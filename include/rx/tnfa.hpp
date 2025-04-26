@@ -1,0 +1,385 @@
+#pragma once
+
+#include <algorithm>
+#include <iterator>
+#include <limits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <rx/error.hpp>
+#include <rx/tree.hpp>
+#include <rx/util.hpp>
+
+
+namespace rx::detail
+{
+    template<typename CharT>
+    class tagged_dfa;
+
+    // template<typename CharT>
+    // class multipass_tagged_dfa;
+
+    inline static constexpr std::size_t no_tag{ static_cast<std::size_t>(-1) };
+
+    /* tnfa transitions */
+
+    template<typename CharT>
+    struct n_tr
+    {
+        std::size_t next;
+        CharT lower;
+        CharT upper;
+    };
+
+    struct epsilon_tr
+    {
+        std::size_t next;
+        int priority;
+        int tag; /* use tag = 0 when tag is absent, tag > 0 for regular tags, and tag < 0 for negative tags */
+    };
+
+    struct assert_tr
+    {
+        std::size_t next;
+        assert_type assertion;
+    };
+
+    /* tnfa nodes */
+
+    template<typename CharT>
+    struct tnfa_node
+    {
+        using transition_t = std::variant<n_tr<CharT>, epsilon_tr, assert_tr>;
+
+        std::vector<transition_t> tr;
+    };
+
+    /* tnfa class */
+
+    template<typename CharT>
+    class tagged_nfa
+    {
+    public:
+        constexpr tagged_nfa(const expr_tree<CharT>& ast);
+
+        friend class tagged_dfa<CharT>;
+        // friend class multipass_tagged_dfa<CharT>;
+
+    private:
+        using ast_t = expr_tree<CharT>;
+
+        template<in_variant<typename ast_t::type> T>
+        static constexpr std::size_t ast_index{ index_of_impl<typename ast_t::type, T>::value };
+
+        constexpr std::size_t node_create();
+        constexpr void epsilon(std::size_t q0, std::size_t qf, int priority = 0, int tag = 0);
+        constexpr void make_ntags(std::size_t q0, std::size_t qf, const std::vector<int>& ntags);
+        constexpr void make_wildcard(std::size_t q0, std::size_t qf);
+
+        struct stack_elem
+        {
+            std::size_t q0, qf, idx;
+        };
+    
+    protected:
+        static constexpr std::size_t match_start{ 0 };
+        static constexpr std::size_t substr_start{ 1 };
+        static constexpr std::size_t end{ 2 };
+
+        [[nodiscard]] constexpr const tnfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
+        [[nodiscard]] constexpr size_t tag_count() const { return tag_count_; }
+
+    private:
+        std::vector<tnfa_node<CharT>> nodes_{ 3 };
+        std::size_t tag_count_;
+    };
+
+    /* modified thompson's algorithm */
+
+    template<typename CharT>
+    constexpr std::size_t tagged_nfa<CharT>::node_create()
+    {
+        auto tmp{ nodes_.size() };
+        nodes_.emplace_back();
+        return tmp;
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::epsilon(const std::size_t q0, const std::size_t qf, const int priority, const int tag)
+    {
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<epsilon_tr>, qf, priority, tag);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_ntags(std::size_t q0, const std::size_t qf, const std::vector<int>& ntags)
+    {
+        if (not ntags.empty())
+        {
+            for (const int tag : ntags | std::views::take(ntags.size() - 1))
+            {
+                auto qi{ node_create() };
+                epsilon(q0, qi, 0, -tag);
+                q0 = qi;
+            }
+
+            epsilon(q0, qf, 0, -(ntags.back()));
+        }
+        else 
+        {     
+            epsilon(q0, qf);
+        }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_wildcard(const std::size_t q0, const std::size_t qf)
+    {
+        if constexpr (std::same_as<CharT, char8_t> /* TODO: or if char unicode mode enabled */)
+        {
+            // TODO: implement multibyte chars;
+            throw tnfa_error("UTF8 wildcards are unimplemented");
+        }
+        else if constexpr (std::same_as<CharT, char16_t>)
+        {
+            // TODO: implement multibyte chars;
+            throw tnfa_error("UTF16 wildcards are unimplemented");
+        }
+        else 
+        {
+            nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, std::numeric_limits<CharT>::lowest(), std::numeric_limits<CharT>::max());
+        }
+    }
+
+    template<typename CharT>
+    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast) : 
+        tag_count_{ ast.tag_count() }
+    {
+        std::vector<std::vector<int>> tag_vec{};
+        if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
+
+        std::vector<stack_elem> stack;
+        stack.emplace_back(match_start, end, ast.root_idx());
+
+        while (not stack.empty())
+        {
+            auto [q0, qf, idx]{ stack.back() };
+            stack.pop_back();
+
+            const auto& entry{ ast.get_expr(idx) };
+
+            switch (entry.index())
+            {
+            case ast_index<typename ast_t::empty>:
+                epsilon(q0, qf);
+                break;
+
+            case ast_index<typename ast_t::any>:
+                make_wildcard(q0, qf);
+                break;
+            
+            case ast_index<typename ast_t::char_lit>:
+                {
+                    const auto& lit{ std::get<typename ast_t::char_lit>(entry) };
+                    nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, lit.c, lit.c);
+                }
+                break;
+
+            case ast_index<typename ast_t::char_class>:
+                // todo: implement
+                throw tnfa_error("Character classes are unimplemented");
+
+            case ast_index<typename ast_t::concat>:
+                if (const auto& cat{ std::get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
+                {
+                    for (const auto i : cat.idxs | std::views::take(cat.idxs.size() - 1))
+                    {
+                        auto qi{ node_create() };
+                        stack.emplace_back(q0, qi, i);
+                        q0 = qi;
+                    }
+            
+                    stack.emplace_back(q0, qf, cat.idxs.back());
+                }
+                else
+                {
+                    epsilon(q0, qf);
+                }
+                break;
+
+            case ast_index<typename ast_t::alt>:
+                if (const auto& alt{ std::get<typename ast_t::alt>(entry) }; not alt.idxs.empty())
+                {
+                    if (tag_vec.empty() or tag_vec.at(idx).empty())
+                    {
+                        /* generate naive tag-free nfa */
+                        for (std::size_t i{ 0 }; i < alt.idxs.size(); ++i)
+                        {
+                            auto qi{ node_create() };
+                            epsilon(q0, qi, i);
+                            stack.emplace_back(qi, qf, alt.idxs.at(i));
+                        }
+                    }
+                    else
+                    {
+                        /* generate tag-aware nfa */
+                        for (std::size_t i{ 0 }; i < alt.idxs.size(); ++i)
+                        {
+                            if (i + 1 == alt.idxs.size())
+                            {
+                                stack.emplace_back(q0, qf, alt.idxs.at(i));
+                            }
+                            else 
+                            {
+                                auto q1{ node_create() };
+                                auto p2{ node_create() };
+                                auto p1{ node_create() };
+                                auto q2{ node_create() };
+                
+                                epsilon(q0, q1, 0);
+                                epsilon(q0, p1, 1);
+                                
+                                stack.emplace_back(q1, p2, alt.idxs.at(i));
+                                make_ntags(p1, q2, tag_vec.at(alt.idxs.at(i)));
+    
+                                std::vector<int> remaining_ntags;
+                                for (std::size_t j{ i + 1 }; j < alt.idxs.size(); ++j)
+                                    std::ranges::copy(tag_vec.at(alt.idxs.at(j)), std::back_inserter(remaining_ntags));
+    
+                                std::ranges::sort(remaining_ntags);
+                                auto [_, last]{ std::ranges::unique(remaining_ntags) };
+                                remaining_ntags.erase(last, remaining_ntags.end());
+    
+                                make_ntags(p2, qf, remaining_ntags);
+                
+                                q0 = q2;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    epsilon(q0, qf);
+                }
+                break;
+
+            case ast_index<typename ast_t::repeat>:
+                {
+                    const auto& rep{ std::get<typename ast_t::repeat>(entry) };
+
+                    if (rep.mode == repeater_mode::possessive)
+                        throw tnfa_error("Possessive repetition is unimplemented");
+
+                    /* reminder: max < min denotes infinity */
+                    int max{ (rep.max < rep.min) ? rep.min - 1 : rep.max };
+                    int min{ rep.min };
+                    const bool lazy{ rep.mode == repeater_mode::lazy };
+
+                    while (true)
+                    {
+                        if (min > 1)
+                        {
+                            auto q1{ node_create() };
+
+                            stack.emplace_back(q0, q1, rep.idx);
+            
+                            min -= 1;
+                            max -= 1;
+                            q0 = q1;
+                        }
+                        else if (min == 1 and max == 1)
+                        {
+                            stack.emplace_back(q0, qf, rep.idx);
+
+                            break;
+                        }
+                        else if (min == 1 and max > 1)
+                        {
+                            auto q1{ node_create() };
+                            auto q2{ node_create() };
+
+                            stack.emplace_back(q0, q1, rep.idx);
+                            epsilon(q1, qf, lazy);
+                            epsilon(q1, q2, not lazy);
+            
+                            max -= 1;
+                            q0 = q2;
+                        }
+                        else if (min == 0)
+                        {
+                            auto q1{ node_create() };
+
+                            epsilon(q0, q1, lazy);
+
+                            if (tag_vec.empty() or tag_vec.at(idx).empty())
+                            {
+                                /* generate tag-free nfa */
+                                epsilon(q0, qf, not lazy);
+                            }
+                            else
+                            {
+                                /* generate tag-aware nfa */
+                                auto p1{ node_create() };
+                                epsilon(q0, p1, not lazy);
+                                make_ntags(p1, qf, tag_vec.at(rep.idx));
+                            }
+
+                            min = 1;
+                            q0 = q1;
+                        }
+                        else if (min == 1 and max < min)
+                        {
+                            auto q1{ node_create() };
+
+                            stack.emplace_back(q0, q1, rep.idx);
+                            epsilon(q1, q0, lazy);
+                            epsilon(q1, qf, not lazy);
+            
+                            break;
+                        }
+                        // else if (min == 0 and max == 0)
+                        // {
+                        //     epsilon(q0, qf);
+                        //     break;
+                        // }
+                        else
+                        {
+                            throw tnfa_error("Invalid repeater in tree");
+                        }
+                    }
+                }
+                break;
+
+            case ast_index<typename ast_t::capture>:
+                {
+                    const auto& cap{ std::get<typename ast_t::capture>(entry) };
+
+                    auto q1{ node_create() };
+                    auto q2{ node_create() };
+
+                    epsilon(q0, q1, 0, cap_num_to_tag(cap.capture_num, false));
+                    stack.emplace_back(q1, q2, cap.idx);
+                    epsilon(q2, qf, 0, cap_num_to_tag(cap.capture_num, true));
+                }
+                break;
+
+            case ast_index<typename ast_t::assertion>:
+                throw tnfa_error("Assertions are unimplemented");
+
+            case ast_index<typename ast_t::backref>:
+                throw tnfa_error("Backreferences are unimplemented");
+
+            default:
+                throw tree_error("Invalid tree");
+
+            }
+        }
+
+        /* join search_start to match_start with ".*?t", where t is the start_tag */
+
+        auto q_tmp{ node_create() };
+        make_wildcard(substr_start, q_tmp);
+        epsilon(q_tmp, match_start, 0, start_tag);
+        epsilon(q_tmp, substr_start, 1);
+    }
+
+}
