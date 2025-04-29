@@ -20,8 +20,6 @@ namespace rx::detail
     // template<typename CharT>
     // class multipass_tagged_dfa;
 
-    inline static constexpr std::size_t no_tag{ static_cast<std::size_t>(-1) };
-
     /* tnfa transitions */
 
     template<typename CharT>
@@ -356,9 +354,9 @@ namespace rx::detail
                     auto q1{ node_create() };
                     auto q2{ node_create() };
 
-                    epsilon(q0, q1, 0, cap_num_to_tag(cap.capture_num, false));
+                    epsilon(q0, q1, 0, cap_num_to_tag(cap.number, false));
                     stack.emplace_back(q1, q2, cap.idx);
-                    epsilon(q2, qf, 0, cap_num_to_tag(cap.capture_num, true));
+                    epsilon(q2, qf, 0, cap_num_to_tag(cap.number, true));
                 }
                 break;
 
@@ -378,7 +376,7 @@ namespace rx::detail
 
         auto q_tmp{ node_create() };
         make_wildcard(substr_start, q_tmp);
-        epsilon(q_tmp, match_start, 0, start_tag);
+        epsilon(q_tmp, match_start, 0, start_tag_number);
         epsilon(q_tmp, substr_start, 1);
     }
 

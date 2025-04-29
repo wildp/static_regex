@@ -1,7 +1,8 @@
 #pragma once
 
-#include <rx/tree.hpp>
 #include <stdexcept>
+
+#include <rx/tree.hpp>
 
 namespace rx::testing
 {

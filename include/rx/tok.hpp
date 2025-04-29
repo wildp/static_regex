@@ -1,7 +1,9 @@
 #pragma once
 
+#include <limits>
 #include <string_view>
 #include <numeric>
+#include <type_traits>
 #include <variant>
 
 #include <rx/error.hpp>
@@ -10,7 +12,7 @@ namespace rx::detail
 {
     /* RE2 limits counted repetitions to 1000 - we do the same here.
      * Note: clang reaches the consteval step limit with >512 repetitions */
-    inline static constexpr std::int16_t counted_repetition_limit{ 1000 };
+    inline static constexpr std::int_least16_t counted_repetition_limit{ 1000 };
 
     /* token definitions */
 
@@ -67,6 +69,8 @@ namespace rx::detail
                                      tok::char_lit<CharT>, tok::char_class<CharT>,
                                      tok::backref>;
 
+        // TODO: rangify API?
+
         constexpr lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}; 
         constexpr token_t nexttok();
 
@@ -107,7 +111,9 @@ namespace rx::detail
                 if (it_ == end_)
                     throw pattern_error("Pattern cannot end with '\\'");
                 
-                switch (*it_++)
+                const auto escaped{ *it_++ };
+
+                switch (escaped)
                 {
                     /* escape sequences */
 
@@ -142,6 +148,101 @@ namespace rx::detail
                 case 'S':
                 case 'w':
                 case 'W': return char_class{{ current, it_ }};
+
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                {
+                    static constexpr std::size_t octal_base{ 010 };
+                    std::size_t result{ 0 };
+                    tok::backref bref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
+
+                    for (int i{ 0 }; i < 2; ++i)
+                    {
+                        if (it_ == end_)
+                            break;
+
+                        const auto lookahead{ *it_ };
+
+                        if (not ('0' <= lookahead and lookahead <= '7'))
+                            break;
+
+                        bref.number = 0;
+                        
+                        result *= octal_base;
+                        result += lookahead - '0';
+                        ++it_;
+                    }
+
+                    if (bref.number == 0)
+                    {
+                        if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+                            throw pattern_error("Octal escape sequence out of range");
+
+                        return tok::char_lit{ static_cast<CharT>(result) };
+                    }
+                    else
+                    {
+                        bref.number -= 1;
+                        return bref;
+                    }
+                }
+
+                case '8':
+                case '9': return tok::backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
+
+                case 'g':
+                {
+                    static constexpr std::size_t decimal_base{ 10 };
+                    tok::backref bref{ 0 };
+                    
+                    if (it_ == end_ )
+                        throw pattern_error("Incomplete escape sequence");
+
+                    auto next{ *it_++ };
+
+                    if (next == '{')
+                    {
+                        /* \g{n...} */
+
+                        while (true)
+                        {
+                            if (it_ == end_)
+                                throw pattern_error("Incomplete escape sequence");;
+    
+                            next = *it_++;
+
+                            if (next == '}')
+                                break;
+                            if (not ('0' <= next and next <= '9'))
+                                throw pattern_error("Incomplete escape sequence");;
+                            
+                            bref.number *= decimal_base;
+                            bref.number += next - '0';
+                        }
+                    }
+                    else if ('0' <= next and next <= '9')
+                    {
+                        /* \gn */
+                        bref.number = next - '0';
+                    }
+                    else
+                    {
+                        throw pattern_error("Incomplete escape sequence");
+                    }
+                 
+
+                    if (bref.number == 0)
+                        throw pattern_error("Backreference to non-existent submatch");
+
+                    bref.number -= 1;
+                    return bref;
+                }
 
                 default: throw pattern_error("Invalid control character");
                 }

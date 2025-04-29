@@ -11,14 +11,6 @@
 #include <rx/error.hpp>
 #include <rx/tok.hpp>
 
-#ifndef RX_TREE_DEBUG_PARSER
-#define RX_TREE_DEBUG_PARSER 0
-#endif // RX_TREE_DEBUG_PARSER
-
-#if RX_TREE_DEBUG_PARSER
-#include <print>
-#endif // RX_TREE_DEBUG_PARSER
-
 namespace rx::detail
 {
     template<typename CharT>
@@ -78,7 +70,7 @@ namespace rx::detail
         struct capture
         {
             std::size_t idx;
-            std::uint_least16_t capture_num;
+            std::uint_least16_t number;
         };
 
         using backref = tok::backref;  
@@ -99,7 +91,7 @@ namespace rx::detail
 
         using type = std::variant<empty, any, assertion, char_lit, char_class, backref, alt, concat, capture, repeat>;
 
-        constexpr expr_tree(sv_type sv);
+        constexpr expr_tree(sv_type sv, parser_flags flags = {});
         
         friend class tagged_nfa<CharT>;
         
@@ -107,6 +99,7 @@ namespace rx::detail
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
         [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return 1 + (2 * capture_count_); }
+        [[nodiscard]] constexpr std::size_t capture_count() const { return capture_count_; }
 
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
 
@@ -122,6 +115,7 @@ namespace rx::detail
         std::vector<type> expressions_;
         std::uint_least16_t capture_count_{ 0 };
     };
+
 
     /* helper classes (and enum) for parser */
 
@@ -203,58 +197,12 @@ namespace rx::detail
         };
     }
 
-    /* print-statement debugging tools */
-
-#if RX_TREE_DEBUG_PARSER
-    template <typename E>
-    requires std::is_enum_v<E>
-    constexpr std::string enum_to_string(E value)
-    {
-        template for (constexpr auto e : std::meta::define_static_array(std::meta::enumerators_of(^^E)))
-        {
-            if (value == [:e:]) 
-                return std::string(std::meta::identifier_of(e));
-        }
-
-        return "<unnamed>";
-    }
-
-    template <typename... Ts>
-    constexpr std::string variant_alternative_name(const std::variant<Ts...>& value)
-    {
-        template for (constexpr auto e : { (^^Ts)... })
-        {
-            if (std::holds_alternative<[: e :]>(value))
-                return std::string{ std::meta::display_string_of(e) };
-        }
-
-        return "<error>";
-    }
-
-    template<typename... Ts>
-    constexpr std::string pretty_print_2(const std::variant<Ts...>& value)
-    {
-        template for (constexpr auto e : { (^^Ts)... })
-        {
-            if (std::holds_alternative<[: e :]>(value))
-            {
-                if constexpr (std::meta::is_enum_type(e))
-                    return enum_to_string(std::get<[: e :]>(value));
-                if constexpr (std::meta::has_template_arguments(e) and std::meta::template_of(e) == ^^std::variant)
-                    return variant_alternative_name(std::get<[: e :]>(value)) ;
-                else
-                    return std::string{ std::meta::display_string_of(e) };
-            }
-        }
-
-        return "<error>";
-    }
-#endif // RX_TREE_DEBUG_PARSER
 
     /* parser implemenation */
 
     template<typename CharT>
-    constexpr expr_tree<CharT>::expr_tree(const sv_type sv) 
+    constexpr expr_tree<CharT>::expr_tree(const sv_type sv, parser_flags flags) :
+            flags_{ flags } 
     {
         using namespace parser;
         using terminal = ll1_stack<CharT>::terminal;
@@ -277,16 +225,6 @@ namespace rx::detail
             if (stack.empty())
                 throw pattern_error("Invalid pattern");
 
-#if RX_TREE_DEBUG_PARSER
-            if not consteval
-            {
-                std::print("stack = ");
-                for (const auto& elem: stack | std::views::reverse)
-                    std::print(" {}", pretty_print_2(elem));
-                std::println();
-            }
-#endif // RX_TREE_DEBUG_PARSER
-
             const auto top{ std::move(stack.root()) };
             stack.pop();
 
@@ -299,13 +237,6 @@ namespace rx::detail
                 }
                 else if (term->index() == token.index())
                 {
-#if RX_TREE_DEBUG_PARSER
-                    if not consteval
-                    {
-                        std::println("matched: {}", variant_alternative_name(token));
-                    }
-#endif // RX_TREE_DEBUG_PARSER
-
                     /* match */
                     semstack.push(std::move(token));
                     token = l.nexttok();
@@ -323,13 +254,6 @@ namespace rx::detail
                 using nt = nonterminal;
                 using sa = semantic_action;
                 using namespace tok;
-
-#if RX_TREE_DEBUG_PARSER
-                if not consteval
-                {
-                    std::println("lookup[{}, {}]", enum_to_string(*nonterm), variant_alternative_name(token));
-                }
-#endif // RX_TREE_DEBUG_PARSER
 
                 switch (*nonterm)
                 {
@@ -507,7 +431,7 @@ namespace rx::detail
                         stack.push({ char_class{}, sa::identity });
                         break;
                     case tok_index<backref>:
-                        stack.push({ char_class{}, sa::make_bref });
+                        stack.push({ backref{}, sa::make_bref });
                         break;
                     default:
                         throw pattern_error("Invalid pattern");
@@ -705,6 +629,7 @@ namespace rx::detail
             root_idx_ = std::get<std::size_t>(semstack.pop());
     }
 
+    
     /* helper for tagged nfa conversion */
 
     template<typename CharT>
@@ -811,8 +736,8 @@ namespace rx::detail
                     {
                         auto& vec{ tag_vec.at(idx) };
 
-                        vec.emplace_back(cap_num_to_tag(cap.capture_num, false));
-                        vec.emplace_back(cap_num_to_tag(cap.capture_num, true));
+                        vec.emplace_back(cap_num_to_tag(cap.number, false));
+                        vec.emplace_back(cap_num_to_tag(cap.number, true));
 
                         std::ranges::copy(tag_vec.at(cap.idx), std::back_inserter(vec));
                         std::ranges::sort(vec);

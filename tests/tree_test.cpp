@@ -107,7 +107,7 @@ static_assert(parse_error(")-("))
 static_assert(parse_error("abcde:)"))
 #endif // __cpp_constexpr_exceptions >= 202411L
 
-/* repeat generalisation */
+/* repeat de-generalisation in pretty printer */
 static_assert(parse("a{0,}", "a*"));
 static_assert(parse("a{1,}", "a+"));
 static_assert(parse("a{0,1}", "a?"));

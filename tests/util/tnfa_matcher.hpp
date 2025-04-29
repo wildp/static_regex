@@ -3,7 +3,9 @@
 #include <optional>
 #include <string_view>
 
+#include <rx/cdarray.hpp>
 #include <rx/tnfa.hpp>
+
 
 namespace rx::testing
 {
@@ -11,12 +13,18 @@ namespace rx::testing
     class tnfa_matcher : public detail::tagged_nfa<CharT>
     {
     public:
+        using tag_result = std::vector<std::size_t>;
         using detail::tagged_nfa<CharT>::tagged_nfa;
 
-        using tag_vector = std::vector<std::size_t>;
-        [[nodiscard]] constexpr std::optional<tag_vector> match(std::basic_string_view<CharT> input) const;
+        [[nodiscard]] constexpr std::optional<tag_result> submatches(std::basic_string_view<CharT> input) const;
+
+        [[nodiscard]] constexpr bool match(std::basic_string_view<CharT> input) const
+        {
+            return submatches(input).has_value();
+        }
 
     private:
+        using tag_vector = detail::cdarray<std::size_t>;
         using closure_entry = std::pair<std::size_t, tag_vector>;
         using closure_t = std::vector<closure_entry>;
 
@@ -102,11 +110,11 @@ namespace rx::testing
     }
 
     template<typename CharT>
-    constexpr auto tnfa_matcher<CharT>::match(std::basic_string_view<CharT> input) const -> std::optional<tag_vector>
+    constexpr auto tnfa_matcher<CharT>::submatches(std::basic_string_view<CharT> input) const -> std::optional<tag_result>
     {
         using namespace rx::detail;
 
-        std::vector<std::size_t> m0(this->tag_count(), no_tag);
+        tag_vector m0(this->tag_count(), no_tag);
         m0.at(0) = 0;
         closure_t c{{ this->match_start, std::move(m0) }};
 
@@ -123,7 +131,7 @@ namespace rx::testing
         auto result{ std::ranges::find(c, this->end, &closure_entry::first) };
 
         if (result != c.end())
-            return result->second;
+            return std::vector(result->second.begin(), result->second.end());
         return {};
         
     }   

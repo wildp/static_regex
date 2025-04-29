@@ -8,7 +8,7 @@ namespace
         rx::detail::expr_tree<CharT> ast{ pattern };
         rx::testing::tnfa_matcher<CharT> tnfa{ ast };
 
-        return tnfa.match(str).has_value();
+        return tnfa.match(str);
     }
 
     template<typename CharT>
@@ -16,7 +16,7 @@ namespace
     {
         rx::detail::expr_tree<CharT> ast{ pattern };
         rx::testing::tnfa_matcher<CharT> tnfa{ ast };
-        auto match_result{ tnfa.match(str) };
+        auto match_result{ tnfa.submatches(str) };
 
         if (not match_result.has_value())
             return false;
@@ -39,6 +39,7 @@ static_assert(not tnfa_match("a|b", ""));
 static_assert(tnfa_match("a|b", "a"));
 static_assert(tnfa_match("a|b", "b"));
 static_assert(tnfa_match("a|b|c", "c"));
+static_assert(tnfa_match("a|b|c", "b"));
 static_assert(tnfa_match("a|b|c", "a"));
 static_assert(not tnfa_match("aa", ""));
 static_assert(not tnfa_match("aa", "a"));

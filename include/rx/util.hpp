@@ -47,5 +47,7 @@ namespace rx::detail
         return ((capture_num + 1) * 2) + is_right;
     }
 
-    inline static constexpr int start_tag{ 1 };
+    inline static constexpr int start_tag_number{ 1 };
+
+    inline static constexpr std::size_t no_tag{ static_cast<std::size_t>(-1) };
 }
