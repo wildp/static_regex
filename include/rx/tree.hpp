@@ -7,9 +7,14 @@
 #include <variant>
 #include <vector>
 
+#include <rx/captures.hpp>
 #include <rx/util.hpp>
 #include <rx/error.hpp>
 #include <rx/tok.hpp>
+
+// Optimisations to add:
+// - merge sequence of chars to strings (?)
+// - merge alternations of single characters into character classes
 
 namespace rx::detail
 {
@@ -38,6 +43,7 @@ namespace rx::detail
         bool enable_captures    : 1 { true };
         bool enable_possessive  : 1 { false };
         bool enable_backrefs    : 1 { false };
+        bool enable_branchreset : 1 { false };
     };
     
 
@@ -121,7 +127,7 @@ namespace rx::detail
 
     namespace parser
     {
-        enum class nonterminal : std::uint_least8_t { S, E, E_, F, F_, G, R, R_, H };
+        enum class nonterminal : std::uint_least8_t { S, E, E_, F, F_, G, R, R_, H, P, P_ };
 
         enum class semantic_action : std::int_least8_t
         {
@@ -133,7 +139,6 @@ namespace rx::detail
             make_alt,
             make_concat,
 
-            make_capture,
             make_bref,
 
             make_star,
@@ -144,6 +149,14 @@ namespace rx::detail
             rep_greedy,
             rep_lazy,
             rep_possessive,
+
+            cap_push,
+            cap_pop,
+            cap_pop_empty,
+            cap_parse_flag,
+            cap_parse_flag_done,
+
+            begin_alt,
         };
 
         template<typename CharT>
@@ -158,14 +171,14 @@ namespace rx::detail
             [[nodiscard]] constexpr auto& root() { return data_.back(); }
             [[nodiscard]] constexpr const auto& root() const { return data_.back(); }
             
-            constexpr auto& begin() const noexcept { return data_.cbegin(); }
-            constexpr auto& end() const noexcept { return data_.cend(); }
-            constexpr auto& rbegin() const noexcept { return data_.crbegin(); }
-            constexpr auto& rend() const noexcept { return data_.crend(); }
-            constexpr auto& cbegin() const noexcept { return data_.cbegin(); }
-            constexpr auto& cend() const noexcept { return data_.cend(); }
-            constexpr auto& crbegin() const noexcept { return data_.crbegin(); }
-            constexpr auto& crend() const noexcept { return data_.crend(); }
+            constexpr auto begin() const noexcept { return data_.cbegin(); }
+            constexpr auto end() const noexcept { return data_.cend(); }
+            constexpr auto rbegin() const noexcept { return data_.crbegin(); }
+            constexpr auto rend() const noexcept { return data_.crend(); }
+            constexpr auto cbegin() const noexcept { return data_.cbegin(); }
+            constexpr auto cend() const noexcept { return data_.cend(); }
+            constexpr auto crbegin() const noexcept { return data_.crbegin(); }
+            constexpr auto crend() const noexcept { return data_.crend(); }
             [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
 
         private:
@@ -182,14 +195,14 @@ namespace rx::detail
             [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
             constexpr void push(elem_t&& elems) { data_.push_back(std::move(elems)); }
 
-            constexpr auto& begin() const noexcept { return data_.cbegin(); }
-            constexpr auto& end() const noexcept { return data_.cend(); }
-            constexpr auto& rbegin() const noexcept { return data_.crbegin(); }
-            constexpr auto& rend() const noexcept { return data_.crend(); }
-            constexpr auto& cbegin() const noexcept { return data_.cbegin(); }
-            constexpr auto& cend() const noexcept { return data_.cend(); }
-            constexpr auto& crbegin() const noexcept { return data_.crbegin(); }
-            constexpr auto& crend() const noexcept { return data_.crend(); }
+            constexpr auto begin() const noexcept { return data_.cbegin(); }
+            constexpr auto end() const noexcept { return data_.cend(); }
+            constexpr auto rbegin() const noexcept { return data_.crbegin(); }
+            constexpr auto rend() const noexcept { return data_.crend(); }
+            constexpr auto cbegin() const noexcept { return data_.cbegin(); }
+            constexpr auto cend() const noexcept { return data_.cend(); }
+            constexpr auto crbegin() const noexcept { return data_.crbegin(); }
+            constexpr auto crend() const noexcept { return data_.crend(); }
             [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
 
         private:
@@ -217,6 +230,7 @@ namespace rx::detail
         lexer<CharT> l{ sv };
         ll1_stack<CharT> stack;
         semantic_stack<CharT> semstack;
+        capture_stack capstack;
 
         auto token{ l.nexttok() };
 
@@ -224,6 +238,21 @@ namespace rx::detail
         {
             if (stack.empty())
                 throw pattern_error("Invalid pattern");
+
+            #if RX_TREE_DEBUG_PARSER
+            if not consteval
+            {
+                std::print("stack = ");
+                for (const auto& elem: stack | std::views::reverse)
+                    std::print(" {}", pretty_print_2(elem));
+                std::println();
+                std::print("semstack = ");
+                for (const auto& elem: semstack | std::views::reverse)
+                    std::print(" {}", pretty_print_2(elem));
+                std::println();
+            }
+            #endif // RX_TREE_DEBUG_PARSER
+
 
             const auto top{ std::move(stack.root()) };
             stack.pop();
@@ -237,6 +266,13 @@ namespace rx::detail
                 }
                 else if (term->index() == token.index())
                 {
+                    #if RX_TREE_DEBUG_PARSER
+                    if not consteval
+                    {
+                        std::println("matched: {}", variant_alternative_name(token));
+                    }
+                    #endif // RX_TREE_DEBUG_PARSER
+
                     /* match */
                     semstack.push(std::move(token));
                     token = l.nexttok();
@@ -254,6 +290,13 @@ namespace rx::detail
                 using nt = nonterminal;
                 using sa = semantic_action;
                 using namespace tok;
+
+                #if RX_TREE_DEBUG_PARSER
+                if not consteval
+                {
+                    std::println("lookup[{}, {}]", enum_to_string(*nonterm), variant_alternative_name(token));
+                }
+                #endif // RX_TREE_DEBUG_PARSER
 
                 switch (*nonterm)
                 {
@@ -297,7 +340,7 @@ namespace rx::detail
                         /* epsilon */
                         break;
                     case tok_index<vert>:
-                        stack.push({ vert{}, nt::E, sa::make_alt });
+                        stack.push({ sa::begin_alt, vert{}, nt::E, sa::make_alt });
                         break;
                     default:
                         throw pattern_error("Invalid pattern");
@@ -422,7 +465,7 @@ namespace rx::detail
                         stack.push({ dollar{}, sa::make_dollar });
                         break;
                     case tok_index<lparen>:
-                        stack.push({ lparen{}, nt::E, rparen{}, sa::make_capture });
+                        stack.push({ sa::cap_push, lparen{}, nt::P });
                         break;
                     case tok_index<char_lit>:
                         stack.push({ char_lit{}, sa::identity });
@@ -432,6 +475,45 @@ namespace rx::detail
                         break;
                     case tok_index<backref>:
                         stack.push({ backref{}, sa::make_bref });
+                        break;
+                    default:
+                        throw pattern_error("Invalid pattern");
+                    }
+                    break;
+                case nt::P:
+                    switch (token.index())
+                    {
+                    case tok_index<dot>:
+                    case tok_index<hat>:
+                    case tok_index<dollar>:
+                    case tok_index<lparen>:
+                    case tok_index<rparen>:
+                    case tok_index<char_lit>:
+                    case tok_index<char_class>:
+                    case tok_index<backref>:
+                        stack.push({ nt::P_ });
+                        break;
+                    case tok_index<quest>:
+                        stack.push({ sa::cap_parse_flag, quest{}, sa::cap_parse_flag_done , nt::P_ });
+                        break;
+                    default:
+                        throw pattern_error("Invalid pattern");
+                    }
+                    break;
+                case nt::P_:
+                    switch (token.index())
+                    {
+                    case tok_index<dot>:
+                    case tok_index<hat>:
+                    case tok_index<dollar>:
+                    case tok_index<lparen>:
+                    case tok_index<char_lit>:
+                    case tok_index<char_class>:
+                    case tok_index<backref>:
+                        stack.push({ nt::E, rparen{}, sa::cap_pop });
+                        break;
+                    case tok_index<rparen>:
+                        stack.push({ rparen{}, sa::cap_pop_empty });
                         break;
                     default:
                         throw pattern_error("Invalid pattern");
@@ -462,8 +544,13 @@ namespace rx::detail
                         std::ignore = semstack.pop(); /* pop tok::hot */
 
                         semstack.push(expressions_.size());
-                        expressions_.emplace_back(std::in_place_type<assertion>, assert_type::text_start);
-                        // TODO: depending on flags, insert assert_type::text_start instead
+
+                        /* depending on flags, insert assert_type::line_start instead of assert_type::text_start */
+                        if (capstack.multiline()) 
+                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::line_start);
+                        else
+                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::text_start);
+                        
                     }
                     break;
                 case sa::make_dollar:
@@ -471,8 +558,12 @@ namespace rx::detail
                         std::ignore = semstack.pop(); /* pop tok::dollar */
 
                         semstack.push(expressions_.size());
-                        expressions_.emplace_back(std::in_place_type<assertion>, assert_type::text_end);
-                        // TODO: depending on flags, insert assert_type::line_end instead
+
+                        /* depending on flags, insert assert_type::line_end instead of assert_type::text_end */
+                        if (capstack.multiline()) 
+                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::line_end);
+                        else
+                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::text_end);
                     }
                     break;
                 case sa::make_alt:
@@ -515,25 +606,6 @@ namespace rx::detail
                             /* create new concat */
                             semstack.push(expressions_.size());
                             expressions_.emplace_back(std::in_place_type<concat>, std::vector{ lhs_idx, rhs_idx });
-                        }
-                    }
-                    break;
-                case sa::make_capture:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::rparen */
-                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
-                        std::ignore = semstack.pop(); /* pop tok::lparen */
-                        
-                        if (flags_.enable_captures)
-                        {
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::in_place_type<capture>, child_idx, capture_count_++);
-                            if (capture_count_ == 0) /* i.e. unsigned integer overflow has occurred */
-                                throw pattern_error("Capturing group limit exceeded");
-                        }
-                        else
-                        {
-                            semstack.push(child_idx);
                         }
                     }
                     break;
@@ -597,13 +669,22 @@ namespace rx::detail
                     break;
                 case sa::rep_greedy:
                     {
-                        semstack.push(repeater_mode::greedy);
+                        /* swap greedy and lazy quantifiers if 'ungreedy' flag is set */
+                        if (capstack.ungreedy())
+                            semstack.push(repeater_mode::lazy);  /* swapped */
+                        else
+                            semstack.push(repeater_mode::greedy); /* default */
                     }
                     break;
                 case sa::rep_lazy:
                     {
                         std::ignore = semstack.pop();  /* pop tok::quest */
-                        semstack.push(repeater_mode::lazy);
+
+                        /* swap greedy and lazy quantifiers if 'ungreedy' flag is set */
+                        if (capstack.ungreedy())
+                            semstack.push(repeater_mode::greedy); /* swapped */
+                        else
+                            semstack.push(repeater_mode::lazy);  /* default */
                     }
                     break;
                 case sa::rep_possessive:
@@ -616,6 +697,183 @@ namespace rx::detail
                             throw parser_error("Possessive repetition is not enabled");
                     }
                     break;
+                case sa::cap_push:
+                    {
+                        if (flags_.enable_captures)
+                        {
+                            if (capstack.push()) /* i.e. unsigned integer overflow has occurred */
+                                throw pattern_error("Capturing group limit exceeded");
+                        }
+                        else
+                        {
+                            capstack.push_non_capturing();
+                        }
+                        
+                    }
+                    break;
+                case sa::cap_pop:
+                    {
+                        std::ignore = semstack.pop(); /* pop tok::rparen */
+                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                        std::ignore = semstack.pop(); /* pop tok::lparen */
+
+                        const auto cap_number{ capstack.pop() };
+
+                        #if RX_TREE_DEBUG_PARSER
+                        if not consteval 
+                        {
+                            if (cap_number.has_value())
+                                std::println("CAP POP {}", *cap_number);
+                            else
+                                std::println("CAP POP");
+                        }
+                        #endif // RX_TREE_DEBUG_PARSER
+
+                        if (cap_number.has_value())
+                        {   
+                            semstack.push(expressions_.size());
+                            expressions_.emplace_back(std::in_place_type<capture>, child_idx, *cap_number);
+                        }
+                        else
+                        {
+                            /* non capturing group */
+                            semstack.push(child_idx);
+                        }
+                    }
+                    break;
+                case sa::cap_pop_empty:
+                    {
+                        std::ignore = semstack.pop(); /* pop tok::rparen */
+                        std::ignore = semstack.pop(); /* pop tok::lparen */
+
+                        const auto cap_number{ capstack.pop_empty() };
+
+                        #if RX_TREE_DEBUG_PARSER
+                        if not consteval 
+                        {
+                            if (cap_number.has_value())
+                            std::println("CAP POP EMPTY {}", *cap_number);
+                        else
+                            std::println("CAP POP EMPTY");
+                        }
+                        #endif // RX_TREE_DEBUG_PARSER
+
+                        const auto empty_idx{ expressions_.size() };
+                        expressions_.emplace_back(std::in_place_type<empty>);
+
+                        if (cap_number.has_value())
+                        {   
+                            semstack.push(expressions_.size());
+                            expressions_.emplace_back(std::in_place_type<capture>, empty_idx, *cap_number);
+                        }
+                        else
+                        {
+                            semstack.push(empty_idx);
+                        }
+                    }
+                    break;
+                case sa::cap_parse_flag:
+                    {
+                        /* manually parse flags */
+
+                        auto& lit{ l.it_ };
+                        const auto& lend{ l.end_ };
+
+                        bool flag_value{ true };
+
+                        if (lit == lend)
+                            break;
+
+                        switch (*lit)
+                        {
+                        case '#':
+                            ++lit;
+                            while (lit != lend and *lit != ')')
+                                ++lit; /* skip comment */
+                            capstack.set_non_capturing();
+                            break;
+
+                        case '|':
+                            if (not flags.enable_branchreset)
+                                throw parser_error("Branch resetting in captures is not enabled");
+                            ++lit;
+                            capstack.set_branch_reset();
+                            break;
+                        
+                        case '>':
+                            throw pattern_error("Atomic capture groups are unsupported");
+
+                        case 'P':
+                        case '<':
+                        case '\'':
+                            throw pattern_error("Named capture groups are unsupported");
+
+                        default: /* parse options */
+                            for (bool loop{ true }; loop;)
+                            {
+                                if (lit == lend)
+                                    throw pattern_error("Invalid Pattern"); 
+
+                                const auto lookahead{ *lit };
+                                bool increment{ true };
+
+                                capstack.set_non_capturing();
+
+                                switch(lookahead)
+                                {
+                                case 'i':
+                                    capstack.set_caseless(flag_value);
+                                    break;
+                                case 'm':
+                                    capstack.set_multiline(flag_value);
+                                    break;
+                                case 's':
+                                    capstack.set_dotall(flag_value);
+                                    break;
+                                case 'U':
+                                    capstack.set_ungreedy(flag_value);
+                                    break;
+                                case 'x':
+                                    throw pattern_error("Capturing group flag 'x' is unsupported");
+                                case '-':
+                                    if (not flag_value)
+                                        throw pattern_error("Capturing group arguments can only contain one hyphen");
+                                    flag_value = false;
+                                    break;
+                                    
+                                case ':':
+                                    loop = false;
+                                    break;
+
+                            
+                                case ')':
+                                    loop = false;
+                                    increment = false;
+                                    break;
+
+                                default:
+                                    throw pattern_error("Invalid capturing group");
+                                }
+
+                                if (increment)
+                                    ++lit;
+                            }   
+                        }
+                    }
+                    break;
+                case sa::cap_parse_flag_done:
+                    {
+                        std::ignore = semstack.pop(); /* pop tok::quest */
+
+                        /* this exists only so we can use capture_pop(_empty)? for captures with flags */
+                    }
+                    break;
+                case sa::begin_alt:
+                    {
+                        /* exists only so branch resetting captures work */
+                        if (flags.enable_branchreset)
+                            capstack.branch_reset_if_enabled();
+                    }
                 }
             }
             else
@@ -627,6 +885,11 @@ namespace rx::detail
 
         if (not semstack.empty())
             root_idx_ = std::get<std::size_t>(semstack.pop());
+
+        if (auto cc{ capstack.capture_count() }; cc.has_value())
+            capture_count_ = cc.value();
+        else
+            throw pattern_error("Parse Error");
     }
 
     

@@ -45,6 +45,7 @@ static_assert(parse(""));
 static_assert(parse("a"));
 static_assert(parse("ab"));
 static_assert(parse("a|b"));
+static_assert(parse("()"));
 static_assert(parse("(a)"));
 static_assert(parse("a*"));
 static_assert(parse("a+"));
@@ -116,5 +117,33 @@ static_assert(parse("a{1,}?", "a+?"));
 static_assert(parse("a{0,1}?", "a??"));
 static_assert(test("a{1,512}"));
 
+/* escape sequences */
+static_assert(parse(R"(\33)", "\33"));
+static_assert(parse(R"(\033)", "\033"));
+static_assert(parse(R"(\60)", "0"));
+static_assert(parse(R"(\141)", "a"));
+static_assert(parse(R"(\x1)", "\1"));
+static_assert(parse(R"(\x1b)", "\x1b"));
+static_assert(parse(R"(\x21)", "!"));
+static_assert(parse(R"(\x61)", "a"));
+static_assert(parse(R"(\x4f)", "O"));
+static_assert(parse(R"(\u0021)", "!"));
+static_assert(parse(R"(\u0061)", "a"));
+static_assert(parse(R"(\u004f)", "O"));
+static_assert(parse(R"(\U00000021)", "!"));
+static_assert(parse(R"(\U00000061)", "a"));
+static_assert(parse(R"(\U0000004F)", "O"));
+static_assert(parse(R"(\x{61})", "a"));
+static_assert(parse(R"(\u{49})", "I"));
+static_assert(parse(R"(\U{6F})", "o"));
+static_assert(parse(uR"(\u2705)", u"✅"));
+static_assert(parse(UR"(\x{1F30D})", U"🌍"));
+static_assert(parse(UR"(\u{1F30E})", U"🌎"));
+static_assert(parse(UR"(\U{1F30F})", U"🌏"));
+static_assert(parse(UR"(\U0001F310)", U"🌐"));
+// TODO: replace previous 5 tests with tests for multibyte chars
+
 /* other test cases */
+static_assert(parse("(?# comment )", ""));
+static_assert(parse("(?:aaa)", "aaa"));
 static_assert(test("(v*)*|j*"));

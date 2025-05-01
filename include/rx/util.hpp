@@ -51,3 +51,57 @@ namespace rx::detail
 
     inline static constexpr std::size_t no_tag{ static_cast<std::size_t>(-1) };
 }
+
+#if RX_TREE_DEBUG_PARSER
+#include <experimental/meta>
+#include <print>
+
+namespace rx::detail
+{
+     /* print-statement debugging tools */
+
+    template <typename E>
+    requires std::is_enum_v<E>
+    constexpr std::string enum_to_string(E value)
+    {
+        template for (constexpr auto e : std::define_static_array(std::meta::enumerators_of(^^E)))
+        {
+            if (value == [:e:]) 
+                return std::string(std::meta::identifier_of(e));
+        }
+
+        return "<unnamed>";
+    }
+
+    template <typename... Ts>
+    constexpr std::string variant_alternative_name(const std::variant<Ts...>& value)
+    {
+        template for (constexpr auto e : { (^^Ts)... })
+        {
+            if (std::holds_alternative<[: e :]>(value))
+                return std::string{ std::meta::display_string_of(e) };
+        }
+
+        return "<error>";
+    }
+
+    template<typename... Ts>
+    constexpr std::string pretty_print_2(const std::variant<Ts...>& value)
+    {
+        template for (constexpr auto e : { (^^Ts)... })
+        {
+            if (std::holds_alternative<[: e :]>(value))
+            {
+                if constexpr (std::meta::is_enum_type(e))
+                    return enum_to_string(std::get<[: e :]>(value));
+                if constexpr (std::meta::has_template_arguments(e) and std::meta::template_of(e) == ^^std::variant)
+                    return variant_alternative_name(std::get<[: e :]>(value));
+                else
+                    return std::string{ std::meta::display_string_of(e) };
+            }
+        }
+
+        return "<error>";
+    }
+}
+#endif // RX_TREE_DEBUG_PARSER

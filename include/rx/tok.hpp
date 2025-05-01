@@ -14,6 +14,9 @@ namespace rx::detail
      * Note: clang reaches the consteval step limit with >512 repetitions */
     inline static constexpr std::int_least16_t counted_repetition_limit{ 1000 };
 
+    template<typename CharT>
+    class expr_tree;
+
     /* token definitions */
 
     namespace tok
@@ -74,11 +77,14 @@ namespace rx::detail
         constexpr lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}; 
         constexpr token_t nexttok();
 
+        friend class expr_tree<CharT>;
+
     private:
+        constexpr std::size_t parse_hex(std::size_t fixed_amt);
+
         it_type it_;
         it_type end_;
     };
-
 
     /* lexer implementation */
 
@@ -159,7 +165,7 @@ namespace rx::detail
                 case '7':
                 {
                     static constexpr std::size_t octal_base{ 010 };
-                    std::size_t result{ 0 };
+                    std::size_t result{ static_cast<std::size_t>(escaped - '0') };
                     tok::backref bref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
 
                     for (int i{ 0 }; i < 2; ++i)
@@ -182,7 +188,10 @@ namespace rx::detail
                     if (bref.number == 0)
                     {
                         if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+                        {
+                            // TODO: return string corresponding to multibyte char
                             throw pattern_error("Octal escape sequence out of range");
+                        }
 
                         return tok::char_lit{ static_cast<CharT>(result) };
                     }
@@ -243,6 +252,46 @@ namespace rx::detail
                     bref.number -= 1;
                     return bref;
                 }
+
+                case 'x':
+                {
+                    std::size_t result{ parse_hex(0) };
+
+                    if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+                    {
+                        // TODO: return string corresponding to multibyte char
+                        throw pattern_error("Multibyte characters are unimplemented");
+                    }
+
+                    return tok::char_lit{ static_cast<CharT>(result) };
+                }
+
+                case 'u':
+                {
+                    std::size_t result{ parse_hex(4) };
+
+                    if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+                    {
+                        // TODO: return string corresponding to multibyte char
+                        throw pattern_error("Multibyte characters are unimplemented");
+                    }
+
+                    return tok::char_lit{ static_cast<CharT>(result) };
+                }
+
+                case 'U':
+                {
+                    std::size_t result{ parse_hex(8) };
+
+                    if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+                    {
+                        // TODO: return string corresponding to multibyte char
+                        throw pattern_error("Multibyte characters are unimplemented");
+                    }
+
+                    return tok::char_lit{ static_cast<CharT>(result) };
+                }
+
 
                 default: throw pattern_error("Invalid control character");
                 }
@@ -375,5 +424,104 @@ namespace rx::detail
         default:
             return char_lit{ *current };
         }
+    }
+
+
+    /* helpers for lexer implementation */
+
+
+    template<typename CharT>
+    constexpr std::size_t lexer<CharT>::parse_hex(std::size_t fixed_amt)
+    {
+        static constexpr std::size_t hexadecimal_base{ 0x10 };
+        static constexpr std::size_t decimal_base{ 10 };
+        std::size_t result{ 0 };
+
+        if (it_ == end_ )
+            throw pattern_error("Incomplete escape sequence");
+
+        const auto lookahead{ *it_ };
+
+        if (lookahead == '{')
+        {
+            /* arbitrary number of digits contained in {} */
+            
+            std::size_t digits{ 0 };
+            ++it_;
+
+            for (bool loop{ true }; loop; ++digits)
+            {
+                if (it_ == end_)
+                    throw pattern_error("Incomplete escape sequence");;
+
+                const auto c{ *it_ };
+
+                if (c == '}')
+                    loop = false;
+                else if ('0' <= c and c <= '9')
+                    result = (result * hexadecimal_base) + (c - '0');
+                else if ('A' <= c and c <= 'F')
+                    result = (result * hexadecimal_base) + decimal_base + (c - 'A');
+                else if ('a' <= c and c <= 'f')
+                    result = (result * hexadecimal_base) + decimal_base + (c - 'a');
+                else
+                    throw pattern_error("Incomplete escape sequence");
+
+                ++it_;
+            }
+
+            if (digits == 0)
+                throw pattern_error("Delimited escape sequence cannot be empty");;
+        }
+        else if (fixed_amt != 0)
+        {
+            for (std::size_t i{ 0 }; i < fixed_amt; ++i)
+            {
+                if (it_ == end_)
+                    throw pattern_error("Incomplete escape sequence");
+
+                const auto c{ *it_ };
+
+                if ('0' <= c and c <= '9')
+                    result = (result * hexadecimal_base) + (c - '0');
+                else if ('A' <= c and c <= 'F')
+                    result = (result * hexadecimal_base) + decimal_base + (c - 'A');
+                else if ('a' <= c and c <= 'f')
+                    result = (result * hexadecimal_base) + decimal_base + (c - 'a');
+                else
+                    throw pattern_error("Incomplete escape sequence");
+
+                ++it_;
+            }
+        }
+        else
+        {
+            std::size_t digits{ 0 };
+            
+            for (bool loop{ true }; loop; ++digits)
+            {
+                if (it_ == end_)
+                    break;
+
+                const auto c{ *it_ };
+
+                if ('0' <= c and c <= '9')
+                    result = (result * hexadecimal_base) + (c - '0');
+                else if ('A' <= c and c <= 'F')
+                    result = (result * hexadecimal_base) + decimal_base + (c - 'A');
+                else if ('a' <= c and c <= 'f')
+                    result = (result * hexadecimal_base) + decimal_base + (c - 'a');
+                else
+                    loop = false;
+
+                ++it_;
+            }
+
+            if (digits == 0)
+                throw pattern_error("Invalid escape sequence");
+        }
+
+
+        return result;
     }
 }

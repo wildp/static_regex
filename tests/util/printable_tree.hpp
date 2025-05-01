@@ -20,7 +20,8 @@ namespace rx::testing
 
     /* printer for patterns */
 
-    constexpr auto append_int(const std::integral auto value, std::string& result)
+    template<typename CharT>
+    constexpr void append_int(std::basic_string<CharT>& result, const std::integral auto value)
     {
         static constexpr decltype(value) base{ 10 };
         std::vector<char> buf;
@@ -41,7 +42,7 @@ namespace rx::testing
 
         std::basic_string<CharT> result;
 
-        auto visitor{ [](this const auto& rec, const expr_tree_t& pet, std::size_t pos, std::basic_string<CharT>& result) constexpr -> void {
+        auto visitor{ [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) constexpr -> void {
             pet.get_expr(pos).visit(detail::overloads{
                 [&](const expr_tree_t::empty&) constexpr {
                 },
@@ -62,26 +63,26 @@ namespace rx::testing
                     }
                 },
                 [&](const expr_tree_t::concat& cat) constexpr {
-                    for (const auto idx : cat.idxs) rec(pet, idx, result);
+                    for (const auto idx : cat.idxs) rec(result, pet, idx);
                 },
                 [&](const expr_tree_t::alt& alt) constexpr {
-                    for (const auto idx : alt.idxs) { rec(pet, idx, result); result += "|"; }
+                    for (const auto idx : alt.idxs) { rec(result, pet, idx); result += '|'; }
                     if (alt.idxs.size() > 0) result.pop_back();
                 },
                 [&](const expr_tree_t::capture& cap) constexpr {
                     result += '(';
                     if constexpr (ExtraParens) result += '(';
-                    rec(pet, cap.idx, result);
+                    rec(result, pet, cap.idx);
                     if constexpr (ExtraParens) result += ')';
                     result += ')';
                 },
                 [&](const expr_tree_t::backref& bref) constexpr {
                     result += '\\';
-                    append_int(bref.number, result);
+                    append_int(result, bref.number);
                 },
                 [&](const expr_tree_t::repeat& rep) constexpr {
                     if constexpr (ExtraParens) result += '(';
-                    rec(pet, rep.idx, result);
+                    rec(result, pet, rep.idx);
                     if constexpr (ExtraParens) result += ')';
 
                     if (rep.min == 0 and rep.max < 0) result += '*';
@@ -89,9 +90,9 @@ namespace rx::testing
                     else if ((rep.min == 0 and rep.max == 1)) result += '?';
                     else {
                         result += '{';
-                        append_int(rep.min, result);
+                        append_int(result, rep.min);
                         if (rep.max != rep.min) result += ',';
-                        if (rep.max > rep.min) append_int(rep.max, result);
+                        if (rep.max > rep.min) append_int(result, rep.max);
                         result += '}';
                     }
 
@@ -109,7 +110,7 @@ namespace rx::testing
             });
         }};
 
-        visitor(*this, this->root_idx(), result);
+        visitor(result, *this, this->root_idx());
 
         return result;
     }

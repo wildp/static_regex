@@ -99,7 +99,7 @@ static_assert(tnfa_capture("(aa)+?a*", "aaaaa", { 0, 0, 2 }));
 static_assert(tnfa_capture("a(aa)b|(aa)ac", "aaab", {0, 1, 3, no_tag, no_tag }));
 static_assert(tnfa_capture("a(aa)b|(aa)ac", "aaac", {0, no_tag, no_tag, 0, 2 }));
 
-// /* wildcard tests */
+/* wildcard tests */
 static_assert(not tnfa_match(".", ""));
 static_assert(tnfa_match(".", "0"));
 static_assert(tnfa_match(".", "@"));
@@ -107,5 +107,5 @@ static_assert(tnfa_match(".", "$"));
 static_assert(tnfa_match(".", "z"));
 static_assert(tnfa_match(".", "A"));
 static_assert(tnfa_match(".", "."));
-static_assert(tnfa_match(".", "\n"));
+static_assert(tnfa_match(".", "\n")); // NOTE: this should not match!
 // TODO: add test cases for non ascii chars
