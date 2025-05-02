@@ -1,8 +1,8 @@
 #pragma once
 
 #include <limits>
-#include <string_view>
 #include <numeric>
+#include <string_view>
 #include <type_traits>
 #include <variant>
 
@@ -39,9 +39,20 @@ namespace rx::detail
         };
 
         template<typename CharT>
-        struct char_lit
+        struct char_str
         {
-            CharT c;
+            std::basic_string<CharT> str;
+
+            constexpr explicit char_str() : str{} {} /* empty string */
+            constexpr explicit char_str(CharT c) : str{ c } {}
+
+            template<std::input_iterator I, std::sentinel_for<I> S>
+            requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+            constexpr explicit char_str(I first, S last) : str(first, last) {}
+    
+            // template<std::ranges::input_range R>
+            // requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
+            // constexpr explicit char_str(std::from_range_t, R&& r) : char_str(std::ranges::begin(r), std::ranges::end(r)) {}
         };
 
         template<typename CharT>
@@ -69,7 +80,7 @@ namespace rx::detail
         using token_t = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
                                      tok::lparen, tok::rparen, tok::vert,
                                      tok::star, tok::plus, tok::quest, tok::repeat_n_m,
-                                     tok::char_lit<CharT>, tok::char_class<CharT>,
+                                     tok::char_str<CharT>, tok::char_class<CharT>,
                                      tok::backref>;
 
         // TODO: rangify API?
@@ -80,7 +91,11 @@ namespace rx::detail
         friend class expr_tree<CharT>;
 
     private:
-        constexpr std::size_t parse_hex(std::size_t fixed_amt);
+        constexpr tok::char_str<CharT>  parse_hex(std::size_t fixed_amt);
+        constexpr tok::backref          parse_bref();
+        constexpr tok::repeat_n_m       parse_repeat();
+        constexpr token_t               parse_bref_or_octal(CharT init);
+        constexpr tok::char_str<CharT>  parse_literal_string(it_type begin);
 
         it_type it_;
         it_type end_;
@@ -92,7 +107,7 @@ namespace rx::detail
     constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
     {
         using namespace tok;
-        using char_lit = tok::char_lit<CharT>;
+        using char_str = tok::char_str<CharT>;
         using char_class = tok::char_class<CharT>;
 
         if (it_ == end_)
@@ -123,28 +138,28 @@ namespace rx::detail
                 {
                     /* escape sequences */
 
-                case 'a': return char_lit{ '\a' };
-                case 'f': return char_lit{ '\f' };
-                case 't': return char_lit{ '\t' };
-                case 'n': return char_lit{ '\n' };
-                case 'r': return char_lit{ '\r' };
-                case 'v': return char_lit{ '\v' };
+                case 'a': return char_str{ '\a' };
+                case 'f': return char_str{ '\f' };
+                case 't': return char_str{ '\t' };
+                case 'n': return char_str{ '\n' };
+                case 'r': return char_str{ '\r' };
+                case 'v': return char_str{ '\v' };
 
                     /* escaped control chars */
 
-                case '.': return char_lit{ '.' };
-                case '^': return char_lit{ '^' };
-                case '$': return char_lit{ '$' };
-                case '*': return char_lit{ '*' };
-                case '+': return char_lit{ '+' };
-                case '?': return char_lit{ '?' };
-                case '(': return char_lit{ '(' };
-                case ')': return char_lit{ ')' };
-                case '[': return char_lit{ '[' };
-                case ']': return char_lit{ ']' };
-                case '{': return char_lit{ '{' };
-                case '}': return char_lit{ '}' };
-                case '\\': return char_lit{ '\\' };
+                case '.': return char_str{ '.' };
+                case '^': return char_str{ '^' };
+                case '$': return char_str{ '$' };
+                case '*': return char_str{ '*' };
+                case '+': return char_str{ '+' };
+                case '?': return char_str{ '?' };
+                case '(': return char_str{ '(' };
+                case ')': return char_str{ ')' };
+                case '[': return char_str{ '[' };
+                case ']': return char_str{ ']' };
+                case '{': return char_str{ '{' };
+                case '}': return char_str{ '}' };
+                case '\\': return char_str{ '\\' };
                     
                     /* perl character classes */
 
@@ -162,225 +177,24 @@ namespace rx::detail
                 case '4':
                 case '5':
                 case '6':
-                case '7':
-                {
-                    static constexpr std::size_t octal_base{ 010 };
-                    std::size_t result{ static_cast<std::size_t>(escaped - '0') };
-                    tok::backref bref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
-
-                    for (int i{ 0 }; i < 2; ++i)
-                    {
-                        if (it_ == end_)
-                            break;
-
-                        const auto lookahead{ *it_ };
-
-                        if (not ('0' <= lookahead and lookahead <= '7'))
-                            break;
-
-                        bref.number = 0;
-                        
-                        result *= octal_base;
-                        result += lookahead - '0';
-                        ++it_;
-                    }
-
-                    if (bref.number == 0)
-                    {
-                        if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-                        {
-                            // TODO: return string corresponding to multibyte char
-                            throw pattern_error("Octal escape sequence out of range");
-                        }
-
-                        return tok::char_lit{ static_cast<CharT>(result) };
-                    }
-                    else
-                    {
-                        bref.number -= 1;
-                        return bref;
-                    }
-                }
+                case '7': return parse_bref_or_octal(escaped);
 
                 case '8':
                 case '9': return tok::backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
 
-                case 'g':
-                {
-                    static constexpr std::size_t decimal_base{ 10 };
-                    tok::backref bref{ 0 };
-                    
-                    if (it_ == end_ )
-                        throw pattern_error("Incomplete escape sequence");
+                case 'g': return parse_bref();
 
-                    auto next{ *it_++ };
+                case 'x': return parse_hex(0);
+                case 'u': return parse_hex(4);
+                case 'U': return parse_hex(8);
 
-                    if (next == '{')
-                    {
-                        /* \g{n...} */
-
-                        while (true)
-                        {
-                            if (it_ == end_)
-                                throw pattern_error("Incomplete escape sequence");;
-    
-                            next = *it_++;
-
-                            if (next == '}')
-                                break;
-                            if (not ('0' <= next and next <= '9'))
-                                throw pattern_error("Incomplete escape sequence");;
-                            
-                            bref.number *= decimal_base;
-                            bref.number += next - '0';
-                        }
-                    }
-                    else if ('0' <= next and next <= '9')
-                    {
-                        /* \gn */
-                        bref.number = next - '0';
-                    }
-                    else
-                    {
-                        throw pattern_error("Incomplete escape sequence");
-                    }
-                 
-
-                    if (bref.number == 0)
-                        throw pattern_error("Backreference to non-existent submatch");
-
-                    bref.number -= 1;
-                    return bref;
-                }
-
-                case 'x':
-                {
-                    std::size_t result{ parse_hex(0) };
-
-                    if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-                    {
-                        // TODO: return string corresponding to multibyte char
-                        throw pattern_error("Multibyte characters are unimplemented");
-                    }
-
-                    return tok::char_lit{ static_cast<CharT>(result) };
-                }
-
-                case 'u':
-                {
-                    std::size_t result{ parse_hex(4) };
-
-                    if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-                    {
-                        // TODO: return string corresponding to multibyte char
-                        throw pattern_error("Multibyte characters are unimplemented");
-                    }
-
-                    return tok::char_lit{ static_cast<CharT>(result) };
-                }
-
-                case 'U':
-                {
-                    std::size_t result{ parse_hex(8) };
-
-                    if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-                    {
-                        // TODO: return string corresponding to multibyte char
-                        throw pattern_error("Multibyte characters are unimplemented");
-                    }
-
-                    return tok::char_lit{ static_cast<CharT>(result) };
-                }
-
+                case 'Q': return parse_literal_string(current);
 
                 default: throw pattern_error("Invalid control character");
                 }
             }
 
-        case '{': 
-        {
-            static constexpr std::int_least16_t base{ 10 };
-
-            std::int_least16_t min{ -1 };
-            std::int_least16_t max{ -1 };
-
-            bool parse_min{ true };
-            bool parse_max{ true };
-
-            while  (parse_min)
-            {
-                if (it_ == end_)
-                    throw pattern_error("Repeater is incomplete");
-
-                auto c{ *it_++ };
-
-                if ('0' <= c and c <= '9')
-                {
-                    if (min == -1)
-                        min = c - '0';
-                    else
-                        min = std::add_sat<std::int_least16_t>(std::mul_sat(min, base), c - '0');
-                }
-                else if (c == ',')
-                {
-                    parse_min = false;
-                }
-                else if (c == '}')
-                {
-                    parse_min = false;
-                    
-                    /* skip parsing max */
-                    max = min;
-                    parse_max = false;
-                }
-                else
-                {
-                    throw pattern_error("Invalid character in repeater");
-                }
-            }
-
-            while (parse_max)
-            {
-                if (it_ == end_)
-                    throw pattern_error("Repeater is incomplete");
-
-                auto c{ *it_++ };
-
-                if ('0' <= c and c <= '9')
-                {
-                    if (max == -1)
-                        max = c - '0';
-                    else
-                        max = std::add_sat<std::int_least16_t>(std::mul_sat(max, base), c - '0');
-                }
-                else if (c == '}')
-                {
-                    if (max != -1 and max < min)
-                        throw pattern_error("Invalid repeater (max is less than min)");
-
-                    parse_max = false; 
-                }
-                else
-                {
-                    throw pattern_error("Invalid character in repeater");
-                }
-            }
-
-            if (min > counted_repetition_limit)
-            {
-                if (min == max)
-                    throw pattern_error("Finite number of counted repetitions exceeds limit");
-                else
-                    throw pattern_error("Lower bound of counted repetitions exceeds limit");
-            }
-            else if (max > counted_repetition_limit)
-            {
-                throw pattern_error("Finite upper bound of counted repetitions exceeds limit");
-            }
-
-            return repeat_n_m{ .min = min, .max = max };
-        }
-
+        case '{': return parse_repeat();
         case '[':
         {
             // TODO: actually parse character class 
@@ -422,7 +236,7 @@ namespace rx::detail
         }
 
         default:
-            return char_lit{ *current };
+            return char_str{ *current };
         }
     }
 
@@ -431,10 +245,12 @@ namespace rx::detail
 
 
     template<typename CharT>
-    constexpr std::size_t lexer<CharT>::parse_hex(std::size_t fixed_amt)
+    constexpr tok::char_str<CharT> lexer<CharT>::parse_hex(const std::size_t fixed_amt)
     {
+        using namespace tok;
         static constexpr std::size_t hexadecimal_base{ 0x10 };
         static constexpr std::size_t decimal_base{ 10 };
+
         std::size_t result{ 0 };
 
         if (it_ == end_ )
@@ -521,7 +337,213 @@ namespace rx::detail
                 throw pattern_error("Invalid escape sequence");
         }
 
+        if (result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+            return char_str<CharT>{ static_cast<CharT>(result) };
 
-        return result;
+        // TODO: return string corresponding to multibyte char
+        throw pattern_error("Multibyte characters are unimplemented");        
+    }
+
+    template<typename CharT>
+    constexpr tok::backref lexer<CharT>::parse_bref()
+    {
+        using namespace tok;
+        static constexpr std::size_t base{ 10 };
+
+        backref bref{ 0 };
+        
+        if (it_ == end_ )
+            throw pattern_error("Incomplete escape sequence");
+
+        auto next{ *it_++ };
+
+        if (next == '{')
+        {
+            /* \g{n...} */
+
+            while (true)
+            {
+                if (it_ == end_)
+                    throw pattern_error("Incomplete escape sequence");;
+
+                next = *it_++;
+
+                if (next == '}')
+                    break;
+                if (not ('0' <= next and next <= '9'))
+                    throw pattern_error("Incomplete escape sequence");;
+                
+                bref.number *= base;
+                bref.number += next - '0';
+            }
+        }
+        else if ('0' <= next and next <= '9')
+        {
+            /* \gn */
+            bref.number = next - '0';
+        }
+        else
+        {
+            throw pattern_error("Incomplete escape sequence");
+        }
+     
+
+        if (bref.number == 0)
+            throw pattern_error("Backreference to non-existent submatch");
+
+        bref.number -= 1;
+        return bref;
+    }
+
+    template<typename CharT>
+    constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
+    {
+        using namespace tok;
+        static constexpr std::int_least16_t base{ 10 };
+
+        std::int_least16_t min{ -1 };
+        std::int_least16_t max{ -1 };
+
+        bool parse_min{ true };
+        bool parse_max{ true };
+
+        while  (parse_min)
+        {
+            if (it_ == end_)
+                throw pattern_error("Repeater is incomplete");
+
+            auto c{ *it_++ };
+
+            if ('0' <= c and c <= '9')
+            {
+                if (min == -1)
+                    min = c - '0';
+                else
+                    min = std::add_sat<std::int_least16_t>(std::mul_sat(min, base), c - '0');
+            }
+            else if (c == ',')
+            {
+                parse_min = false;
+            }
+            else if (c == '}')
+            {
+                parse_min = false;
+                
+                /* skip parsing max */
+                max = min;
+                parse_max = false;
+            }
+            else
+            {
+                throw pattern_error("Invalid character in repeater");
+            }
+        }
+
+        while (parse_max)
+        {
+            if (it_ == end_)
+                throw pattern_error("Repeater is incomplete");
+
+            auto c{ *it_++ };
+
+            if ('0' <= c and c <= '9')
+            {
+                if (max == -1)
+                    max = c - '0';
+                else
+                    max = std::add_sat<std::int_least16_t>(std::mul_sat(max, base), c - '0');
+            }
+            else if (c == '}')
+            {
+                if (max != -1 and max < min)
+                    throw pattern_error("Invalid repeater (max is less than min)");
+
+                parse_max = false; 
+            }
+            else
+            {
+                throw pattern_error("Invalid character in repeater");
+            }
+        }
+
+        if (min > counted_repetition_limit)
+        {
+            if (min == max)
+                throw pattern_error("Finite number of counted repetitions exceeds limit");
+            else
+                throw pattern_error("Lower bound of counted repetitions exceeds limit");
+        }
+        else if (max > counted_repetition_limit)
+        {
+            throw pattern_error("Finite upper bound of counted repetitions exceeds limit");
+        }
+
+        return repeat_n_m{ .min = min, .max = max };
+    }
+
+    template<typename CharT>
+    constexpr lexer<CharT>::token_t lexer<CharT>::parse_bref_or_octal(const CharT init)
+    {
+        using namespace tok;
+        static constexpr std::size_t base{ 010 };
+
+        std::size_t result{ static_cast<std::size_t>(init - '0') };
+        backref bref{ std::saturate_cast<std::uint_least16_t>(init - '0') };
+
+        for (int i{ 0 }; i < 2; ++i)
+        {
+            if (it_ == end_)
+                break;
+
+            const auto lookahead{ *it_ };
+
+            if (not ('0' <= lookahead and lookahead <= '7'))
+                break;
+
+            bref.number = 0;
+            
+            result *= base;
+            result += lookahead - '0';
+            ++it_;
+        }
+
+        if (bref.number == 0)
+        {
+            if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+            {
+                // TODO: return string corresponding to multibyte char
+                throw pattern_error("Octal escape sequence out of range");
+            }
+
+            return char_str<CharT>{ static_cast<CharT>(result) };
+        }
+        else
+        {
+            bref.number -= 1;
+            return bref;
+        }
+    }
+
+    template<typename CharT>
+    constexpr tok::char_str<CharT> lexer<CharT>::parse_literal_string(const it_type begin)
+    {
+        using namespace tok;
+
+        for (bool slash{ true }; true;)
+        {
+            if (it_ == end_)
+                throw pattern_error("Reached end of input in literal text");
+
+            const auto cur{ *it_++ };
+
+            if (not slash and cur == '\\')
+                slash = true;
+            else if (slash and cur == 'E')
+                break;
+            else
+                slash = false;
+        }
+
+        return char_str<CharT>{ std::next(begin, 2), std::prev(it_, 2) };
     }
 }

@@ -108,10 +108,6 @@ namespace rx::testing
                 const std::size_t pos{ raw_data.pos() };
 
                 const rc result = this->get_expr(pos).visit(detail::overloads{
-                    [&](const expr_tree_t::empty&) -> rc
-                    {
-                        return rc::match_continue;
-                    },
                     [&](const expr_tree_t::any&) -> rc
                     {
                         if (s.it == last)
@@ -202,7 +198,7 @@ namespace rx::testing
 
                         if (const auto& range{ s.tags.cat(bref.number) }; range.has_value())
                         {
-                            for (auto [bit, blast] { *range }; bit != blast; std::advance(s.it, 1), std::advance(bit, 1))
+                            for (auto [bit, blast] { *range }; bit != blast; std::ranges::advance(s.it, 1), std::ranges::advance(bit, 1))
                                 if (s.it == last or *s.it != *bit)
                                     return rc::match_failure;
                         }
@@ -292,11 +288,15 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::char_lit& lit) -> rc
+                    [&](const expr_tree_t::char_str& lit) -> rc
                     {
-                        if (s.it == last or *s.it != lit.c)
-                            return rc::match_failure;  /* unsuccessful match */
-                        std::ranges::advance(s.it, 1);
+                        for (const auto c: lit.str)
+                        {
+                            if (s.it == last or *s.it != c)
+                                return rc::match_failure; /* unsuccessful match */
+                            std::ranges::advance(s.it, 1);
+                        }
+
                         return rc::match_continue;
                     },
                     [&](const expr_tree_t::char_class& /* cla */) -> rc

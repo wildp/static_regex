@@ -146,4 +146,5 @@ static_assert(parse(UR"(\U0001F310)", U"🌐"));
 /* other test cases */
 static_assert(parse("(?# comment )", ""));
 static_assert(parse("(?:aaa)", "aaa"));
+static_assert(parse("\\Q...\\E", "..."));
 static_assert(test("(v*)*|j*"));

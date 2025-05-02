@@ -44,8 +44,6 @@ namespace rx::testing
 
         auto visitor{ [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) constexpr -> void {
             pet.get_expr(pos).visit(detail::overloads{
-                [&](const expr_tree_t::empty&) constexpr {
-                },
                 [&](const expr_tree_t::any&) constexpr {
                     result += '.';
                 },
@@ -99,8 +97,8 @@ namespace rx::testing
                     if (rep.mode == detail::repeater_mode::lazy) result += '?';
                     else if (rep.mode == detail::repeater_mode::possessive) result += '+';
                 },
-                [&](const expr_tree_t::char_lit& lit) constexpr {
-                    result += lit.c;
+                [&](const expr_tree_t::char_str& lit) constexpr {
+                    result += lit.str;
                 },
                 [&](const expr_tree_t::char_class& cla) constexpr {
                     result += '[';

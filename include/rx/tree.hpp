@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <iterator>
 #include <ranges>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -13,7 +14,6 @@
 #include <rx/tok.hpp>
 
 // Optimisations to add:
-// - merge sequence of chars to strings (?)
 // - merge alternations of single characters into character classes
 
 namespace rx::detail
@@ -54,8 +54,7 @@ namespace rx::detail
     {
     public:
         using sv_type = std::basic_string_view<CharT>;
-
-        struct empty {};    
+ 
         using any = tok::dot;
 
         struct assertion
@@ -89,13 +88,13 @@ namespace rx::detail
             repeater_mode mode;     /* default = greedy */
         };
 
-        using char_lit = tok::char_lit<CharT>;
+        using char_str = tok::char_str<CharT>;
         using char_class = tok::char_class<CharT>;
 
         // TODO: replace char_lit with strings
         // using char_str = std::basic_string<CharT>;
 
-        using type = std::variant<empty, any, assertion, char_lit, char_class, backref, alt, concat, capture, repeat>;
+        using type = std::variant<any, assertion, char_str, char_class, backref, alt, concat, capture, repeat>;
 
         constexpr expr_tree(sv_type sv, parser_flags flags = {});
         
@@ -116,9 +115,28 @@ namespace rx::detail
         template<in_variant<type> T>
         static constexpr std::size_t ast_index{ index_of_impl<type, T>::value };
 
+        template<in_variant<type> T, typename... Args>
+        [[nodiscard]] constexpr std::size_t new_expression(Args... args)
+        {
+            if (overwritable_.empty())
+            {
+                const std::size_t idx{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<T>, std::forward<Args>(args)...);
+                return idx;
+            }
+            else
+            {
+                const std::size_t idx{ overwritable_.back() };
+                overwritable_.pop_back();
+                expressions_.at(idx) = T{ std::forward<Args>(args)... };
+                return idx;
+            }
+        }
+
         std::size_t root_idx_{ 0 };
         parser_flags flags_;
         std::vector<type> expressions_;
+        std::vector<std::size_t> overwritable_;
         std::uint_least16_t capture_count_{ 0 };
     };
 
@@ -223,7 +241,7 @@ namespace rx::detail
         if (sv.empty())
         {
             /* ensure expressions is non-empty */
-            expressions_.emplace_back(std::in_place_type<empty>);
+            std::ignore = new_expression<char_str>(/* empty string */);
             return;
         }
 
@@ -242,6 +260,7 @@ namespace rx::detail
             #if RX_TREE_DEBUG_PARSER
             if not consteval
             {
+                std::println("-------------------------");
                 std::print("stack = ");
                 for (const auto& elem: stack | std::views::reverse)
                     std::print(" {}", pretty_print_2(elem));
@@ -307,7 +326,7 @@ namespace rx::detail
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::E, end_of_input{} });
@@ -323,7 +342,7 @@ namespace rx::detail
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::F, nt::E_ });
@@ -353,7 +372,7 @@ namespace rx::detail
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::G, nt::F_ });
@@ -373,7 +392,7 @@ namespace rx::detail
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::F , sa::make_concat });
@@ -389,7 +408,7 @@ namespace rx::detail
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::H, nt::R });
@@ -408,7 +427,7 @@ namespace rx::detail
                     case tok_index<lparen>:
                     case tok_index<rparen>:
                     case tok_index<vert>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         /* epsilon */
@@ -437,7 +456,7 @@ namespace rx::detail
                     case tok_index<lparen>:
                     case tok_index<rparen>:
                     case tok_index<vert>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ /* epsilon, */ sa::rep_greedy });
@@ -467,8 +486,8 @@ namespace rx::detail
                     case tok_index<lparen>:
                         stack.push({ sa::cap_push, lparen{}, nt::P });
                         break;
-                    case tok_index<char_lit>:
-                        stack.push({ char_lit{}, sa::identity });
+                    case tok_index<char_str>:
+                        stack.push({ char_str{}, sa::identity });
                         break;
                     case tok_index<char_class>:
                         stack.push({ char_class{}, sa::identity });
@@ -488,7 +507,7 @@ namespace rx::detail
                     case tok_index<dollar>:
                     case tok_index<lparen>:
                     case tok_index<rparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::P_ });
@@ -507,7 +526,7 @@ namespace rx::detail
                     case tok_index<hat>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
-                    case tok_index<char_lit>:
+                    case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
                         stack.push({ nt::E, rparen{}, sa::cap_pop });
@@ -532,24 +551,35 @@ namespace rx::detail
                         /* make an arbitrary token an ast entry */
                         const terminal term{ std::get<terminal>(semstack.pop()) };
                         
-                        semstack.push(expressions_.size());
-                        expressions_.emplace_back(term.visit(overloads{
+                        type result{ term.visit(overloads{
                             [](const in_variant<type> auto& arg) constexpr -> type { return arg; },
                             [](const auto&) constexpr -> type { throw pattern_error("Unknown error during parsing pattern"); }
-                        }));
+                        }) };
+
+                        /* we duplicate functionality of new_expression here */
+                        if (overwritable_.empty())
+                        {
+                            semstack.push(expressions_.size());
+                            expressions_.emplace_back(std::move(result));
+                        }
+                        else
+                        {
+                            const std::size_t idx{ overwritable_.back() };
+                            overwritable_.pop_back();
+                            semstack.push(idx);
+                            expressions_.at(idx) = std::move(result);
+                        }
                     }
                     break;
                 case sa::make_hat:
                     {
-                        std::ignore = semstack.pop(); /* pop tok::hot */
-
-                        semstack.push(expressions_.size());
+                        std::ignore = semstack.pop(); /* pop tok::hot */                        
 
                         /* depending on flags, insert assert_type::line_start instead of assert_type::text_start */
                         if (capstack.multiline()) 
-                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::line_start);
+                            semstack.push(new_expression<assertion>(assert_type::line_start));
                         else
-                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::text_start);
+                            semstack.push(new_expression<assertion>(assert_type::text_start));
                         
                     }
                     break;
@@ -557,13 +587,11 @@ namespace rx::detail
                     {
                         std::ignore = semstack.pop(); /* pop tok::dollar */
 
-                        semstack.push(expressions_.size());
-
                         /* depending on flags, insert assert_type::line_end instead of assert_type::text_end */
                         if (capstack.multiline()) 
-                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::line_end);
+                            semstack.push(new_expression<assertion>(assert_type::line_end));
                         else
-                            expressions_.emplace_back(std::in_place_type<assertion>, assert_type::text_end);
+                            semstack.push(new_expression<assertion>(assert_type::text_end));
                     }
                     break;
                 case sa::make_alt:
@@ -582,8 +610,7 @@ namespace rx::detail
                         else 
                         {
                             /* create new alt */
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::in_place_type<alt>, std::vector<std::size_t>{ lhs_idx, rhs_idx });
+                            semstack.push(new_expression<alt>(std::vector<std::size_t>{ lhs_idx, rhs_idx }));
                         }
                     }
                     break;
@@ -592,20 +619,57 @@ namespace rx::detail
                         const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
                         const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
 
-                        // TODO: perform string merging? 
-
                         if (type& ast{ expressions_.at(rhs_idx) }; std::holds_alternative<concat>(ast))
                         {
                             /* insert lhs into existing concat */
                             semstack.push(rhs_idx);
-                            auto& ast_concat { std::get<concat>(ast) };
-                            ast_concat.idxs.insert(ast_concat.idxs.begin(), lhs_idx);
+                            auto& ast_concat{ std::get<concat>(ast) };
+                            bool merged{ false };
+
+                            if (not ast_concat.idxs.empty())
+                            {
+                                type& rhs{ expressions_.at(ast_concat.idxs.front()) };
+                                type& lhs{ expressions_.at(lhs_idx) };
+
+                                if (std::holds_alternative<char_str>(rhs) and std::holds_alternative<char_str>(lhs))
+                                {
+                                    /* merge lhs string with first entry of rhs (also a string) */
+                                    auto& target{ std::get<char_str>(rhs).str };
+                                    auto& lhs_str{ std::get<char_str>(lhs).str };
+                                    lhs_str.append(target);
+                                    std::swap(lhs_str, target);
+                                    overwritable_.push_back(lhs_idx);
+                                    merged = true;
+                                }
+                            }
+
+                            
+                            if (not merged)
+                            {
+                                /* insert lhs into existing concat */
+                                ast_concat.idxs.insert(ast_concat.idxs.begin(), lhs_idx);
+                            }
                         }
                         else 
                         {
-                            /* create new concat */
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::in_place_type<concat>, std::vector{ lhs_idx, rhs_idx });
+                            type& rhs{ expressions_.at(rhs_idx) };
+                            type& lhs{ expressions_.at(lhs_idx) };
+
+                            if (std::holds_alternative<char_str>(rhs) and std::holds_alternative<char_str>(lhs))
+                            {
+                                /* lhs and rhs are both strings: merge strings into one instead of creating concat  */
+                                semstack.push(rhs_idx);
+                                auto& target{ std::get<char_str>(rhs).str };
+                                auto& lhs_str{ std::get<char_str>(lhs).str };
+                                lhs_str.append(target);
+                                std::swap(lhs_str, target);
+                                overwritable_.push_back(lhs_idx);
+                            }
+                            else
+                            {
+                                /* create new concat */
+                                semstack.push(new_expression<concat>(std::vector{ lhs_idx, rhs_idx }));
+                            }
                         }
                     }
                     break;
@@ -617,8 +681,7 @@ namespace rx::detail
                         {
                             /* note: we don't perform a check (bref.number <= capture_count) to match the behaviour of other engines */
 
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::in_place_type<backref>, bref.number);
+                            semstack.push(new_expression<backref>(bref.number));
                         }
                         else
                         {
@@ -633,8 +696,7 @@ namespace rx::detail
                         std::ignore = semstack.pop(); /* pop tok::star */
                         const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
                         
-                        semstack.push(expressions_.size());
-                        expressions_.emplace_back(std::in_place_type<repeat>, child_idx, 0, -1, mode);
+                        semstack.push(new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, mode));
                     }
                     break;
                 case sa::make_plus:
@@ -643,8 +705,7 @@ namespace rx::detail
                         std::ignore = semstack.pop(); /* pop tok::plus */
                         const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
                         
-                        semstack.push(expressions_.size());
-                        expressions_.emplace_back(std::in_place_type<repeat>, child_idx, 1, 0, mode);
+                        semstack.push(new_expression<repeat>(child_idx, std::int_least16_t{ 1 }, std::int_least16_t{ 0 }, mode));
                     }
                     break;
                 case sa::make_quest:
@@ -653,8 +714,7 @@ namespace rx::detail
                         std::ignore = semstack.pop(); /* pop tok::quest */
                         const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
                         
-                        semstack.push(expressions_.size());
-                        expressions_.emplace_back(std::in_place_type<repeat>, child_idx, 0, 1, mode);
+                        semstack.push(new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, mode));
                     }
                     break;
                 case sa::make_repeat:
@@ -663,8 +723,7 @@ namespace rx::detail
                         const auto rep{ std::get<tok::repeat_n_m>(std::get<terminal>(semstack.pop())) };
                         const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
 
-                        semstack.push(expressions_.size());
-                        expressions_.emplace_back(std::in_place_type<repeat>, child_idx, rep.min, rep.max, mode);
+                        semstack.push(new_expression<repeat>(child_idx, rep.min, rep.max, mode));
                     }
                     break;
                 case sa::rep_greedy:
@@ -707,8 +766,7 @@ namespace rx::detail
                         else
                         {
                             capstack.push_non_capturing();
-                        }
-                        
+                        }   
                     }
                     break;
                 case sa::cap_pop:
@@ -719,26 +777,10 @@ namespace rx::detail
 
                         const auto cap_number{ capstack.pop() };
 
-                        #if RX_TREE_DEBUG_PARSER
-                        if not consteval 
-                        {
-                            if (cap_number.has_value())
-                                std::println("CAP POP {}", *cap_number);
-                            else
-                                std::println("CAP POP");
-                        }
-                        #endif // RX_TREE_DEBUG_PARSER
-
                         if (cap_number.has_value())
-                        {   
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::in_place_type<capture>, child_idx, *cap_number);
-                        }
+                            semstack.push(new_expression<capture>(child_idx, *cap_number));
                         else
-                        {
-                            /* non capturing group */
-                            semstack.push(child_idx);
-                        }
+                            semstack.push(child_idx); /* non capturing group */
                     }
                     break;
                 case sa::cap_pop_empty:
@@ -747,29 +789,12 @@ namespace rx::detail
                         std::ignore = semstack.pop(); /* pop tok::lparen */
 
                         const auto cap_number{ capstack.pop_empty() };
-
-                        #if RX_TREE_DEBUG_PARSER
-                        if not consteval 
-                        {
-                            if (cap_number.has_value())
-                            std::println("CAP POP EMPTY {}", *cap_number);
-                        else
-                            std::println("CAP POP EMPTY");
-                        }
-                        #endif // RX_TREE_DEBUG_PARSER
-
-                        const auto empty_idx{ expressions_.size() };
-                        expressions_.emplace_back(std::in_place_type<empty>);
+                        const auto empty_idx{ new_expression<char_str>(/* empty string */) };
 
                         if (cap_number.has_value())
-                        {   
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::in_place_type<capture>, empty_idx, *cap_number);
-                        }
+                            semstack.push(new_expression<capture>(empty_idx, *cap_number));
                         else
-                        {
-                            semstack.push(empty_idx);
-                        }
+                            semstack.push(empty_idx); /* non capturing group */
                     }
                     break;
                 case sa::cap_parse_flag:
@@ -845,7 +870,6 @@ namespace rx::detail
                                     loop = false;
                                     break;
 
-                            
                                 case ')':
                                     loop = false;
                                     increment = false;
@@ -913,10 +937,9 @@ namespace rx::detail
 
             switch (entry.index())
             {
-            case ast_index<empty>:
             case ast_index<any>:
             case ast_index<assertion>:
-            case ast_index<char_lit>:
+            case ast_index<char_str>:
             case ast_index<char_class>:
             case ast_index<backref>:
                 stack.pop_back();

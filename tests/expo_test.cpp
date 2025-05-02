@@ -3,10 +3,12 @@
 
 namespace
 {
+    constexpr rx::detail::parser_flags expo_test_flags{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true };
+
     template<typename CharT>
     consteval bool tree_match(const CharT* pattern, const CharT* str)
     {
-        rx::testing::tree_matcher<CharT> tree{ pattern , rx::detail::parser_flags{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true } };
+        rx::testing::tree_matcher<CharT> tree{ pattern , expo_test_flags };
 
         return tree.match(std::string_view{ str });
     }
@@ -14,7 +16,7 @@ namespace
     template<typename CharT>
     consteval bool tree_capture(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures)
     {
-        rx::testing::tree_matcher<CharT> tree{ pattern, rx::detail::parser_flags{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true }  };
+        rx::testing::tree_matcher<CharT> tree{ pattern, expo_test_flags };
         auto match_result{ tree.submatches(std::string_view{ str }) };
 
         if (not match_result.has_value())
@@ -173,3 +175,7 @@ static_assert(tree_capture("(?U-U)(a)?a*", "aa", { 0, 0, 1 }));
 static_assert(tree_capture("(?U-U)(a)??a*", "aa", { 0, no_tag, no_tag }));
 static_assert(tree_capture("(?U)(a)?a*(?-U)(b)?b*", "aabb", { 0, no_tag, no_tag, 2, 3 }));
 static_assert(tree_capture("(?U)(a)??a*(?-U)(b)??b*", "aabb", { 0, 0, 1, no_tag, no_tag }));
+
+/* additional parser tests */
+static_assert(tree_match("\\Q...\\E", "..."));
+static_assert(not tree_match("\\Q...\\E", "aaa"));

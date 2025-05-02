@@ -167,18 +167,25 @@ namespace rx::detail
 
             switch (entry.index())
             {
-            case ast_index<typename ast_t::empty>:
-                epsilon(q0, qf);
-                break;
-
             case ast_index<typename ast_t::any>:
                 make_wildcard(q0, qf);
                 break;
             
-            case ast_index<typename ast_t::char_lit>:
+            case ast_index<typename ast_t::char_str>:
+                if (const auto& lit{ std::get<typename ast_t::char_str>(entry) }; not lit.str.empty())
                 {
-                    const auto& lit{ std::get<typename ast_t::char_lit>(entry) };
-                    nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, lit.c, lit.c);
+                    for (const auto c : lit.str | std::views::take(lit.str.size() - 1))
+                    {
+                        auto qi{ node_create() };
+                        nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qi, c, c);
+                        q0 = qi;
+                    }
+                    
+                    nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, lit.str.back(), lit.str.back());
+                }
+                else
+                {
+                    epsilon(q0, qf);
                 }
                 break;
 
