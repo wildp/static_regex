@@ -86,6 +86,9 @@ static_assert(parse("a|bcde|cefg|d"));
 static_assert(parse("a+b*c+d?"));
 static_assert(parse("a|bcde|cefg|d"));
 static_assert(parse("(ab+c)ab(ddee{0,2})"));
+static_assert(parse("a|"));
+static_assert(parse("|a"));
+static_assert(parse("|"));
 
 /* reject invalid syntax */
 #if __cpp_constexpr_exceptions >= 202411L

@@ -129,28 +129,6 @@ namespace rx::detail::parser
             auto elem{ elems_.back() };
             elems_.pop_back();
 
-            auto& target{ elems_.empty() ? base_ : elems_.back() };
-            if (elem.branch_reset)
-                target.number_end = std::max(target.number_end, elem.number_end) ;
-            else
-                target.number_end = elem.number_end;
-
-
-            if (elem.non_capturing)
-                return {};
-            else
-                return elem.number;
-
-        }
-
-        constexpr std::optional<uint_least16_t> pop_empty()
-        {
-            if (elems_.empty())
-                return {};
-
-            auto elem{ elems_.back() };
-            elems_.pop_back();
-
             /* empty capturing group with flags: overwrite containing capturing group's flags*/
             auto& target{ elems_.empty() ? base_ : elems_.back() };
 

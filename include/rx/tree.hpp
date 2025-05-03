@@ -145,12 +145,13 @@ namespace rx::detail
 
     namespace parser
     {
-        enum class nonterminal : std::uint_least8_t { S, E, E_, F, F_, G, R, R_, H, P, P_ };
+        enum class nonterminal : std::uint_least8_t { S, E, E_, F, F_, G, R, R_, H, P };
 
         enum class semantic_action : std::int_least8_t
         {
             identity,
 
+            make_empty,
             make_hat,
             make_dollar,
 
@@ -170,7 +171,6 @@ namespace rx::detail
 
             cap_push,
             cap_pop,
-            cap_pop_empty,
             cap_parse_flag,
             cap_parse_flag_done,
 
@@ -322,10 +322,12 @@ namespace rx::detail
                 case nt::S:
                     switch (token.index())
                     {
+                    case tok_index<end_of_input>:
                     case tok_index<hat>:
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
+                    case tok_index<vert>:
                     case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
@@ -338,10 +340,13 @@ namespace rx::detail
                 case nt::E:
                     switch (token.index())
                     {
+                    case tok_index<end_of_input>:
                     case tok_index<hat>:
                     case tok_index<dot>:
                     case tok_index<dollar>:
                     case tok_index<lparen>:
+                    case tok_index<rparen>:
+                    case tok_index<vert>:
                     case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
@@ -368,6 +373,11 @@ namespace rx::detail
                 case nt::F:
                     switch (token.index())
                     {
+                    case tok_index<end_of_input>:
+                    case tok_index<rparen>:
+                    case tok_index<vert>:
+                        stack.push({ /* epsilon */ sa::make_empty });
+                        break;
                     case tok_index<hat>:
                     case tok_index<dot>:
                     case tok_index<dollar>:
@@ -387,6 +397,7 @@ namespace rx::detail
                     case tok_index<end_of_input>:
                     case tok_index<rparen>:
                     case tok_index<vert>:
+                        /* epsilon */
                         break;
                     case tok_index<hat>:
                     case tok_index<dot>:
@@ -395,7 +406,7 @@ namespace rx::detail
                     case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
-                        stack.push({ nt::F , sa::make_concat });
+                        stack.push({ nt::G, nt::F_, sa::make_concat });
                         break;
                     default:
                         throw pattern_error("Invalid pattern");
@@ -484,7 +495,7 @@ namespace rx::detail
                         stack.push({ dollar{}, sa::make_dollar });
                         break;
                     case tok_index<lparen>:
-                        stack.push({ sa::cap_push, lparen{}, nt::P });
+                        stack.push({ sa::cap_push, lparen{}, nt::P, rparen{}, sa::cap_pop });
                         break;
                     case tok_index<char_str>:
                         stack.push({ char_str{}, sa::identity });
@@ -510,29 +521,10 @@ namespace rx::detail
                     case tok_index<char_str>:
                     case tok_index<char_class>:
                     case tok_index<backref>:
-                        stack.push({ nt::P_ });
+                        stack.push({ nt::E });
                         break;
                     case tok_index<quest>:
-                        stack.push({ sa::cap_parse_flag, quest{}, sa::cap_parse_flag_done , nt::P_ });
-                        break;
-                    default:
-                        throw pattern_error("Invalid pattern");
-                    }
-                    break;
-                case nt::P_:
-                    switch (token.index())
-                    {
-                    case tok_index<dot>:
-                    case tok_index<hat>:
-                    case tok_index<dollar>:
-                    case tok_index<lparen>:
-                    case tok_index<char_str>:
-                    case tok_index<char_class>:
-                    case tok_index<backref>:
-                        stack.push({ nt::E, rparen{}, sa::cap_pop });
-                        break;
-                    case tok_index<rparen>:
-                        stack.push({ rparen{}, sa::cap_pop_empty });
+                        stack.push({ sa::cap_parse_flag, quest{}, sa::cap_parse_flag_done , nt::E });
                         break;
                     default:
                         throw pattern_error("Invalid pattern");
@@ -569,6 +561,11 @@ namespace rx::detail
                             semstack.push(idx);
                             expressions_.at(idx) = std::move(result);
                         }
+                    }
+                    break;
+                case sa::make_empty:
+                    {                 
+                        semstack.push(new_expression<char_str>(/* empty string */));
                     }
                     break;
                 case sa::make_hat:
@@ -643,7 +640,6 @@ namespace rx::detail
                                 }
                             }
 
-                            
                             if (not merged)
                             {
                                 /* insert lhs into existing concat */
@@ -781,20 +777,6 @@ namespace rx::detail
                             semstack.push(new_expression<capture>(child_idx, *cap_number));
                         else
                             semstack.push(child_idx); /* non capturing group */
-                    }
-                    break;
-                case sa::cap_pop_empty:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::rparen */
-                        std::ignore = semstack.pop(); /* pop tok::lparen */
-
-                        const auto cap_number{ capstack.pop_empty() };
-                        const auto empty_idx{ new_expression<char_str>(/* empty string */) };
-
-                        if (cap_number.has_value())
-                            semstack.push(new_expression<capture>(empty_idx, *cap_number));
-                        else
-                            semstack.push(empty_idx); /* non capturing group */
                     }
                     break;
                 case sa::cap_parse_flag:
