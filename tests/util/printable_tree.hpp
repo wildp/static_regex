@@ -1,8 +1,10 @@
 #pragma once
 
+#include <limits>
 #include <stdexcept>
 
 #include <rx/tree.hpp>
+#include <string>
 
 namespace rx::testing
 {
@@ -40,13 +42,39 @@ namespace rx::testing
     {
         using expr_tree_t = printable_expr_tree<CharT>;
 
+        static constexpr auto escape = [](std::basic_string<CharT>& result, CharT c) constexpr {
+            if (c == '\177' or (c >= '\0' and c < '\40')) {
+                result += '\\';
+                switch (c) {
+                case '\0': result += '0'; break;
+                case '\a': result += 'a'; break;
+                case '\b': result += 'b'; break;
+                case '\f': result += 'f'; break;
+                case '\t': result += 't'; break;
+                case '\n': result += 'n'; break;
+                case '\r': result += 'r'; break;
+                case '\v': result += 'v'; break;
+                default:
+                    {
+                        static constexpr CharT octal_base{ 010 };
+                        std::basic_string<CharT> tmp;
+                        for (; c != 0; c /= octal_base)
+                            tmp.push_back('0' + (c % octal_base));
+                        result.append(tmp.rbegin(), tmp.rend());
+                    }
+                    break;
+                }
+            }
+            else {
+                if (c == '-' or c == '[' or c == ']' or c == '^') result += '\\';
+                result += c;
+            }
+        };
+
         std::basic_string<CharT> result;
 
-        auto visitor{ [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) constexpr -> void {
+        auto visitor = [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) constexpr -> void {
             pet.get_expr(pos).visit(detail::overloads{
-                [&](const expr_tree_t::any&) constexpr {
-                    result += '.';
-                },
                 [&](const expr_tree_t::assertion& asr) constexpr {
                     switch (asr.type)
                     {
@@ -98,15 +126,33 @@ namespace rx::testing
                     else if (rep.mode == detail::repeater_mode::possessive) result += '+';
                 },
                 [&](const expr_tree_t::char_str& lit) constexpr {
-                    result += lit.str;
+                    result += lit.data;
                 },
                 [&](const expr_tree_t::char_class& cla) constexpr {
+                    if (cla.data.get().size() == 1) {
+                        using uct = typename expr_tree_t::char_class::underlying_char_type;
+                        const auto& [lower, upper]{ cla.data.get().front() };
+                        if ((not cla.data.is_negated() and lower == std::numeric_limits<uct>::min() and upper == std::numeric_limits<uct>::max())
+                            or (cla.data.is_negated() and lower == '\n' and upper == '\n')) {
+                            result += '.';
+                            return;
+                        }
+                    }
+
                     result += '[';
-                    result += cla.name; // TODO: replace this once char classes are properly implemented
+                    if (cla.data.is_negated())
+                        result += '^';
+                    for (const auto& [lower, upper] : cla.data.get()) {
+                        /* TODO: maybe escape certain characters */
+                        escape(result, lower);
+                        if (upper == lower) continue;
+                        result += '-';
+                        escape(result, upper);
+                    }
                     result += ']';
                 },
             });
-        }};
+        };
 
         visitor(result, *this, this->root_idx());
 

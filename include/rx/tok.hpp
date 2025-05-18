@@ -1,12 +1,18 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 #include <numeric>
 #include <string_view>
 #include <type_traits>
 #include <variant>
 
+#include <rx/charclass.hpp>
 #include <rx/error.hpp>
+#include <rx/util.hpp>
+
+
+/* Note: We assume the literal character encoding is a superset of ASCII */
 
 namespace rx::detail
 {
@@ -39,27 +45,59 @@ namespace rx::detail
         };
 
         template<typename CharT>
+        struct char_class
+        {
+            using underlying_char_type = std::conditional_t<char_is_multibyte<CharT>, char32_t, CharT>;
+
+            using impl_type = char_class_impl<underlying_char_type>;
+
+            impl_type data;
+
+            template<typename... Args>
+            constexpr char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
+        };
+
+        template<typename CharT>
         struct char_str
         {
-            std::basic_string<CharT> str;
+            std::basic_string<CharT> data;
 
-            constexpr explicit char_str() : str{} {} /* empty string */
-            constexpr explicit char_str(CharT c) : str{ c } {}
+            constexpr explicit char_str() : data{} {} /* empty string */
+            constexpr explicit char_str(CharT c) : data{ c } {}
 
             template<std::input_iterator I, std::sentinel_for<I> S>
             requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-            constexpr explicit char_str(I first, S last) : str(first, last) {}
+            constexpr explicit char_str(I first, S last) : data(first, last) {}
     
             // template<std::ranges::input_range R>
             // requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
             // constexpr explicit char_str(std::from_range_t, R&& r) : char_str(std::ranges::begin(r), std::ranges::end(r)) {}
-        };
+            
+            constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
+            {
+                data += c;
+            }
 
-        template<typename CharT>
-        struct char_class
-        {
-            // TODO: implement
-            std::basic_string_view<CharT> name;
+            constexpr explicit char_str(std::size_t parse_result)
+            {
+                if (parse_result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
+                {
+                    data = static_cast<CharT>(parse_result);
+                }
+                else
+                {
+                    // TODO: construct string corresponding to multibyte char
+                    throw pattern_error("Multibyte characters are unimplemented");
+                }
+            }
+
+            [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
+            {
+                // TODO: update this to be aware of multibyte characters
+                if (data.size() == 1)
+                    return data.front();
+                return {};
+            }
         };
 
         struct backref
@@ -91,15 +129,20 @@ namespace rx::detail
         friend class expr_tree<CharT>;
 
     private:
-        constexpr tok::char_str<CharT>  parse_hex(std::size_t fixed_amt);
-        constexpr tok::backref          parse_bref();
-        constexpr tok::repeat_n_m       parse_repeat();
-        constexpr token_t               parse_bref_or_octal(CharT init);
-        constexpr tok::char_str<CharT>  parse_literal_string(it_type begin);
+        constexpr std::size_t               parse_hex(std::size_t fixed_amt);
+        constexpr std::size_t               parse_remaining_oct(std::size_t init);
+        constexpr std::size_t               parse_arbitrary_oct();
+        constexpr tok::backref              parse_bref();
+        constexpr tok::repeat_n_m           parse_repeat();
+        constexpr token_t                   parse_bref_or_octal(CharT init);
+        constexpr tok::char_str<CharT>      parse_literal_string(it_type begin);
+        constexpr tok::char_class<CharT>    parse_char_class();
+        constexpr named_character_class     parse_posix_char_class();
 
         it_type it_;
         it_type end_;
     };
+
 
     /* lexer implementation */
 
@@ -129,6 +172,8 @@ namespace rx::detail
 
         case '\\':
             {
+                using ncc = named_character_class;
+
                 if (it_ == end_)
                     throw pattern_error("Pattern cannot end with '\\'");
                 
@@ -136,39 +181,33 @@ namespace rx::detail
 
                 switch (escaped)
                 {
-                    /* escape sequences */
+                    /* standard escape sequences */
 
                 case 'a': return char_str{ '\a' };
+                case 'b': return char_str{ '\b' };
                 case 'f': return char_str{ '\f' };
                 case 't': return char_str{ '\t' };
                 case 'n': return char_str{ '\n' };
                 case 'r': return char_str{ '\r' };
                 case 'v': return char_str{ '\v' };
 
-                    /* escaped control chars */
-
-                case '.': return char_str{ '.' };
-                case '^': return char_str{ '^' };
-                case '$': return char_str{ '$' };
-                case '*': return char_str{ '*' };
-                case '+': return char_str{ '+' };
-                case '?': return char_str{ '?' };
-                case '(': return char_str{ '(' };
-                case ')': return char_str{ ')' };
-                case '[': return char_str{ '[' };
-                case ']': return char_str{ ']' };
-                case '{': return char_str{ '{' };
-                case '}': return char_str{ '}' };
-                case '\\': return char_str{ '\\' };
+                    /* numeric escape sequences */
+                
+                case 'o': return char_str{ parse_arbitrary_oct() };
+                case 'x': return char_str{ parse_hex(0) };
+                case 'u': return char_str{ parse_hex(4) };
+                case 'U': return char_str{ parse_hex(8) };
                     
                     /* perl character classes */
 
-                case 'd':
-                case 'D':
-                case 's':
-                case 'S':
-                case 'w':
-                case 'W': return char_class{{ current, it_ }};
+                case 'd': return char_class{ ncc::digits };
+                case 'D': return char_class{ ncc::digits, true };
+                case 's': return char_class{ ncc::perl_whitespace };
+                case 'S': return char_class{ ncc::perl_whitespace, true };
+                case 'w': return char_class{ ncc::word };
+                case 'W': return char_class{ ncc::word, true };
+
+                    /* octal escape sequences and backreferences */
 
                 case '0':
                 case '1':
@@ -184,77 +223,40 @@ namespace rx::detail
 
                 case 'g': return parse_bref();
 
-                case 'x': return parse_hex(0);
-                case 'u': return parse_hex(4);
-                case 'U': return parse_hex(8);
+                    /* literal string */
 
                 case 'Q': return parse_literal_string(current);
 
-                default: throw pattern_error("Invalid control character");
+                default:
+                    if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
+                        throw pattern_error("Invalid control character");
+                    else
+                        return char_str{ escaped }; /* TODO: extract multibyte character */
                 }
             }
 
         case '{': return parse_repeat();
-        case '[':
-        {
-            // TODO: actually parse character class 
-
-            for (int bkt_depth{ 1 }; bkt_depth > 0;)
-            {
-                if (it_ == end_)
-                    throw pattern_error("Character class missing closing bracket");
-
-                auto c{ *it_++ };
-
-                /* NOTE: this code here is incorrect */
-                // TODO: IMPLEMENT
-
-                if (c == '[')
-                {
-                    ++bkt_depth;
-                }
-                else if (c == ']')
-                {
-                    --bkt_depth;
-                }
-                else if (c == '\\')
-                {
-                    if (it_ == end_)
-                        throw pattern_error("Character class missing closing bracket");
-                    
-                    /* WARNING:
-                     * For now, we assume that escape codes are 2 chars long.
-                     * This is not actually the case, but it's good enough to 
-                     * help us ignore escaped square brackets (at least for now). */
-                     ++it_;
-                }
-            }
-
-            // TODO: if character class only has one character, return a char_lit instead
-
-            return char_class{{ std::next(current), std::next(it_, -1) }};
-        }
+        case '[': return parse_char_class();
 
         default:
-            return char_str{ *current };
+            return char_str{ *current }; /* TODO: extract multibyte character */
         }
     }
 
 
-    /* helpers for lexer implementation */
+    /* general helpers for lexer implementation */
 
 
     template<typename CharT>
-    constexpr tok::char_str<CharT> lexer<CharT>::parse_hex(const std::size_t fixed_amt)
+    constexpr std::size_t lexer<CharT>::parse_hex(const std::size_t fixed_amt)
     {
-        using namespace tok;
         static constexpr std::size_t hexadecimal_base{ 0x10 };
         static constexpr std::size_t decimal_base{ 10 };
 
         std::size_t result{ 0 };
 
         if (it_ == end_ )
-            throw pattern_error("Incomplete escape sequence");
+            throw pattern_error("EOF in escape sequence");
 
         const auto lookahead{ *it_ };
 
@@ -268,7 +270,7 @@ namespace rx::detail
             for (bool loop{ true }; loop; ++digits)
             {
                 if (it_ == end_)
-                    throw pattern_error("Incomplete escape sequence");;
+                    throw pattern_error("EOF in escape sequence");;
 
                 const auto c{ *it_ };
 
@@ -281,7 +283,7 @@ namespace rx::detail
                 else if ('a' <= c and c <= 'f')
                     result = (result * hexadecimal_base) + decimal_base + (c - 'a');
                 else
-                    throw pattern_error("Incomplete escape sequence");
+                    throw pattern_error("Invalid character in hexadecimal escape sequence");
 
                 ++it_;
             }
@@ -294,7 +296,7 @@ namespace rx::detail
             for (std::size_t i{ 0 }; i < fixed_amt; ++i)
             {
                 if (it_ == end_)
-                    throw pattern_error("Incomplete escape sequence");
+                    throw pattern_error("EOF in escape sequence");
 
                 const auto c{ *it_ };
 
@@ -305,7 +307,7 @@ namespace rx::detail
                 else if ('a' <= c and c <= 'f')
                     result = (result * hexadecimal_base) + decimal_base + (c - 'a');
                 else
-                    throw pattern_error("Incomplete escape sequence");
+                    throw pattern_error("Invalid character in hexadecimal escape sequence");
 
                 ++it_;
             }
@@ -314,7 +316,7 @@ namespace rx::detail
         {
             std::size_t digits{ 0 };
             
-            for (bool loop{ true }; loop; ++digits)
+            while (true)
             {
                 if (it_ == end_)
                     break;
@@ -328,21 +330,88 @@ namespace rx::detail
                 else if ('a' <= c and c <= 'f')
                     result = (result * hexadecimal_base) + decimal_base + (c - 'a');
                 else
-                    loop = false;
+                    break;
 
                 ++it_;
+                ++digits;
             }
 
             if (digits == 0)
                 throw pattern_error("Invalid escape sequence");
         }
 
-        if (result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-            return char_str<CharT>{ static_cast<CharT>(result) };
-
-        // TODO: return string corresponding to multibyte char
-        throw pattern_error("Multibyte characters are unimplemented");        
+        return result;
     }
+
+    template<typename CharT>
+    constexpr std::size_t lexer<CharT>::parse_remaining_oct(const std::size_t init)
+    {
+        static constexpr std::size_t octal_base{ 010 };
+
+        std::size_t result{ init };
+       
+        for (std::size_t i{ 0 }; i < 2; ++i)
+        {
+            if (it_ == end_)
+                break;
+
+            const auto c{ *it_ };
+
+            if ('0' <= c and c <= '7')
+                result = (result * octal_base) + (c - '0');
+            else
+                break;
+
+            ++it_;
+        }
+     
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr std::size_t lexer<CharT>::parse_arbitrary_oct()
+    {
+        static constexpr std::size_t octal_base{ 010 };
+
+        std::size_t result{ 0 };
+
+        if (it_ == end_ )
+            throw pattern_error("EOF in escape sequence");
+
+        const auto lookahead{ *it_ };
+
+        if (lookahead != '{')
+            throw pattern_error("Invalid escape sequence");
+
+        /* arbitrary number of digits contained in {} */
+        
+        std::size_t digits{ 0 };
+        ++it_;
+
+        for (bool loop{ true }; loop; ++digits)
+        {
+            if (it_ == end_)
+                throw pattern_error("EOF in escape sequence");;
+
+            const auto c{ *it_ };
+
+            if (c == '}')
+                loop = false;
+            else if ('0' <= c and c <= '7')
+                result = (result * octal_base) + (c - '0');
+            else
+                throw pattern_error("Invalid character in octal escape sequence");
+
+            ++it_;
+        }
+
+        if (digits == 0)
+            throw pattern_error("Delimited escape sequence cannot be empty");
+
+        return result;
+    }
+
+    /* specific helpers for lexer implementation */
 
     template<typename CharT>
     constexpr tok::backref lexer<CharT>::parse_bref()
@@ -509,13 +578,7 @@ namespace rx::detail
 
         if (bref.number == 0)
         {
-            if (result > std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-            {
-                // TODO: return string corresponding to multibyte char
-                throw pattern_error("Octal escape sequence out of range");
-            }
-
-            return char_str<CharT>{ static_cast<CharT>(result) };
+            return char_str<CharT>{ result };
         }
         else
         {
@@ -545,5 +608,281 @@ namespace rx::detail
         }
 
         return char_str<CharT>{ std::next(begin, 2), std::prev(it_, 2) };
+    }
+
+    template<typename CharT>
+    constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
+    {
+        using namespace tok;
+        using ncc = named_character_class;
+        using char_class = char_class<CharT>;
+        using underlying_char_t = char_class::underlying_char_type;
+
+        if (it_ == end_)
+            throw pattern_error("EOF in character class");
+
+        const bool is_negated{ *it_ == '^' };
+
+        if (is_negated)
+            ++it_;
+
+        char_class result{ is_negated };
+
+        std::optional<underlying_char_t> c{};
+        bool is_range{ false };
+
+        for (bool loop{ true }; loop; )
+        {
+            if (it_ == end_)
+                throw pattern_error("EOF in character class");
+
+            const auto current{ it_ };
+
+            std::optional<std::pair<ncc, bool>> selected_cc;
+            std::optional<underlying_char_t> nc;
+
+            switch (*it_++)
+            {
+            case ']':
+                if (result.data.get().empty() and not c.has_value())
+                    nc = ']';
+                else
+                    loop = false;
+                break;
+
+            case '-':
+                if (c.has_value() and not is_range)
+                    is_range = true;
+                else
+                    nc = '-';
+                break;
+
+            case '\\':
+                {
+                    if (it_ == end_)
+                        throw pattern_error("Pattern cannot end with '\\'");
+                    
+                    const auto escaped{ *it_++ };
+
+                    switch (escaped)
+                    {
+                        /* standard escape sequences */
+
+                    case 'a': nc = '\a'; break;
+                    case 'b': nc = '\b'; break;
+                    case 'f': nc = '\f'; break;
+                    case 't': nc = '\t'; break;
+                    case 'n': nc = '\n'; break;
+                    case 'r': nc = '\r'; break;
+                    case 'v': nc = '\v'; break;
+
+                        /* numeric escape sequences */
+
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7': nc = parse_remaining_oct(escaped - '0'); break;
+
+                    case 'o': nc = parse_arbitrary_oct(); break;
+                    case 'x': nc = parse_hex(0); break;
+                    case 'u': nc = parse_hex(4); break;
+                    case 'U': nc = parse_hex(8); break;
+                        
+                        /* perl character classes */
+
+                    case 'd': selected_cc = { ncc::digits, false }; break;
+                    case 'D': selected_cc = { ncc::digits, true }; break;
+                    case 's': selected_cc = { ncc::perl_whitespace, false }; break;
+                    case 'S': selected_cc = { ncc::perl_whitespace, true }; break;
+                    case 'w': selected_cc = { ncc::word, false }; break;
+                    case 'W': selected_cc = { ncc::word, true }; break;
+
+                    default:
+                        if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
+                            throw pattern_error("Invalid control character");
+                        else
+                            nc = escaped; /* TODO: extract multibyte character */
+                        break;
+                    }
+                }
+                break;
+
+            case '[':
+                selected_cc = { parse_posix_char_class(), false };
+                break;
+
+            default:
+                nc = *current; /* TODO: extract multibyte character */
+                break;
+            }
+
+
+            if (selected_cc)
+            {
+                if (c)
+                {
+                    /* insert c */
+                    result.data.insert(c.value());
+                    c.reset();
+                }
+
+                if (selected_cc->second)
+                {
+                    /* insert negated char class */
+                    char_class_impl<underlying_char_t> tmp{ selected_cc->first, true };
+                    result.data.insert(tmp);
+                }
+                else
+                {
+                    /* insert char class */
+                    result.data.insert(selected_cc->first);
+                }
+
+                selected_cc.reset();
+            }
+            else if (nc)
+            {
+                if (not c)
+                {
+                    /* delay insert */
+                    c = nc;
+                }
+                else if (is_range)
+                {
+                    if (*c > *nc)
+                        throw pattern_error("Invalid character class range");
+
+                    /* insert c - nc */
+                    result.data.insert(*c, *nc);
+                    is_range = false;
+                    c.reset();
+                }
+                else
+                {
+                    /* insert c */
+                    result.data.insert(*c);
+                    c = nc;
+                }
+            }
+            else if (not loop)
+            {
+                if (c)
+                    result.data.insert(*c);
+
+                if (is_range)
+                    result.data.insert(underlying_char_t{ '-' });
+            }
+        }
+
+        return result;
+    }
+
+
+    template<typename CharT>
+    constexpr named_character_class lexer<CharT>::parse_posix_char_class()
+    {
+        using ncc = named_character_class;
+
+        static constexpr auto test = [](it_type& it, const it_type& end, std::string_view rest) constexpr -> bool {
+            if (std::ranges::starts_with(it, end, std::ranges::begin(rest), std::ranges::end(rest)))
+            {
+                std::ranges::advance(it, std::ranges::size(rest));
+                return true;
+            }
+            return false;
+        };
+
+
+        if (it_ == end_ or *it_ != ':') throw pattern_error("Invalid POSIX Character Class");
+        ++it_;
+
+        if (it_ != end_)
+        {
+            switch (*it_++)
+            {
+            case 'a':
+                if (it_ == end_)
+                    break;
+                if (*it_ == 'l')
+                {
+                    ++it_;
+                    if (it_ == end_)
+                    {
+                        break;
+                    }
+                    else if (*it_ == 'n')
+                    {
+                        if (test(++it_, end_, "um:]")) return ncc::alphanumeric;
+                    }
+                    else if (*it_ == 'p')
+                    {
+                        if (test(++it_, end_, "ha:]")) return ncc::alphabetic;
+                    }
+                }
+                else if (*it_ == 's')
+                {
+                    if (test(++it_, end_, "cii:]")) return ncc::ascii;
+                }
+                break;
+
+            case 'b':
+                if (test(it_, end_, "lank:]")) return ncc::blank;
+                break;
+
+            case 'c':
+                if (test(it_, end_, "ntrl:]")) return ncc::control;
+                break;
+
+            case 'd':
+                if (test(it_, end_, "igit:]")) return ncc::digits;
+                break;
+
+            case 'g':
+                if (test(it_, end_, "raph:]")) return ncc::graphical;
+                break;
+
+            case 'l':
+                if (test(it_, end_, "ower:]")) return ncc::lowercase;
+                break;
+
+            case 'p':
+                if (it_ == end_)
+                    break;
+                if (*it_ == 'r')
+                {
+                    if (test(++it_, end_, "int:]")) return ncc::printable;
+                }
+                else if (*it_ == 'u')
+                {
+                    if (test(++it_, end_, "nct:]")) return ncc::punctuation;
+                }
+                break;
+
+            case 's':
+                if (test(it_, end_, "pace:]")) return ncc::posix_whitespace;
+                break;
+
+            case 'u':
+                if (test(it_, end_, "pper:]")) return ncc::uppercase;
+                break;
+
+            case 'w':
+                if (test(it_, end_, "ord:]")) return ncc::word;
+                break;
+
+            case 'x':
+                if (test(it_, end_, "digit:]")) return ncc::hexdigits;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        throw pattern_error("Invalid POSIX Character Class");
     }
 }

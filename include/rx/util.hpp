@@ -21,6 +21,21 @@ namespace rx::detail
     template<typename T, typename Variant>
     concept in_variant = type_in_variant_impl<T, Variant>::value;
 
+    template<typename CharT>
+    concept char_is_utf8 = std::same_as<CharT, char8_t>; /* Assume a regular char is ascii (or some single byte superset of) */
+
+    template<typename CharT>
+    concept char_is_utf16 = std::same_as<CharT, char16_t>
+                            or (std::same_as<CharT, wchar_t> and sizeof(wchar_t) == sizeof(char16_t)); /* Assume a 16-bit wchar_t is encoded in utf16 */
+
+    template<typename CharT>
+    concept char_is_utf32 = std::same_as<CharT, char32_t>
+                            or (std::same_as<CharT, wchar_t> and sizeof(wchar_t) == sizeof(char32_t)); /* Assume a 32-bit wchar_t is encoded in utf32 */
+    
+
+    template<typename CharT>
+    concept char_is_multibyte = char_is_utf8<CharT> or char_is_utf16<CharT>;
+
     template<typename CharT, std::size_t N>
     struct string_literal
     {

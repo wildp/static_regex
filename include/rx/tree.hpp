@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <ranges>
 #include <utility>
 #include <variant>
@@ -13,8 +14,6 @@
 #include <rx/error.hpp>
 #include <rx/tok.hpp>
 
-// Optimisations to add:
-// - merge alternations of single characters into character classes
 
 namespace rx::detail
 {
@@ -44,6 +43,7 @@ namespace rx::detail
         bool enable_possessive  : 1 { false };
         bool enable_backrefs    : 1 { false };
         bool enable_branchreset : 1 { false };
+        bool enable_alttocc     : 1 { true };
     };
     
 
@@ -54,8 +54,6 @@ namespace rx::detail
     {
     public:
         using sv_type = std::basic_string_view<CharT>;
- 
-        using any = tok::dot;
 
         struct assertion
         {
@@ -94,7 +92,7 @@ namespace rx::detail
         // TODO: replace char_lit with strings
         // using char_str = std::basic_string<CharT>;
 
-        using type = std::variant<any, assertion, char_str, char_class, backref, alt, concat, capture, repeat>;
+        using type = std::variant<assertion, char_str, char_class, backref, alt, concat, capture, repeat>;
 
         constexpr expr_tree(sv_type sv, parser_flags flags = {});
         
@@ -149,11 +147,13 @@ namespace rx::detail
 
         enum class semantic_action : std::int_least8_t
         {
-            identity,
-
             make_empty,
+            make_dot,
             make_hat,
             make_dollar,
+
+            make_char_lit,
+            make_char_class,
 
             make_alt,
             make_concat,
@@ -486,7 +486,7 @@ namespace rx::detail
                     switch (token.index())
                     {
                     case tok_index<dot>:
-                        stack.push({ dot{}, sa::identity });
+                        stack.push({ dot{}, sa::make_dot });
                         break;
                     case tok_index<hat>:
                         stack.push({ hat{}, sa::make_hat });
@@ -498,10 +498,10 @@ namespace rx::detail
                         stack.push({ sa::cap_push, lparen{}, nt::P, rparen{}, sa::cap_pop });
                         break;
                     case tok_index<char_str>:
-                        stack.push({ char_str{}, sa::identity });
+                        stack.push({ char_str{}, sa::make_char_lit });
                         break;
                     case tok_index<char_class>:
-                        stack.push({ char_class{}, sa::identity });
+                        stack.push({ char_class{}, sa::make_char_class });
                         break;
                     case tok_index<backref>:
                         stack.push({ backref{}, sa::make_bref });
@@ -538,34 +538,30 @@ namespace rx::detail
 
                 switch (*action)
                 {
-                case sa::identity:
-                    {
-                        /* make an arbitrary token an ast entry */
-                        const terminal term{ std::get<terminal>(semstack.pop()) };
-                        
-                        type result{ term.visit(overloads{
-                            [](const in_variant<type> auto& arg) constexpr -> type { return arg; },
-                            [](const auto&) constexpr -> type { throw pattern_error("Unknown error during parsing pattern"); }
-                        }) };
-
-                        /* we duplicate functionality of new_expression here */
-                        if (overwritable_.empty())
-                        {
-                            semstack.push(expressions_.size());
-                            expressions_.emplace_back(std::move(result));
-                        }
-                        else
-                        {
-                            const std::size_t idx{ overwritable_.back() };
-                            overwritable_.pop_back();
-                            semstack.push(idx);
-                            expressions_.at(idx) = std::move(result);
-                        }
-                    }
-                    break;
                 case sa::make_empty:
                     {                 
                         semstack.push(new_expression<char_str>(/* empty string */));
+                    }
+                    break;
+                case sa::make_dot:
+                    {
+                        std::ignore = semstack.pop(); /* pop tok::dot */                        
+
+                        /* depending on flags, insert true wildcard instead of [^\n] */
+                        if (capstack.dotall())
+                        { 
+                            using uct = char_class::underlying_char_type;
+                            char_class result{ false };
+                            result.data.insert(std::numeric_limits<uct>::min(), std::numeric_limits<uct>::max());
+                            semstack.push(new_expression<char_class>(std::move(result)));
+                        }
+                        else
+                        {
+                            char_class result{ true };
+                            result.data.insert('\n');
+                            semstack.push(new_expression<char_class>(std::move(result)));
+                        }
+
                     }
                     break;
                 case sa::make_hat:
@@ -591,23 +587,257 @@ namespace rx::detail
                             semstack.push(new_expression<assertion>(assert_type::text_end));
                     }
                     break;
+                case sa::make_char_lit:
+                    {
+                        char_str lit{ std::get<char_str>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+
+                        bool normal_insert{ true };
+
+                        if (capstack.caseless())
+                        {
+                            static constexpr auto is_alphabetic = [](CharT c) constexpr -> bool { return ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z'); };
+
+                            if (auto c{ lit.get_if_single() })
+                            {
+                                /* single character (therefore easier to implement) */
+
+                                if (is_alphabetic(*c))
+                                {
+                                    const auto new_idx{ new_expression<char_class>() }; 
+                                    auto& target{ std::get<char_class>(expressions_.at(new_idx)).data };
+                                    semstack.push(new_idx);
+
+                                    target.insert(*c);
+                                    target.make_caseless();
+                                    normal_insert = false;
+                                }
+                            }
+                            else if (not lit.data.empty())
+                            {
+                                /* several characters (need to insert concat) */
+
+                                if constexpr(char_is_multibyte<CharT>)
+                                {
+                                    // TODO: implement this using utf32 proxy iterators
+                                    throw tree_error("Caseless flag on multibyte strings not implemented");
+                                }
+                                
+                                auto lit_it{ std::ranges::begin(lit.data) };
+                                const auto lit_end{ std::ranges::end(lit.data) };
+
+                                if (std::ranges::any_of(lit_it, lit_end, is_alphabetic))
+                                {
+                                    /* create new concat to insert caseless string into */
+                                    const auto cat_idx{ new_expression<concat>() }; 
+                                    semstack.push(cat_idx);
+
+                                    while (lit_it != lit_end)
+                                    {
+                                        const auto c{ *lit_it++ };
+
+                                        if (is_alphabetic(c))
+                                        {
+                                            /* insert character class of [cC] into cat */
+                                            const auto new_idx{ new_expression<char_class>() }; 
+                                            auto& target{ std::get<char_class>(expressions_.at(new_idx)).data };
+                                            std::get<concat>(expressions_.at(cat_idx)).idxs.push_back(new_idx);
+
+                                            target.insert(c);
+                                            target.make_caseless();
+                                            
+                                        }
+                                        else
+                                        {
+                                            /* insert character string into cat */
+                                            const auto new_idx{ new_expression<char_str>() }; 
+                                            auto& target{ std::get<char_str>(expressions_.at(new_idx)).data };
+
+                                            target.push_back(c);
+
+                                            while (lit_it != lit_end and is_alphabetic(*lit_it))
+                                                target.push_back(*lit_it++);
+
+                                            std::get<concat>(expressions_.at(cat_idx)).idxs.push_back(new_idx);
+                                        }
+                                    }
+
+                                    normal_insert = false;
+                                }
+                            }
+                        }
+                        
+                        if (normal_insert)
+                            semstack.push(new_expression<char_str>(std::move(lit)));
+                        
+                    }
+                    break;
+                case sa::make_char_class:
+                    {
+                        char_class cc{ std::get<char_class>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+
+                        if (capstack.caseless())
+                            cc.data.make_caseless();
+                        
+                        semstack.push(new_expression<char_class>(std::move(cc)));
+                    }
+                    break;
                 case sa::make_alt:
                     {
                         const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
                         std::ignore = semstack.pop(); /* pop tok::vert */
                         const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
 
+                        bool merged{ false };                        
+
                         if (type& ast{ expressions_.at(rhs_idx) }; std::holds_alternative<alt>(ast))
                         {
-                            /* insert lhs into existing alt */
                             semstack.push(rhs_idx);
                             auto& ast_alt{ std::get<alt>(ast) };
-                            ast_alt.idxs.insert(ast_alt.idxs.begin(), lhs_idx);
+                            
+                            if (flags_.enable_alttocc and not ast_alt.idxs.empty())
+                            {
+                                /* attempt to replace a|b with [ab] */
+                                type& rhs{ expressions_.at(ast_alt.idxs.front()) };
+                                type& lhs{ expressions_.at(lhs_idx) };
+
+                                if (std::holds_alternative<char_class>(rhs))
+                                {
+                                    auto& target{ std::get<char_class>(rhs).data };
+
+                                    if (std::holds_alternative<char_class>(lhs))
+                                    {
+                                        /* merge char classes */
+                                        auto& other{ std::get<char_class>(lhs).data };
+                                        target.insert(other);
+                                        overwritable_.push_back(lhs_idx);
+                                        merged = true;
+                                    }
+                                    else if (std::holds_alternative<char_str>(lhs))
+                                    {
+                                        if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
+                                        {
+                                            /* insert char into char class */
+                                            target.insert(*to_insert);
+                                            overwritable_.push_back(lhs_idx);
+                                            merged = true;
+                                        }
+                                    }
+                                }
+                                else if (std::holds_alternative<char_str>(rhs))
+                                {
+                                    const auto saved_idx{ ast_alt.idxs.front() }; 
+
+                                    if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
+                                    {
+                                        if (std::holds_alternative<char_class>(lhs))
+                                        {
+                                            /* replace rhs with lhs in alt, and insert char into char class */
+                                            auto& target{ std::get<char_class>(lhs).data };
+                                            ast_alt.idxs.front() = lhs_idx;
+                                            target.insert(*to_insert);
+                                            overwritable_.push_back(saved_idx);
+                                            merged = true;
+                                        }
+                                        else if (std::holds_alternative<char_str>(lhs))
+                                        {
+                                            if (auto other_insert{ std::get<char_str>(lhs).get_if_single() })
+                                            {
+                                                /* replace rhs with new char class in alt */
+                                                const auto new_idx{ new_expression<char_class>() }; 
+                                                auto& target{ std::get<char_class>(expressions_.at(new_idx)).data };
+
+                                                /* calling new_expression invalidates references, so we must re-get ast_alt */ 
+                                                auto& ast_alt2{ std::get<alt>(expressions_.at(rhs_idx)) };
+                                                ast_alt2.idxs.front() = new_idx;
+
+                                                target.insert(*to_insert);
+                                                target.insert(*other_insert);
+                                                overwritable_.push_back(lhs_idx);
+                                                overwritable_.push_back(saved_idx);
+                                                merged = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                                
+                            if (not merged)
+                            {
+                                /* insert lhs into existing alt */
+                                ast_alt.idxs.insert(ast_alt.idxs.begin(), lhs_idx);
+                            }
                         }
-                        else 
+                        else
                         {
-                            /* create new alt */
-                            semstack.push(new_expression<alt>(std::vector<std::size_t>{ lhs_idx, rhs_idx }));
+                            if (flags_.enable_alttocc)
+                            {
+                                /* attempt to replace a|b with [ab] */
+                                type& rhs{ expressions_.at(rhs_idx) };
+                                type& lhs{ expressions_.at(lhs_idx) };
+
+                                if (std::holds_alternative<char_class>(rhs))
+                                {
+                                    auto& target{ std::get<char_class>(rhs).data };
+
+                                    if (std::holds_alternative<char_class>(lhs))
+                                    {
+                                        /* merge char classes */
+                                        auto& other{ std::get<char_class>(lhs).data };
+                                        semstack.push(rhs_idx);
+                                        target.insert(other);
+                                        overwritable_.push_back(lhs_idx);
+                                        merged = true;
+                                    }
+                                    else if (std::holds_alternative<char_str>(lhs))
+                                    {
+                                        if (auto to_insert{ std::get<char_str>(lhs).get_if_single() })
+                                        {
+                                            /* insert char into char class */
+                                            semstack.push(rhs_idx);
+                                            target.insert(*to_insert);
+                                            overwritable_.push_back(lhs_idx);
+                                            merged = true;
+                                        }
+                                    }
+                                }
+                                else if (std::holds_alternative<char_str>(rhs))
+                                {
+                                    if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
+                                    {
+                                        if (std::holds_alternative<char_class>(lhs))
+                                        {
+                                            /* insert (rhs) char into (lhs) char class */
+                                            auto& target{ std::get<char_class>(lhs).data };
+                                            semstack.push(lhs_idx);
+                                            target.insert(*to_insert);
+                                            overwritable_.push_back(rhs_idx);
+                                            merged = true;
+                                        }
+                                        else if (std::holds_alternative<char_str>(lhs))
+                                        {
+                                            if (auto other_insert{ std::get<char_str>(lhs).get_if_single() })
+                                            {
+                                                /* create new char class */
+                                                const auto new_idx{ new_expression<char_class>() };
+                                                auto& target{ std::get<char_class>(expressions_.at(new_idx)).data };
+                                                semstack.push(new_idx);
+                                                
+                                                target.insert(*to_insert);
+                                                target.insert(*other_insert);
+                                                overwritable_.push_back(lhs_idx);
+                                                overwritable_.push_back(rhs_idx);
+                                                merged = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (not merged)
+                            {
+                                /* create new alt */
+                                semstack.push(new_expression<alt>(std::vector<std::size_t>{ lhs_idx, rhs_idx }));
+                            }
                         }
                     }
                     break;
@@ -631,8 +861,8 @@ namespace rx::detail
                                 if (std::holds_alternative<char_str>(rhs) and std::holds_alternative<char_str>(lhs))
                                 {
                                     /* merge lhs string with first entry of rhs (also a string) */
-                                    auto& target{ std::get<char_str>(rhs).str };
-                                    auto& lhs_str{ std::get<char_str>(lhs).str };
+                                    auto& target{ std::get<char_str>(rhs).data };
+                                    auto& lhs_str{ std::get<char_str>(lhs).data };
                                     lhs_str.append(target);
                                     std::swap(lhs_str, target);
                                     overwritable_.push_back(lhs_idx);
@@ -655,8 +885,8 @@ namespace rx::detail
                             {
                                 /* lhs and rhs are both strings: merge strings into one instead of creating concat  */
                                 semstack.push(rhs_idx);
-                                auto& target{ std::get<char_str>(rhs).str };
-                                auto& lhs_str{ std::get<char_str>(lhs).str };
+                                auto& target{ std::get<char_str>(rhs).data };
+                                auto& lhs_str{ std::get<char_str>(lhs).data };
                                 lhs_str.append(target);
                                 std::swap(lhs_str, target);
                                 overwritable_.push_back(lhs_idx);
@@ -816,6 +1046,7 @@ namespace rx::detail
                             throw pattern_error("Named capture groups are unsupported");
 
                         default: /* parse options */
+                            capstack.set_flag_assigning();
                             for (bool loop{ true }; loop;)
                             {
                                 if (lit == lend)
@@ -823,8 +1054,6 @@ namespace rx::detail
 
                                 const auto lookahead{ *lit };
                                 bool increment{ true };
-
-                                capstack.set_non_capturing();
 
                                 switch(lookahead)
                                 {
@@ -849,6 +1078,7 @@ namespace rx::detail
                                     break;
                                     
                                 case ':':
+                                    capstack.set_non_capturing();
                                     loop = false;
                                     break;
 
@@ -863,7 +1093,8 @@ namespace rx::detail
 
                                 if (increment)
                                     ++lit;
-                            }   
+                            }
+                            break;
                         }
                     }
                     break;
@@ -919,7 +1150,6 @@ namespace rx::detail
 
             switch (entry.index())
             {
-            case ast_index<any>:
             case ast_index<assertion>:
             case ast_index<char_str>:
             case ast_index<char_class>:

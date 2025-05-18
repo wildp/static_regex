@@ -108,30 +108,6 @@ namespace rx::testing
                 const std::size_t pos{ raw_data.pos() };
 
                 const rc result = this->get_expr(pos).visit(detail::overloads{
-                    [&](const expr_tree_t::any&) -> rc
-                    {
-                        if (s.it == last)
-                        {
-                            return rc::match_failure;
-                        }
-
-                        if constexpr (std::same_as<CharT, char8_t>)
-                        {
-                            // TODO: Implement
-                            throw tree_error("UTF-8 wildcard matching unimplemented");
-                        }
-                        else if constexpr (std::same_as<CharT, char16_t> or (std::same_as<CharT, wchar_t> and sizeof(wchar_t) == 2))
-                        {
-                            // TODO: Implement
-                            throw tree_error("UTF-16 wildcard matching unimplemented");
-                        }
-                        else
-                        {
-                            std::ranges::advance(s.it, 1);
-                        }
-
-                        return rc::match_continue;
-                    },
                     [&](const expr_tree_t::assertion& asr) -> rc
                     {
                         using detail::assert_type;
@@ -142,6 +118,12 @@ namespace rx::testing
                                 return rc::match_continue;
                         case assert_type::text_end:
                             if (s.it == last)
+                                return rc::match_continue;
+                        case assert_type::line_start:
+                            if (s.it == first or *std::ranges::prev(s.it) == '\n')
+                                return rc::match_continue;
+                        case assert_type::line_end:
+                            if (s.it == last or *s.it == '\n')
                                 return rc::match_continue; 
                         default:
                             throw tree_error("Encountered unimplemented assertion while matching");
@@ -290,7 +272,7 @@ namespace rx::testing
                     },
                     [&](const expr_tree_t::char_str& lit) -> rc
                     {
-                        for (const auto c: lit.str)
+                        for (const auto c: lit.data)
                         {
                             if (s.it == last or *s.it != c)
                                 return rc::match_failure; /* unsuccessful match */
@@ -299,10 +281,47 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::char_class& /* cla */) -> rc
+                    [&](const expr_tree_t::char_class& cla) -> rc
                     {
-                        // TODO: Implement
-                        throw tree_error("Character class matching is unimplemented"); 
+                        if (s.it == last)
+                        {
+                            return rc::match_failure;
+                        }
+
+                        using uct = typename expr_tree_t::char_class::underlying_char_type;
+
+                        uct input{};
+
+                        if constexpr (detail::char_is_utf8<CharT>)
+                        {
+                            // TODO: Implement
+                            throw tree_error("UTF-8 char class matching unimplemented");
+                        }
+                        else if constexpr (detail::char_is_utf16<CharT>)
+                        {
+                            // TODO: Implement
+                            throw tree_error("UTF-16 char class matching unimplemented");
+                        }
+                        else
+                        {
+                            input = *s.it++;
+                        }
+
+                        
+                        if (cla.data.is_negated())
+                        {
+                            for (const auto& [lower, upper] : cla.data.get())
+                                if (lower <= input and input <= upper)
+                                    return rc::match_failure;
+                            return rc::match_continue;
+                        }
+                        else
+                        {
+                            for (const auto& [lower, upper] : cla.data.get())
+                                if (lower <= input and input <= upper)
+                                    return rc::match_continue;
+                            return rc::match_failure;
+                        }
                     }
                 });
 

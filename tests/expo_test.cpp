@@ -39,6 +39,7 @@ static_assert(not tree_match("a", "b"));
 static_assert(not tree_match("a|b", ""));
 static_assert(tree_match("a|b", "a"));
 static_assert(tree_match("a|b", "b"));
+static_assert(not tree_match("a|b", "c"));
 static_assert(tree_match("a|b|c", "c"));
 static_assert(tree_match("a|b|c", "b"));
 static_assert(tree_match("a|b|c", "a"));
@@ -54,6 +55,12 @@ static_assert(not tree_match("ab", "ba"));
 static_assert(not tree_match("ab", "abb"));
 static_assert(not tree_match("ab", "aab"));
 static_assert(not tree_match("ab", "bb"));
+
+/* character class tests */
+static_assert(tree_match("[a-c]", "a"));
+static_assert(tree_match("[a-c]", "b"));
+static_assert(tree_match("[a-c]", "c"));
+static_assert(not tree_match("[a-c]", "d"));
 
 /* repeater tests */
 static_assert(tree_match("a*", ""));
@@ -124,7 +131,7 @@ static_assert(tree_match(".", "$"));
 static_assert(tree_match(".", "z"));
 static_assert(tree_match(".", "A"));
 static_assert(tree_match(".", "."));
-static_assert(tree_match(".", "\n")); // NOTE: this should not match!
+static_assert(not tree_match(".", "\n"));
 // TODO: add test cases for non ascii chars
 
 /* backtracking tests */
@@ -166,9 +173,30 @@ static_assert(tree_match("(?|(a)|(b)(c))(d)\\3", "add"));
 static_assert(tree_match("(?|(a)|(b)(c))(d)\\1\\2", "bcdbc"));
 static_assert(tree_match("(?|(a)|(b)(c)|(d)(e))(f)\\1\\2", "bcfbc"));
 static_assert(tree_match("(?|(a)|(b)(c)|(d)(e))(f)\\1\\2", "defde"));
+
+/* caseless flag */
+static_assert(tree_match("(?i)abc", "ABC"));
+static_assert(tree_match("(?i)abc", "Abc"));
+static_assert(tree_match("(?i)abc", "aBc"));
+static_assert(tree_match("(?i)a[be]", "aB"));
+static_assert(tree_match("(?i)a[Z-a]", "az"));
+static_assert(tree_match("a(?i:b)c", "abc"));
+static_assert(tree_match("a(?i:b)c", "aBc"));
+static_assert(not tree_match("a(?i:b)c", "abC"));
+
+/* dotall flag */
+static_assert(tree_match("(?s).", "\n"));
+static_assert(tree_match("a.b", "a-b"));
+static_assert(not tree_match("a.b", "a\nb"));
+static_assert(tree_match("(?s)a.b", "a\nb"));
+static_assert(not tree_match("((?s))a.b", "a\nb"));
+static_assert(not tree_match("(?:(?s))a.b", "a\nb"));
+
+/* ungreedy flag */
 static_assert(tree_capture("(?U)(a)?a*", "aa", { 0, no_tag, no_tag }));
 static_assert(tree_capture("(?U)(a)??a*", "aa", { 0, 0, 1 }));
-static_assert(tree_capture("(?U:)(a)?a*", "", { 0, no_tag, no_tag }));
+static_assert(tree_capture("(?U:)(a)?a*", "aa", { 0, 0, 1 }));
+static_assert(tree_capture("(?U:)(a)??a*", "aa", { 0, no_tag, no_tag }));
 static_assert(tree_capture("(?U)(aa)+a*", "aaaaa", { 0, 0, 2 }));
 static_assert(tree_capture("(?U)(aa)+?a*", "aaaaa", { 0, 2, 4 }));
 static_assert(tree_capture("(?U-U)(a)?a*", "aa", { 0, 0, 1 }));

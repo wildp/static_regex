@@ -129,15 +129,16 @@ namespace rx::detail
         }
     }
 
+    
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_wildcard(const std::size_t q0, const std::size_t qf)
     {
-        if constexpr (std::same_as<CharT, char8_t> /* TODO: or if char unicode mode enabled */)
+        if constexpr (char_is_utf8<CharT>)
         {
             // TODO: implement multibyte chars;
             throw tnfa_error("UTF8 wildcards are unimplemented");
         }
-        else if constexpr (std::same_as<CharT, char16_t>)
+        else if constexpr (char_is_utf16<CharT>)
         {
             // TODO: implement multibyte chars;
             throw tnfa_error("UTF16 wildcards are unimplemented");
@@ -167,21 +168,17 @@ namespace rx::detail
 
             switch (entry.index())
             {
-            case ast_index<typename ast_t::any>:
-                make_wildcard(q0, qf);
-                break;
-            
             case ast_index<typename ast_t::char_str>:
-                if (const auto& lit{ std::get<typename ast_t::char_str>(entry) }; not lit.str.empty())
+                if (const auto& str{ std::get<typename ast_t::char_str>(entry) }; not str.data.empty())
                 {
-                    for (const auto c : lit.str | std::views::take(lit.str.size() - 1))
+                    for (const auto c : str.data | std::views::take(str.data.size() - 1))
                     {
                         auto qi{ node_create() };
                         nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qi, c, c);
                         q0 = qi;
                     }
                     
-                    nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, lit.str.back(), lit.str.back());
+                    nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, str.data.back(), str.data.back());
                 }
                 else
                 {
@@ -190,8 +187,35 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::char_class>:
-                // todo: implement
-                throw tnfa_error("Character classes are unimplemented");
+                {
+                    const auto& cla{ std::get<typename ast_t::char_class>(entry) };
+                    // using uct = decltype(cla)::underlying_char_type;
+                    using char_range = decltype(cla.data)::char_range;
+
+                    if constexpr (char_is_utf8<CharT>)
+                    {
+                        // TODO: implement multibyte chars;
+                        throw tnfa_error("UTF8 character classes are unimplemented");
+                    }
+                    else if constexpr (char_is_utf16<CharT>)
+                    {
+                        // TODO: implement multibyte chars;
+                        throw tnfa_error("UTF16 character classes are unimplemented");
+                    }
+                    else
+                    {
+                        std::vector<char_range> negated;
+
+                        if (cla.data.is_negated())
+                            cla.data.make_negated(negated);
+
+                        const std::vector<char_range>& ref{ (cla.data.is_negated()) ? negated : cla.data.get() };
+
+                        for (const auto& [lower, upper] : ref)
+                            nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, lower, upper);                    
+                    }
+                }
+                break;
 
             case ast_index<typename ast_t::concat>:
                 if (const auto& cat{ std::get<typename ast_t::concat>(entry) }; not cat.idxs.empty())

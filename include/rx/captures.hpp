@@ -16,9 +16,9 @@ namespace rx::detail::parser
             inherit,
         };
 
-        flag_value caseless  : 2;  /* not implemented -> need to convert all chars into char classes */
+        flag_value caseless  : 2;
         flag_value multiline : 2;  /* not fully implemented -> need to implement in matcher */
-        flag_value dotall    : 2;  /* not implemented -> need to replace dot with character class [^\n] if false */
+        flag_value dotall    : 2;
         flag_value ungreedy  : 2;
     };
 
@@ -26,20 +26,26 @@ namespace rx::detail::parser
     {
         struct cse
         {
+            enum class modes : std::int_least8_t
+            {
+                normal,
+                flag_assigning,
+                non_capturing,
+                branch_reset,
+            };
+
             using cf = capture_flags::flag_value;
 
             std::uint_least16_t number;
             std::uint_least16_t number_end;
             capture_flags flags;
-            bool non_capturing : 1;
-            bool branch_reset : 1;
+            modes mode;
 
             constexpr cse() noexcept :
                 number{ 0 },
                 number_end{ 0 },
                 flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
-                non_capturing{ true },
-                branch_reset{ false }
+                mode{ modes::non_capturing }
             {
             }
 
@@ -47,8 +53,7 @@ namespace rx::detail::parser
                 number{ cur },
                 number_end{ end },
                 flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit },
-                non_capturing{ false },
-                branch_reset{ false }
+                mode{ modes::normal }
             {
             }
         };
@@ -60,7 +65,7 @@ namespace rx::detail::parser
         {
             auto next{ next_number() };
             elems_.emplace_back(next, next);
-            elems_.back().non_capturing = true;
+            elems_.back().mode = cse::modes::non_capturing;
         }
 
         [[nodiscard]] constexpr bool push()
@@ -81,9 +86,9 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; not elem.non_capturing)
+            if (auto& elem{ elems_.back() }; elem.mode != cse::modes::non_capturing)
             {
-                elem.non_capturing = true;
+                elem.mode = cse::modes::non_capturing;
                 elem.number_end = elem.number;
             }
         }
@@ -93,10 +98,21 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; not elem.non_capturing)
+            if (auto& elem{ elems_.back() }; elem.mode != cse::modes::branch_reset)
             {
-                elem.non_capturing = true;
-                elem.branch_reset = true;
+                elem.mode = cse::modes::branch_reset;
+                elem.number_end = elem.number;
+            }
+        }
+
+        constexpr void set_flag_assigning() noexcept
+        {
+            if (elems_.empty())
+                return;
+
+            if (auto& elem{ elems_.back() }; elem.mode != cse::modes::flag_assigning)
+            {
+                elem.mode = cse::modes::flag_assigning;
                 elem.number_end = elem.number;
             }
         }
@@ -106,7 +122,7 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; elem.branch_reset and elem.non_capturing)
+            if (auto& elem{ elems_.back() }; elem.mode == cse::modes::branch_reset)
             {
                 auto& target{ (elems_.size() < 2) ? base_ : *(std::next(elems_.rbegin())) };
                 target.number_end = std::max(target.number_end, elem.number_end) ;
@@ -129,30 +145,33 @@ namespace rx::detail::parser
             auto elem{ elems_.back() };
             elems_.pop_back();
 
-            /* empty capturing group with flags: overwrite containing capturing group's flags*/
             auto& target{ elems_.empty() ? base_ : elems_.back() };
+            
+            /* overwrite containing capturing group's flags when elem is an empty capturing group */
+            if (elem.mode == cse::modes::flag_assigning)
+            {
+                // template for (constexpr auto e : std::define_static_array(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
+                // {
+                //     if (elem.flags.[:e:] != cf::inherit)
+                //         target.flags.[:e:] = elem.flags.[:e:] ;
+                // }
 
-            // template for (constexpr auto e : std::define_static_array(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
-            // {
-            //     if (elem.flags.[:e:] != cf::inherit)
-            //         target.flags.[:e:] = elem.flags.[:e:] ;
-            // }
+                if (elem.flags.caseless  != cf::inherit) target.flags.caseless  = elem.flags.caseless;
+                if (elem.flags.multiline != cf::inherit) target.flags.multiline = elem.flags.multiline;
+                if (elem.flags.dotall    != cf::inherit) target.flags.dotall    = elem.flags.dotall;
+                if (elem.flags.ungreedy  != cf::inherit) target.flags.ungreedy  = elem.flags.ungreedy;
+            }
 
-            if (elem.flags.caseless  != cf::inherit) target.flags.caseless  = elem.flags.caseless;
-            if (elem.flags.multiline != cf::inherit) target.flags.multiline = elem.flags.multiline;
-            if (elem.flags.dotall    != cf::inherit) target.flags.dotall    = elem.flags.dotall;
-            if (elem.flags.ungreedy  != cf::inherit) target.flags.ungreedy  = elem.flags.ungreedy;
-
-            if (elem.branch_reset)
+            if (elem.mode == cse::modes::branch_reset)
                 target.number_end = std::max(target.number_end, elem.number_end) ;
             else
                 target.number_end = elem.number_end;
 
-            if (elem.non_capturing)
-                return {};
-            else
+            if (elem.mode == cse::modes::normal)
                 return elem.number;
-        }
+            else
+                return {};
+    }
 
         // template<std::meta::info CaptureFlagReflection>
         // requires (std::ranges::contains(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked()), CaptureFlagReflection))

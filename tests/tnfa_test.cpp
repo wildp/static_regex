@@ -38,6 +38,7 @@ static_assert(not tnfa_match("a", "b"));
 static_assert(not tnfa_match("a|b", ""));
 static_assert(tnfa_match("a|b", "a"));
 static_assert(tnfa_match("a|b", "b"));
+static_assert(not tnfa_match("a|b", "c"));
 static_assert(tnfa_match("a|b|c", "c"));
 static_assert(tnfa_match("a|b|c", "b"));
 static_assert(tnfa_match("a|b|c", "a"));
@@ -53,6 +54,12 @@ static_assert(not tnfa_match("ab", "ba"));
 static_assert(not tnfa_match("ab", "abb"));
 static_assert(not tnfa_match("ab", "aab"));
 static_assert(not tnfa_match("ab", "bb"));
+
+/* character class tests */
+static_assert(tnfa_match("[a-c]", "a"));
+static_assert(tnfa_match("[a-c]", "b"));
+static_assert(tnfa_match("[a-c]", "c"));
+static_assert(not tnfa_match("[a-c]", "d"));
 
 /* repeater tests */
 static_assert(tnfa_match("a*", ""));
@@ -107,5 +114,6 @@ static_assert(tnfa_match(".", "$"));
 static_assert(tnfa_match(".", "z"));
 static_assert(tnfa_match(".", "A"));
 static_assert(tnfa_match(".", "."));
-static_assert(tnfa_match(".", "\n")); // NOTE: this should not match!
+static_assert(not tnfa_match(".", "\n"));
+static_assert(tnfa_match("(?s).", "\n"));
 // TODO: add test cases for non ascii chars
