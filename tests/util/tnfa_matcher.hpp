@@ -50,8 +50,8 @@ namespace rx::testing
             const auto& [q, m]{ new_closure.back() };
             
             std::vector<epsilon_tr> et{ this->get_node(q).tr
-                                        | std::views::filter([](const auto& t) constexpr { return std::holds_alternative<epsilon_tr>(t); })
-                                        | std::views::transform([](const auto& t) constexpr -> epsilon_tr { return std::get<epsilon_tr>(t); })
+                                        | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t); })
+                                        | std::views::transform([](const auto& t) -> epsilon_tr { return std::get<epsilon_tr>(t); })
                                         | std::ranges::to<std::vector>() };
             
             std::ranges::sort(et, std::ranges::greater{}, &epsilon_tr::priority);
@@ -74,7 +74,7 @@ namespace rx::testing
             if (e.first == this->end)
                 return false;
             return 0 != std::ranges::count_if(this->get_node(e.first).tr,
-                                              [](const auto& t) constexpr { return not std::holds_alternative<n_tr<CharT>>(t); });
+                                              [](const auto& t) { return not std::holds_alternative<n_tr<CharT>>(t); });
         });
 
         return new_closure;
@@ -90,8 +90,8 @@ namespace rx::testing
         for (auto& [q, m] : closure)
         {
             std::vector<n_tr<CharT>> ct{ this->get_node(q).tr
-                                         | std::views::filter([](const auto& t) constexpr { return std::holds_alternative<n_tr<CharT>>(t); })
-                                         | std::views::transform([](const auto& t) constexpr -> n_tr<CharT> { return std::get<n_tr<CharT>>(t); })
+                                         | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<CharT>>(t); })
+                                         | std::views::transform([](const auto& t) -> n_tr<CharT> { return std::get<n_tr<CharT>>(t); })
                                          | std::ranges::to<std::vector>() };
 
             for (const n_tr<CharT>& c : ct)

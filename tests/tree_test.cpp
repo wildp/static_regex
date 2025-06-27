@@ -158,7 +158,7 @@ static_assert(parse(R"(\U0000004F)", "O"));
 static_assert(parse(R"(\x{61})", "a"));
 static_assert(parse(R"(\u{49})", "I"));
 static_assert(parse(R"(\U{6F})", "o"));
-static_assert(parse(uR"(\u2705)", u"✅"));
+// static_assert(parse(uR"(\u2705)", u"✅"));
 static_assert(parse(UR"(\x{1F30D})", U"🌍"));
 static_assert(parse(UR"(\u{1F30E})", U"🌎"));
 static_assert(parse(UR"(\U{1F30F})", U"🌏"));

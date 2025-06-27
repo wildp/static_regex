@@ -787,7 +787,7 @@ namespace rx::detail
     {
         using ncc = named_character_class;
 
-        static constexpr auto test = [](it_type& it, const it_type& end, std::string_view rest) constexpr -> bool {
+        static constexpr auto test = [](it_type& it, const it_type& end, std::string_view rest) -> bool {
             if (std::ranges::starts_with(it, end, std::ranges::begin(rest), std::ranges::end(rest)))
             {
                 std::ranges::advance(it, std::ranges::size(rest));

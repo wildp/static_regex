@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <limits>
 #include <variant>
 #include <algorithm>
 
@@ -64,11 +65,11 @@ namespace rx::detail
 
     inline static constexpr int start_tag_number{ 1 };
 
-    inline static constexpr std::size_t no_tag{ static_cast<std::size_t>(-1) };
+    inline static constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
 }
 
 #if RX_TREE_DEBUG_PARSER
-#include <experimental/meta>
+#include <meta>
 #include <print>
 
 namespace rx::detail

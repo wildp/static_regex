@@ -185,7 +185,7 @@ namespace rx::detail
             using elem_t = std::variant<terminal, nonterminal, semantic_action>;
             
             constexpr void pop() { data_.pop_back(); }
-            constexpr void push(const std::vector<elem_t>& elems){ data_.append_range(elems | std::views::reverse); }
+            constexpr void push(const std::vector<elem_t>& elems) { data_.append_range(elems | std::views::reverse); }
             [[nodiscard]] constexpr auto& root() { return data_.back(); }
             [[nodiscard]] constexpr const auto& root() const { return data_.back(); }
             
@@ -595,7 +595,7 @@ namespace rx::detail
 
                         if (capstack.caseless())
                         {
-                            static constexpr auto is_alphabetic = [](CharT c) constexpr -> bool { return ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z'); };
+                            static constexpr auto is_alphabetic = [](CharT c) -> bool { return ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z'); };
 
                             if (auto c{ lit.get_if_single() })
                             {

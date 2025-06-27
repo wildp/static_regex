@@ -42,7 +42,7 @@ namespace rx::testing
     {
         using expr_tree_t = printable_expr_tree<CharT>;
 
-        static constexpr auto escape = [](std::basic_string<CharT>& result, CharT c) constexpr {
+        static constexpr auto escape = [](std::basic_string<CharT>& result, CharT c) {
             if (c == '\177' or (c >= '\0' and c < '\40')) {
                 result += '\\';
                 switch (c) {
@@ -73,9 +73,9 @@ namespace rx::testing
 
         std::basic_string<CharT> result;
 
-        auto visitor = [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) constexpr -> void {
+        auto visitor = [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) -> void {
             pet.get_expr(pos).visit(detail::overloads{
-                [&](const expr_tree_t::assertion& asr) constexpr {
+                [&](const expr_tree_t::assertion& asr) {
                     switch (asr.type)
                     {
                     case detail::assert_type::text_start:
@@ -88,25 +88,25 @@ namespace rx::testing
                         throw std::runtime_error("unrecognised assert_type");
                     }
                 },
-                [&](const expr_tree_t::concat& cat) constexpr {
+                [&](const expr_tree_t::concat& cat) {
                     for (const auto idx : cat.idxs) rec(result, pet, idx);
                 },
-                [&](const expr_tree_t::alt& alt) constexpr {
+                [&](const expr_tree_t::alt& alt) {
                     for (const auto idx : alt.idxs) { rec(result, pet, idx); result += '|'; }
                     if (alt.idxs.size() > 0) result.pop_back();
                 },
-                [&](const expr_tree_t::capture& cap) constexpr {
+                [&](const expr_tree_t::capture& cap) {
                     result += '(';
                     if constexpr (ExtraParens) result += '(';
                     rec(result, pet, cap.idx);
                     if constexpr (ExtraParens) result += ')';
                     result += ')';
                 },
-                [&](const expr_tree_t::backref& bref) constexpr {
+                [&](const expr_tree_t::backref& bref) {
                     result += '\\';
                     append_int(result, bref.number);
                 },
-                [&](const expr_tree_t::repeat& rep) constexpr {
+                [&](const expr_tree_t::repeat& rep) {
                     if constexpr (ExtraParens) result += '(';
                     rec(result, pet, rep.idx);
                     if constexpr (ExtraParens) result += ')';
@@ -125,10 +125,10 @@ namespace rx::testing
                     if (rep.mode == detail::repeater_mode::lazy) result += '?';
                     else if (rep.mode == detail::repeater_mode::possessive) result += '+';
                 },
-                [&](const expr_tree_t::char_str& lit) constexpr {
+                [&](const expr_tree_t::char_str& lit) {
                     result += lit.data;
                 },
-                [&](const expr_tree_t::char_class& cla) constexpr {
+                [&](const expr_tree_t::char_class& cla) {
                     if (cla.data.get().size() == 1) {
                         using uct = typename expr_tree_t::char_class::underlying_char_type;
                         const auto& [lower, upper]{ cla.data.get().front() };

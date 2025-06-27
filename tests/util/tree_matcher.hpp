@@ -98,7 +98,7 @@ namespace rx::testing
             match_continue,
         };
 
-        auto visitor = [&, this](this const auto& rec, state& s) constexpr -> bool
+        auto visitor = [&, this](this const auto& rec, state& s) -> bool
         {
             while (not s.cont.empty())
             {
