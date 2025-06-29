@@ -1,18 +1,23 @@
-#pragma once
+module;
 
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <ranges>
 #include <utility>
 #include <variant>
 #include <vector>
 
-#include <rx/error.hpp>
-#include <rx/tree.hpp>
-#include <rx/util.hpp>
+// TODO: Add fixed tag optimisation (delete unnecessary tags)
+// TODO: Decouple tags from capture numbers and provide mapping
 
+export module rx.fsm:tnfa;
 
-namespace rx::detail
+// import std;
+import rx.util;
+import rx.ast;
+
+export namespace rx::detail
 {
     template<typename CharT>
     class tagged_dfa;
@@ -381,6 +386,8 @@ namespace rx::detail
             case ast_index<typename ast_t::capture>:
                 {
                     const auto& cap{ std::get<typename ast_t::capture>(entry) };
+
+                    // TODO: change to conditionally inserting tags according to fixed tag optimisation
 
                     auto q1{ node_create() };
                     auto q2{ node_create() };

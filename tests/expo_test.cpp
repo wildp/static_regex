@@ -1,5 +1,9 @@
-#include "rx/tree.hpp"
-#include "util/tree_matcher.hpp"
+#include <algorithm>
+#include <string_view>
+
+import rx.util;
+import rx.ast;
+import rx.tests;
 
 namespace
 {

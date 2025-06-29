@@ -1,5 +1,6 @@
-#pragma once
+module;
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <numeric>
@@ -7,10 +8,11 @@
 #include <type_traits>
 #include <variant>
 
-#include <rx/charclass.hpp>
-#include <rx/error.hpp>
-#include <rx/util.hpp>
+export module rx.ast:tok;
 
+// import std;
+import rx.util;
+import :charclass;
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
@@ -20,12 +22,12 @@ namespace rx::detail
      * Note: clang reaches the consteval step limit with >512 repetitions */
     inline static constexpr std::int_least16_t counted_repetition_limit{ 1000 };
 
-    template<typename CharT>
+    export template<typename CharT>
     class expr_tree;
 
     /* token definitions */
 
-    namespace tok
+    export namespace tok
     {
         struct end_of_input {};
         struct vert {};
@@ -109,7 +111,7 @@ namespace rx::detail
 
     /* lexer class definition */
 
-    template<typename CharT>
+    export template<typename CharT>
     class lexer
     {
         using sv_type = std::basic_string_view<CharT>;

@@ -1,14 +1,22 @@
-#pragma once
+module;
 
+#include <algorithm>
+#include <concepts>
+#include <iterator>
 #include <limits>
 #include <stdexcept>
-
-#include <rx/tree.hpp>
 #include <string>
+#include <vector>
+
+export module rx.tests:printable_tree;
+
+// import std;
+import rx.util;
+import rx.ast;
 
 namespace rx::testing
 {
-    template<typename CharT>
+    export template<typename CharT>
     class printable_expr_tree : public detail::expr_tree<CharT>
     {
     public:

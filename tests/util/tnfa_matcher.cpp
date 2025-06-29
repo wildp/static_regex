@@ -1,15 +1,21 @@
-#pragma once
+module;
 
+#include <algorithm>
 #include <optional>
+#include <ranges>
 #include <string_view>
+#include <vector>
 
-#include <rx/cdarray.hpp>
-#include <rx/tnfa.hpp>
+export module rx.tests:tnfa_matcher;
 
+// import std;
+import rx.ast;
+import rx.fsm;
+import rx.util;
 
 namespace rx::testing
 {
-    template<typename CharT>
+    export template<typename CharT>
     class tnfa_matcher : public detail::tagged_nfa<CharT>
     {
     public:

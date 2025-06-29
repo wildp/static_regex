@@ -1,4 +1,4 @@
-#pragma once
+module;
 
 #include <algorithm>
 #include <cstdint>
@@ -9,20 +9,22 @@
 #include <variant>
 #include <vector>
 
-#include <rx/captures.hpp>
-#include <rx/util.hpp>
-#include <rx/error.hpp>
-#include <rx/tok.hpp>
+export module rx.ast;
+
+// import std;
+import rx.util;
+import :tok;
+import :captures;
 
 
 namespace rx::detail
 {
-    template<typename CharT>
-    class tagged_nfa;
+    // template<typename CharT>
+    // class tagged_nfa;
 
     /* types */
 
-    enum class assert_type : int_least8_t
+    export enum class assert_type : int_least8_t
     {
         text_start,
         text_end,
@@ -30,14 +32,14 @@ namespace rx::detail
         line_end
     };
 
-    enum class repeater_mode : int_least8_t
+    export enum class repeater_mode : int_least8_t
     {
         greedy = 0,
         lazy,
         possessive
     };
 
-    struct parser_flags
+    export struct parser_flags
     {
         bool enable_captures    : 1 { true };
         bool enable_possessive  : 1 { false };
@@ -49,7 +51,7 @@ namespace rx::detail
 
     /* ast definition */
 
-    template<typename CharT>
+    export template<typename CharT>
     class expr_tree
     {
     public:
@@ -96,9 +98,8 @@ namespace rx::detail
 
         constexpr expr_tree(sv_type sv, parser_flags flags = {});
         
-        friend class tagged_nfa<CharT>;
+        // friend class tagged_nfa<CharT>;
         
-    protected:
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
         [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return 1 + (2 * capture_count_); }

@@ -1,10 +1,14 @@
-#pragma once
+module;
 
 #include <cstdint>
 #include <ranges>
 #include <vector>
 
-namespace rx::detail::parser
+export module rx.ast:captures;
+
+// import std;
+
+export namespace rx::detail::parser
 {
 
     struct capture_flags
@@ -130,14 +134,14 @@ namespace rx::detail::parser
             }
         }
 
-        [[nodiscard]] constexpr std::optional<uint_least16_t> capture_count() const noexcept
+        [[nodiscard]] constexpr std::optional<std::uint_least16_t> capture_count() const noexcept
         {
             if (elems_.empty())
                 return base_.number_end;
             return {};
         }
 
-        constexpr std::optional<uint_least16_t> pop()
+        constexpr std::optional<std::uint_least16_t> pop()
         {
             if (elems_.empty())
                 return {};

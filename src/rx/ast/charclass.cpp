@@ -1,13 +1,16 @@
-#pragma once
+module;
 
 #include <cstddef>
 #include <iterator>
 #include <numeric>
 #include <vector>
 
-#include "rx/util.hpp"
+export module rx.ast:charclass;
 
-namespace rx::detail
+// import std;
+import rx.util;
+
+export namespace rx::detail
 {
     enum class named_character_class : std::uint8_t
     {
@@ -72,7 +75,7 @@ namespace rx::detail
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    inline constexpr std::size_t char_class_impl<CharT>::insert_impl(const CharT c)
+    constexpr std::size_t char_class_impl<CharT>::insert_impl(const CharT c)
     {
         if (data_.empty())
         {
@@ -158,14 +161,14 @@ namespace rx::detail
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    inline constexpr void char_class_impl<CharT>::insert(const char_type c)
+    constexpr void char_class_impl<CharT>::insert(const char_type c)
     {
         insert_impl(c);
     }
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    inline constexpr void char_class_impl<CharT>::insert(const char_type first, const char_type last)
+    constexpr void char_class_impl<CharT>::insert(const char_type first, const char_type last)
     {
         const std::size_t target{ insert_impl(first) };
 
@@ -211,7 +214,7 @@ namespace rx::detail
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    inline constexpr void char_class_impl<CharT>::insert(named_character_class ncc)
+    constexpr void char_class_impl<CharT>::insert(named_character_class ncc)
     {
         switch (ncc)
         {
@@ -280,7 +283,7 @@ namespace rx::detail
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    inline constexpr void char_class_impl<CharT>::insert(const char_class_impl<CharT>& cc)
+    constexpr void char_class_impl<CharT>::insert(const char_class_impl<CharT>& cc)
     {
         std::vector<char_range> negated;
 
@@ -300,7 +303,7 @@ namespace rx::detail
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    inline constexpr void char_class_impl<CharT>::make_negated(std::vector<char_range>& result) const
+    constexpr void char_class_impl<CharT>::make_negated(std::vector<char_range>& result) const
     {
         /* negate character ranges in cc */
         char_type tmp{ std::numeric_limits<CharT>::min() };

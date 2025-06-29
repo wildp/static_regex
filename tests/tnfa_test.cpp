@@ -1,4 +1,11 @@
-#include "util/tnfa_matcher.hpp"
+#include <algorithm>
+#include <vector>
+
+import rx.util;
+import rx.ast;
+import rx.fsm;
+import rx.tests;
+
 
 namespace
 {

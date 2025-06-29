@@ -1,6 +1,9 @@
-#include <rx/tree.hpp>
+#include <string>
+#include <vector>
 
-#include "util/printable_tree.hpp"
+import rx.util;
+import rx.ast;
+import rx.tests;
 
 namespace 
 {

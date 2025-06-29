@@ -1,16 +1,18 @@
-#pragma once
+module;
 
+#include <numeric>
 #include <cstdint>
 #include <ranges>
 
-#include <rx/cdarray.hpp>
-#include <rx/error.hpp>
-#include <rx/util.hpp>
-#include <rx/tree.hpp>
+export module rx.tests:tree_matcher;
+
+// import std;
+import rx.util;
+import rx.ast;
 
 namespace rx::testing
 {
-    template<typename CharT>
+    export template<typename CharT>
     class tree_matcher : public detail::expr_tree<CharT>
     {
     public:

@@ -1,24 +1,37 @@
-#pragma once
+module;
 
 #include <concepts>
 #include <limits>
 #include <variant>
 #include <algorithm>
 
-namespace rx::detail 
+export module rx.util;
+
+// import std;
+export import :error;
+export import :cdarray;
+
+export namespace rx::detail 
 {
     template<class... Ts>
     struct overloads : Ts... { using Ts::operator()...; };
 
     template<typename T, typename... Ts>
     concept one_of = (std::same_as<T, Ts> or ...);
+}
 
+namespace
+{
     template<typename, typename>
     struct type_in_variant_impl {};
 
     template<typename T, typename... Ts>
-    struct type_in_variant_impl<T, std::variant<Ts...>> : std::bool_constant<one_of<T, Ts...>> {};
+    struct type_in_variant_impl<T, std::variant<Ts...>> : std::bool_constant<rx::detail::one_of<T, Ts...>> {};
 
+}
+
+export namespace rx::detail
+{
     template<typename T, typename Variant>
     concept in_variant = type_in_variant_impl<T, Variant>::value;
 
@@ -63,10 +76,26 @@ namespace rx::detail
         return ((capture_num + 1) * 2) + is_right;
     }
 
-    inline static constexpr int start_tag_number{ 1 };
+    inline constexpr int start_tag_number{ 1 };
 
-    inline static constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
+    inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #if RX_TREE_DEBUG_PARSER
 #include <meta>

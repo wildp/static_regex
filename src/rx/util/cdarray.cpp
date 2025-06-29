@@ -1,4 +1,4 @@
-#pragma once
+module;
 
 #include <cstddef>
 #include <iterator>
@@ -7,7 +7,11 @@
 #include <stdexcept>
 #include <type_traits>
 
-namespace rx::detail
+export module rx.util:cdarray;
+
+// import std;
+
+export namespace rx::detail
 {
     /* WARNING: cdarray is NOT thread-safe */
     template<typename T, typename Allocator = std::allocator<T>>

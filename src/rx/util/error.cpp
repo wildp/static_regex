@@ -1,8 +1,12 @@
-#pragma once
+module;
 
 #include <stdexcept>
 
-namespace rx
+export module rx.util:error;
+
+// import std;
+
+export namespace rx
 {
     class pattern_error : public std::runtime_error
     {
