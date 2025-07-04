@@ -59,9 +59,10 @@ target_sources("rx.util"
         TYPE CXX_MODULES
         BASE_DIRS src/rx/util
         FILES
-            src/rx/util/util.cpp
             src/rx/util/cdarray.cpp
             src/rx/util/error.cpp
+            src/rx/util/partition.cpp
+            src/rx/util/util.cpp
 )
 
 # target_link_libraries("rx.util" PRIVATE std)
@@ -115,10 +116,10 @@ target_sources("rx.tests"
         TYPE CXX_MODULES
         BASE_DIRS tests/util
         FILES
+            tests/util/all.cpp
             tests/util/printable_tree.cpp
             tests/util/tnfa_matcher.cpp
             tests/util/tree_matcher.cpp
-            tests/util/all.cpp
 )
 
 target_link_libraries("rx.tests" PRIVATE rx "rx.util" "rx.ast" "rx.fsm")
@@ -128,6 +129,7 @@ add_library(tests)
 target_sources(tests
     PUBLIC
         tests/expo_test.cpp
+        tests/part_test.cpp
         tests/tnfa_test.cpp
         tests/tree_test.cpp
 )

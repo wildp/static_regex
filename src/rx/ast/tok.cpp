@@ -20,7 +20,7 @@ namespace rx::detail
 {
     /* RE2 limits counted repetitions to 1000 - we do the same here.
      * Note: clang reaches the consteval step limit with >512 repetitions */
-    inline static constexpr std::int_least16_t counted_repetition_limit{ 1000 };
+    export constexpr std::int_least16_t counted_repetition_limit{ 1000 };
 
     export template<typename CharT>
     class expr_tree;

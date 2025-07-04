@@ -3,6 +3,7 @@ module;
 #include <numeric>
 #include <cstdint>
 #include <ranges>
+#include <vector>
 
 export module rx.tests:tree_matcher;
 

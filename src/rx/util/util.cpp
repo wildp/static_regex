@@ -1,15 +1,17 @@
 module;
 
+#include <algorithm>
+#include <cstdint>
 #include <concepts>
 #include <limits>
 #include <variant>
-#include <algorithm>
 
 export module rx.util;
 
 // import std;
 export import :error;
 export import :cdarray;
+export import :partition;
 
 export namespace rx::detail 
 {
@@ -18,20 +20,13 @@ export namespace rx::detail
 
     template<typename T, typename... Ts>
     concept one_of = (std::same_as<T, Ts> or ...);
-}
 
-namespace
-{
     template<typename, typename>
     struct type_in_variant_impl {};
 
     template<typename T, typename... Ts>
     struct type_in_variant_impl<T, std::variant<Ts...>> : std::bool_constant<rx::detail::one_of<T, Ts...>> {};
 
-}
-
-export namespace rx::detail
-{
     template<typename T, typename Variant>
     concept in_variant = type_in_variant_impl<T, Variant>::value;
 
