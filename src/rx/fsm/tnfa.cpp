@@ -85,7 +85,7 @@ export namespace rx::detail
             std::size_t q0, qf, idx;
         };
     
-    protected:
+    public:
         static constexpr std::size_t match_start{ 0 };
         static constexpr std::size_t substr_start{ 1 };
         static constexpr std::size_t end{ 2 };

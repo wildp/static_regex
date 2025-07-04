@@ -118,6 +118,7 @@ target_sources("rx.tests"
         FILES
             tests/util/all.cpp
             tests/util/printable_tree.cpp
+            tests/util/tdfa_matcher.cpp
             tests/util/tnfa_matcher.cpp
             tests/util/tree_matcher.cpp
 )
@@ -130,6 +131,7 @@ target_sources(tests
     PUBLIC
         tests/expo_test.cpp
         tests/part_test.cpp
+        tests/tdfa_test.cpp
         tests/tnfa_test.cpp
         tests/tree_test.cpp
 )
