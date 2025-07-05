@@ -1,7 +1,9 @@
 module;
 
-#include <numeric>
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
+#include <numeric>
 #include <ranges>
 #include <vector>
 
@@ -20,25 +22,25 @@ namespace rx::testing
         using detail::expr_tree<CharT>::expr_tree;
         using tag_result = std::vector<std::size_t>;
 
-        template<std::input_iterator I, std::sentinel_for<I> S>
+        template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr std::optional<tag_result> submatches(I first, S last) const;
+        [[nodiscard]] constexpr std::optional<tag_result> submatches(I first, I last) const;
 
-        template<std::ranges::input_range R>
+        template<std::ranges::random_access_range R>
         requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
         [[nodiscard]] constexpr std::optional<tag_result> submatches(R&& r) const
         {
             return submatches(std::ranges::begin(r), std::ranges::end(r));
         }
 
-        template<std::input_iterator I, std::sentinel_for<I> S>
+        template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr bool match(I first, S last) const
+        [[nodiscard]] constexpr bool match(I first, I last) const
         {
             return submatches(first, last).has_value();
         }
 
-        template<std::ranges::input_range R>
+        template<std::ranges::random_access_range R>
         requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
         [[nodiscard]] constexpr bool match(R&& r) const
         {
@@ -46,62 +48,67 @@ namespace rx::testing
         }
     };
 
+    
+    /* helper for tree matcher */
+
+    class cont_val
+    {
+    public:
+        using rep_t = std::int_least16_t;
+
+        constexpr cont_val(std::size_t i) : pos_{ i } {}
+        constexpr explicit cont_val(std::size_t i, rep_t r) : pos_{ i }, reps_{ r } {}
+        constexpr explicit cont_val(std::size_t i, rep_t r, rep_t amt) : pos_{ i }, reps_{ std::add_sat(r, amt) } {}
+
+        [[nodiscard]] constexpr std::size_t pos() const noexcept { return static_cast<std::size_t>(pos_); }
+        [[nodiscard]] constexpr rep_t reps() const noexcept { return reps_; }
+
+    private:
+        std::uint_least64_t pos_: 48;
+        rep_t               reps_: 16 { 0 };
+    };
+
+    template<typename I>
+    struct matcher_state
+    {
+        using tags_t            = detail::cdarray<std::optional<I>>;
+        using continuation_t    = std::vector<cont_val>;
+
+
+        I                   it;
+        continuation_t      cont;
+        tags_t              tags;
+
+        constexpr matcher_state(I first, std::size_t tag_count, std::size_t start_state) :
+            it{ first },
+            cont{ start_state },
+            tags(tag_count)
+        {
+        }
+    };
+
+    enum class rc : uint_least8_t
+    {
+        match_failure,
+        match_success,
+        match_continue,
+    };
+
+
     /* tree matcher */
 
     template<typename CharT>
-    template<std::input_iterator I, std::sentinel_for<I> S>
+    template<std::random_access_iterator I>
     requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-    [[nodiscard]] constexpr auto tree_matcher<CharT>::submatches(const I first, const S last) const -> std::optional<tag_result>
+    [[nodiscard]] constexpr auto tree_matcher<CharT>::submatches(const I first, const I last) const -> std::optional<tag_result>
     {
         using expr_tree_t = tree_matcher<CharT>;
+        using state_t = matcher_state<I>;
 
-        class cont_val
-        {
-        public:
-            using rep_t = std::int_least16_t;
+        const auto& ci{ this->get_capture_info() };
+        const std::size_t capture_count{ ci.capture_count() };
 
-            constexpr cont_val(std::size_t i) : pos_{ i } {}
-            constexpr explicit cont_val(std::size_t i, rep_t r) : pos_{ i }, reps_{ r } {}
-            constexpr explicit cont_val(std::size_t i, rep_t r, rep_t amt) : pos_{ i }, reps_{ std::add_sat(r, amt) } {}
-
-            [[nodiscard]] constexpr std::size_t pos() const noexcept { return static_cast<std::size_t>(pos_); }
-            [[nodiscard]] constexpr rep_t reps() const noexcept { return reps_; }
-
-        private:
-            std::uint_least64_t pos_: 48;
-            rep_t               reps_: 16 { 0 };
-        };
-
-        using tags_t = detail::cdarray<std::optional<std::pair<I, I>>>;
-        using tag_begs_t = detail::cdarray<std::optional<I>>;
-        using continuation_t = std::vector<cont_val>;
-
-        struct state
-        {
-            I                   it;
-            continuation_t      cont;
-            tags_t              tags;
-            tag_begs_t          tag_begs;
-
-            constexpr state(I first, std::size_t tag_count, std::size_t start_state) :
-                it{ first },
-                cont{ start_state },
-                tags(tag_count),
-                tag_begs(tag_count)
-            {
-            }
-        };
-
-        // TODO: maybe change continuation_t to also contain tags, and make capture produce a re-visit to itself?
-
-        enum class rc : uint_least8_t
-        {
-            match_failure,
-            match_success,
-            match_continue,
-        };
-
-        auto visitor = [&, this](this const auto& rec, state& s) -> bool
+        auto visitor = [&, this](this const auto& rec, state_t& s) -> bool
         {
             while (not s.cont.empty())
             {
@@ -145,7 +152,7 @@ namespace rx::testing
 
                         for (std::size_t i{ 0 }; i + 1 < alt.idxs.size(); ++i)
                         {
-                            state s_copy{ s };
+                            state_t s_copy{ s };
                             s_copy.cont.push_back(alt.idxs.at(i));
 
                             if (rec(s_copy))
@@ -158,40 +165,44 @@ namespace rx::testing
                         s.cont.push_back(alt.idxs.back());
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::capture& cap) -> rc
+                    [&](const expr_tree_t::tag& tag) -> rc
                     {
-                        if (not s.tag_begs.at(cap.number).has_value())
-                        {
-                            /* lhs of capture */
-                            s.tag_begs.at(cap.number) = s.it;
-                            s.cont.push_back(pos);
-                            s.cont.push_back(cap.idx);
-                        }
-                        else
-                        {
-                            /* rhs of capture */
-                            s.tags.at(cap.number) = std::pair{ *s.tag_begs.at(cap.number), s.it };
-                            s.tag_begs.at(cap.number).reset();
-                        }
-
+                        s.tags.at(tag.number) = s.it;
+                            
                         return rc::match_continue;
                     },
                     [&](const expr_tree_t::backref& bref) -> rc
                     {
-                        if (bref.number >= s.tags.size())
+                        if (bref.number >= capture_count)
                             throw pattern_error("Backreference to non-existent submatch");
 
-                        if (const auto& range{ s.tags.cat(bref.number) }; range.has_value())
-                        {
-                            for (auto [bit, blast] { *range }; bit != blast; std::ranges::advance(s.it, 1), std::ranges::advance(bit, 1))
-                                if (s.it == last or *s.it != *bit)
-                                    return rc::match_failure;
-                        }
-                        else
-                        {
-                            /* capture doesn't exist */
-                            return rc::match_failure;
-                        }
+                        auto f = [&](const rx::detail::capture_info::tag_pair_t& p) -> bool {
+                            return not ((p.first.tag_number >= 0 and not s.tags.at(p.first.tag_number).has_value())
+                                            or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
+                        };
+
+                        auto t = [&](const rx::detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
+                            return{ std::next((p.first.tag_number >= 0) ? *s.tags.at(p.first.tag_number)
+                                                : ((p.first.tag_number == rx::detail::start_of_input_tag) ? first : last), p.first.offset),
+                                    std::next((p.second.tag_number >= 0) ? *s.tags.at(p.second.tag_number)
+                                                : ((p.second.tag_number == rx::detail::start_of_input_tag) ? first : last), p.second.offset) };
+                        };
+
+                        const auto [beg, end]{ ci.lookup(bref.number) };
+
+                        auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
+                                                                  | std::views::transform(t)
+                                                                  | std::ranges::to<std::vector>() };
+                        
+
+                        if (std::ranges::size(rng) == 0)
+                            return rc::match_failure; /* capture doesn't exist */
+
+                        auto [bit, blast]{ std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first) };
+
+                        for (; bit != blast; std::ranges::advance(s.it, 1), std::ranges::advance(bit, 1))
+                            if (s.it == last or *s.it != *bit)
+                                return rc::match_failure;
 
                         return rc::match_continue;
                     },
@@ -219,7 +230,7 @@ namespace rx::testing
                         if (rep.mode == repeater_mode::greedy)
                         {
                             /* try to match repeated pattern first */
-                            state s_copy{ s };
+                            state_t s_copy{ s };
 
                             if (rep.max < rep.min or rep_count < rep.max - 1)
                                 s_copy.cont.emplace_back(pos, rep_count, 1);
@@ -234,7 +245,7 @@ namespace rx::testing
                         else if (rep.mode == repeater_mode::lazy)
                         {
                             /* try to match pattern after rep first */
-                            state s_copy{ s };
+                            state_t s_copy{ s };
 
                             if (rec(s_copy))
                             {
@@ -250,7 +261,7 @@ namespace rx::testing
                         {
                             /* unoptimised possessive matching */
 
-                             state s_copy{ s };
+                             state_t s_copy{ s };
 
                              if (rep.max < rep.min or rep_count < rep.max - 1)
                                  s_copy.cont.emplace_back(pos, rep_count, 1);
@@ -335,19 +346,47 @@ namespace rx::testing
             return (s.it == last);
         };
 
-        state s(first, this->capture_count(), this->root_idx());
+        state_t s(first, this->tag_count(), this->root_idx());
         auto rv{ visitor(s) };
 
         if (not rv)
             return {};
 
-        tag_result res{ 0 };
-        for (const auto& opt: s.tags)
+        /* construct submatch results from tags */
+
+        tag_result res{};
+
+        auto f = [&](const rx::detail::capture_info::tag_pair_t& p) -> bool {
+            return not ((p.first.tag_number >= 0 and not s.tags.at(p.first.tag_number).has_value())
+                            or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
+        };
+
+        auto t = [&](const rx::detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
+            return { std::next((p.first.tag_number >= 0) ? *s.tags.at(p.first.tag_number)
+                                : ((p.first.tag_number == rx::detail::start_of_input_tag) ? first : last), p.first.offset),
+                     std::next((p.second.tag_number >= 0) ? *s.tags.at(p.second.tag_number)
+                                : ((p.second.tag_number == rx::detail::start_of_input_tag) ? first : last), p.second.offset) };
+        };
+
+        for (std::size_t i{ 0 }; i < capture_count; ++i)
         {
-            if (opt.has_value())
-                res.push_back(std::distance(first, opt->first)), res.push_back(std::distance(first, opt->second));
-            else
+            const auto [beg, end]{ ci.lookup(i) };
+
+            auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
+                                                      | std::views::transform(t)
+                                                      | std::ranges::to<std::vector>() };
+                    
+            if (std::ranges::size(rng) == 0)
+            {
                 res.insert(res.end(), { detail::no_tag, detail::no_tag });
+                continue;
+            }
+
+            auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<I, I>::first) };
+            auto [bit, blast]{ *max_elem };
+
+            res.push_back(std::distance(first, bit));
+            res.push_back(std::distance(first, blast));
         }
 
         return res;

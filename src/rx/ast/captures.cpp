@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <cstdint>
 #include <ranges>
 #include <vector>
@@ -7,6 +8,10 @@ module;
 export module rx.ast:captures;
 
 // import std;
+import rx.util;
+
+// TODO: move this namespace rx::detail::parser to parser.cpp
+// TODO: move remainder of this file to module util
 
 export namespace rx::detail::parser
 {

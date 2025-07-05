@@ -31,24 +31,22 @@ namespace rx::testing
     /* printer for patterns */
 
     template<typename CharT>
-    constexpr void append_int(std::basic_string<CharT>& result, const std::integral auto value)
-    {
-        static constexpr decltype(value) base{ 10 };
-        std::vector<char> buf;
-        if (value == 0)
-            buf.emplace_back('0');
-        else for (auto v{ value }; v > 0; v /= base)
-            buf.emplace_back('0' + (v % base));
-        if (value < 0)
-            buf.emplace_back('-');
-        std::ranges::move(buf.rbegin(), buf.rend(), std::back_insert_iterator(result));
-    }
-
-    template<typename CharT>
     template<bool ExtraParens>
     [[nodiscard]] constexpr std::basic_string<CharT> printable_expr_tree<CharT>::to_pattern() const
     {
         using expr_tree_t = printable_expr_tree<CharT>;
+
+        static constexpr auto append_int = [](std::basic_string<CharT>& result, const std::integral auto value) {
+            static constexpr decltype(value) base{ 10 };
+            std::vector<char> buf;
+            if (value == 0)
+                buf.emplace_back('0');
+            else for (auto v{ value }; v > 0; v /= base)
+                buf.emplace_back('0' + (v % base));
+            if (value < 0)
+                buf.emplace_back('-');
+            std::ranges::move(buf.rbegin(), buf.rend(), std::back_insert_iterator(result));
+        };
 
         static constexpr auto escape = [](std::basic_string<CharT>& result, CharT c) {
             if (c == '\177' or (c >= '\0' and c < '\40')) {
@@ -80,8 +78,9 @@ namespace rx::testing
         };
 
         std::basic_string<CharT> result;
+        const auto& ci{ this->get_capture_info() };
 
-        auto visitor = [](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) -> void {
+        auto visitor = [&ci](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) -> void {
             pet.get_expr(pos).visit(detail::overloads{
                 [&](const expr_tree_t::assertion& asr) {
                     switch (asr.type)
@@ -103,12 +102,11 @@ namespace rx::testing
                     for (const auto idx : alt.idxs) { rec(result, pet, idx); result += '|'; }
                     if (alt.idxs.size() > 0) result.pop_back();
                 },
-                [&](const expr_tree_t::capture& cap) {
-                    result += '(';
-                    if constexpr (ExtraParens) result += '(';
-                    rec(result, pet, cap.idx);
-                    if constexpr (ExtraParens) result += ')';
-                    result += ')';
+                [&](const expr_tree_t::tag& tag) {
+                    auto [is_lhs, is_rhs]{ ci.capture_side(tag.number) };
+
+                    if (is_lhs) result += '(';
+                    if (is_rhs) result += ')';
                 },
                 [&](const expr_tree_t::backref& bref) {
                     result += '\\';

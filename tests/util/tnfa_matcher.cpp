@@ -36,6 +36,7 @@ namespace rx::testing
 
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& closure, std::size_t k) const;
         [[nodiscard]] constexpr closure_t step(const closure_t& closure, CharT a) const;
+        [[nodiscard]] constexpr tag_result make_submatch_results(const tag_vector& v, std::size_t size) const;
     };
     
     /* tagged nfa simulation */
@@ -121,7 +122,6 @@ namespace rx::testing
         using namespace rx::detail;
 
         tag_vector m0(this->tag_count(), no_tag);
-        m0.at(0) = 0;
         closure_t c{{ this->match_start, std::move(m0) }};
 
         for (std::size_t k{ 0 }; k < input.size(); ++k)
@@ -136,10 +136,55 @@ namespace rx::testing
         c = e_closure(std::move(c), input.size());
         auto result{ std::ranges::find(c, this->end, &closure_entry::first) };
 
-        if (result != c.end())
-            return std::vector(result->second.begin(), result->second.end());
-        return {};
-        
-    }   
+        if (result == c.end())
+            return {};
+        // return make_submatch_results(result->second, input.size());
+        return std::vector(result->second.begin(), result->second.end());
+    }
 
+    /* tag remapping */
+
+    template<typename CharT>
+    constexpr auto tnfa_matcher<CharT>::make_submatch_results(const tag_vector& v, std::size_t size) const -> tag_result
+    {
+        using namespace rx::detail;
+
+        std::vector<std::size_t> result;
+        const capture_info& ci{ this->get_capture_info() };
+        const auto capture_count{ ci.capture_count() };
+
+        auto f = [&](const capture_info::tag_pair_t& p) -> bool {
+            return not ((p.first.tag_number >= 0 and v.at(p.first.tag_number) == no_tag)
+                         or (p.second.tag_number >= 0 and v.at(p.second.tag_number) == no_tag));
+        };
+
+        auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<std::size_t, std::size_t> {
+            return { ((p.first.tag_number >= 0) ? v.at(p.first.tag_number)
+                      : ((p.first.tag_number == start_of_input_tag) ? 0 : size)) + p.first.offset,
+                     ((p.second.tag_number >= 0) ? v.at(p.second.tag_number)
+                      : ((p.second.tag_number == start_of_input_tag) ? 0 : size)) + p.second.offset };
+        };
+
+        for (std::size_t i{ 0 }; i < capture_count; ++i)
+        {
+            const auto [beg, end]{ ci.lookup(i) };
+
+            auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
+                                                      | std::views::transform(t)
+                                                      | std::ranges::to<std::vector>() };
+                    
+            if (std::ranges::size(rng) == 0)
+            {
+                result.insert(result.end(), { no_tag, no_tag });
+                continue;
+            }
+
+            auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<std::size_t, std::size_t>::first) };
+
+            result.push_back(max_elem->first);
+            result.push_back(max_elem->second);
+        }
+        
+        return result;
+    }
 }

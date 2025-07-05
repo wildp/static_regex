@@ -9,8 +9,9 @@ module;
 export module rx.util;
 
 // import std;
-export import :error;
+export import :captures;
 export import :cdarray;
+export import :error;
 export import :partition;
 
 export namespace rx::detail 
@@ -64,14 +65,6 @@ export namespace rx::detail
     template<typename V, typename T, std::size_t I>
     requires (I >= std::variant_size_v<V>)
     struct index_of_impl<V, T, I> {};
-
-    constexpr int cap_num_to_tag(const std::uint_least16_t capture_num, const bool is_right)
-    {
-        /* tags start at 1, and we reserve tag 1 for the start tag */
-        return ((capture_num + 1) * 2) + is_right;
-    }
-
-    inline constexpr int start_tag_number{ 1 };
 
     inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
 }

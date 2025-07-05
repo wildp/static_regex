@@ -92,10 +92,12 @@ export namespace rx::detail
 
         [[nodiscard]] constexpr const tnfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
         [[nodiscard]] constexpr size_t tag_count() const { return tag_count_; }
+        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
     private:
         std::vector<tnfa_node<CharT>> nodes_{ 3 };
         std::size_t tag_count_;
+        capture_info capture_info_;
     };
 
     /* modified thompson's algorithm */
@@ -119,14 +121,15 @@ export namespace rx::detail
     {
         if (not ntags.empty())
         {
+            /* note: in tree_expr tags start at 0, whereas here they start at 1 */
             for (const int tag : ntags | std::views::take(ntags.size() - 1))
             {
                 auto qi{ node_create() };
-                epsilon(q0, qi, 0, -tag);
+                epsilon(q0, qi, 0, -(tag + 1));
                 q0 = qi;
             }
 
-            epsilon(q0, qf, 0, -(ntags.back()));
+            epsilon(q0, qf, 0, -(ntags.back() + 1));
         }
         else 
         {     
@@ -156,7 +159,7 @@ export namespace rx::detail
 
     template<typename CharT>
     constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast) : 
-        tag_count_{ ast.tag_count() }
+        tag_count_{ ast.tag_count() }, capture_info_{ ast.get_capture_info() }
     {
         std::vector<std::vector<int>> tag_vec{};
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
@@ -383,18 +386,11 @@ export namespace rx::detail
                 }
                 break;
 
-            case ast_index<typename ast_t::capture>:
+            case ast_index<typename ast_t::tag>:
                 {
-                    const auto& cap{ std::get<typename ast_t::capture>(entry) };
-
-                    // TODO: change to conditionally inserting tags according to fixed tag optimisation
-
-                    auto q1{ node_create() };
-                    auto q2{ node_create() };
-
-                    epsilon(q0, q1, 0, cap_num_to_tag(cap.number, false));
-                    stack.emplace_back(q1, q2, cap.idx);
-                    epsilon(q2, qf, 0, cap_num_to_tag(cap.number, true));
+                    /* in tree_expr tags start at 0, whereas here they start at 1 */
+                    const auto& tag_entry{ std::get<typename ast_t::tag>(entry) };
+                    epsilon(q0, qf, 0, tag_entry.number + 1);
                 }
                 break;
 
@@ -412,10 +408,10 @@ export namespace rx::detail
 
         /* join search_start to match_start with ".*?t", where t is the start_tag */
 
-        auto q_tmp{ node_create() };
-        make_wildcard(substr_start, q_tmp);
-        epsilon(q_tmp, match_start, 0, start_tag_number);
-        epsilon(q_tmp, substr_start, 1);
+        // auto q_tmp{ node_create() };
+        // make_wildcard(substr_start, q_tmp);
+        // epsilon(q_tmp, match_start, 0, tag_count_++);
+        // epsilon(q_tmp, substr_start, 1);
     }
 
 }

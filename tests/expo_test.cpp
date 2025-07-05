@@ -114,18 +114,18 @@ static_assert(not tree_match("a{1,2}", "aaa"));
 static_assert(not tree_match("a{1,2}", "aaa"));
 
 /* laziness tests */
-static_assert(tree_capture("(a)?a*", "", { 0, no_tag, no_tag }));
-static_assert(tree_capture("(a)?a*", "a", { 0, 0, 1 }));
-static_assert(tree_capture("(a)?a*", "aa", { 0, 0, 1 }));
-static_assert(tree_capture("(a)??a*", "aa", { 0, no_tag, no_tag }));
+static_assert(tree_capture("(a)?a*", "", { no_tag, no_tag }));
+static_assert(tree_capture("(a)?a*", "a", { 0, 1 }));
+static_assert(tree_capture("(a)?a*", "aa", { 0, 1 }));
+static_assert(tree_capture("(a)??a*", "aa", { no_tag, no_tag }));
 
 /* capture location tests */
-static_assert(tree_capture("(a)+b*", "ab", { 0, 0, 1 }));
-static_assert(tree_capture("(a)+b*", "aab", { 0, 1, 2 }));
-static_assert(tree_capture("(aa)+a*", "aaaaa", { 0, 2, 4 }));
-static_assert(tree_capture("(aa)+?a*", "aaaaa", { 0, 0, 2 }));
-static_assert(tree_capture("a(aa)b|(aa)ac", "aaab", {0, 1, 3, no_tag, no_tag }));
-static_assert(tree_capture("a(aa)b|(aa)ac", "aaac", {0, no_tag, no_tag, 0, 2 }));
+static_assert(tree_capture("(a)+b*", "ab", { 0, 1 }));
+static_assert(tree_capture("(a)+b*", "aab", { 1, 2 }));
+static_assert(tree_capture("(aa)+a*", "aaaaa", { 2, 4 }));
+static_assert(tree_capture("(aa)+?a*", "aaaaa", { 0, 2 }));
+static_assert(tree_capture("a(aa)b|(aa)ac", "aaab", { 1, 3, no_tag, no_tag }));
+static_assert(tree_capture("a(aa)b|(aa)ac", "aaac", { no_tag, no_tag, 0, 2 }));
 
 /* wildcard tests */
 static_assert(not tree_match(".", ""));
@@ -197,16 +197,16 @@ static_assert(not tree_match("((?s))a.b", "a\nb"));
 static_assert(not tree_match("(?:(?s))a.b", "a\nb"));
 
 /* ungreedy flag */
-static_assert(tree_capture("(?U)(a)?a*", "aa", { 0, no_tag, no_tag }));
-static_assert(tree_capture("(?U)(a)??a*", "aa", { 0, 0, 1 }));
-static_assert(tree_capture("(?U:)(a)?a*", "aa", { 0, 0, 1 }));
-static_assert(tree_capture("(?U:)(a)??a*", "aa", { 0, no_tag, no_tag }));
-static_assert(tree_capture("(?U)(aa)+a*", "aaaaa", { 0, 0, 2 }));
-static_assert(tree_capture("(?U)(aa)+?a*", "aaaaa", { 0, 2, 4 }));
-static_assert(tree_capture("(?U-U)(a)?a*", "aa", { 0, 0, 1 }));
-static_assert(tree_capture("(?U-U)(a)??a*", "aa", { 0, no_tag, no_tag }));
-static_assert(tree_capture("(?U)(a)?a*(?-U)(b)?b*", "aabb", { 0, no_tag, no_tag, 2, 3 }));
-static_assert(tree_capture("(?U)(a)??a*(?-U)(b)??b*", "aabb", { 0, 0, 1, no_tag, no_tag }));
+static_assert(tree_capture("(?U)(a)?a*", "aa", { no_tag, no_tag }));
+static_assert(tree_capture("(?U)(a)??a*", "aa", { 0, 1 }));
+static_assert(tree_capture("(?U:)(a)?a*", "aa", { 0, 1 }));
+static_assert(tree_capture("(?U:)(a)??a*", "aa", { no_tag, no_tag }));
+static_assert(tree_capture("(?U)(aa)+a*", "aaaaa", { 0, 2 }));
+static_assert(tree_capture("(?U)(aa)+?a*", "aaaaa", { 2, 4 }));
+static_assert(tree_capture("(?U-U)(a)?a*", "aa", { 0, 1 }));
+static_assert(tree_capture("(?U-U)(a)??a*", "aa", { no_tag, no_tag }));
+static_assert(tree_capture("(?U)(a)?a*(?-U)(b)?b*", "aabb", { no_tag, no_tag, 2, 3 }));
+static_assert(tree_capture("(?U)(a)??a*(?-U)(b)??b*", "aabb", { 0, 1, no_tag, no_tag }));
 
 /* additional parser tests */
 static_assert(tree_match("\\Q...\\E", "..."));

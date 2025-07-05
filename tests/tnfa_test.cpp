@@ -100,18 +100,18 @@ static_assert(tnfa_match("a{3}", "aaa"));
 static_assert(not tnfa_match("a{3}", "aaaa"));
 
 /* laziness tests */
-static_assert(tnfa_capture("(a)?a*", "", { 0, no_tag, no_tag }));
-static_assert(tnfa_capture("(a)?a*", "a", { 0, 0, 1 }));
-static_assert(tnfa_capture("(a)?a*", "aa", { 0, 0, 1 }));
-static_assert(tnfa_capture("(a)??a*", "aa", { 0, no_tag, no_tag }));
+static_assert(tnfa_capture("(a)?a*", "", { no_tag, no_tag }));
+static_assert(tnfa_capture("(a)?a*", "a", { 0, 1 }));
+static_assert(tnfa_capture("(a)?a*", "aa", { 0, 1 }));
+static_assert(tnfa_capture("(a)??a*", "aa", { no_tag, no_tag }));
 
 /* capture location tests */
-static_assert(tnfa_capture("(a)+b*", "ab", { 0, 0, 1 }));
-static_assert(tnfa_capture("(a)+b*", "aab", { 0, 1, 2 }));
-static_assert(tnfa_capture("(aa)+a*", "aaaaa", { 0, 2, 4 }));
-static_assert(tnfa_capture("(aa)+?a*", "aaaaa", { 0, 0, 2 }));
-static_assert(tnfa_capture("a(aa)b|(aa)ac", "aaab", {0, 1, 3, no_tag, no_tag }));
-static_assert(tnfa_capture("a(aa)b|(aa)ac", "aaac", {0, no_tag, no_tag, 0, 2 }));
+static_assert(tnfa_capture("(a)+b*", "ab", { 0, 1 }));
+static_assert(tnfa_capture("(a)+b*", "aab", { 1, 2 }));
+static_assert(tnfa_capture("(aa)+a*", "aaaaa", { 2, 4 }));
+static_assert(tnfa_capture("(aa)+?a*", "aaaaa", { 0, 2 }));
+static_assert(tnfa_capture("a(aa)b|(aa)ac", "aaab", { 1, 3, no_tag, no_tag }));
+static_assert(tnfa_capture("a(aa)b|(aa)ac", "aaac", { no_tag, no_tag, 0, 2 }));
 
 /* wildcard tests */
 static_assert(not tnfa_match(".", ""));

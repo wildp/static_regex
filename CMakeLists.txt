@@ -59,6 +59,7 @@ target_sources("rx.util"
         TYPE CXX_MODULES
         BASE_DIRS src/rx/util
         FILES
+            src/rx/util/captures.cpp
             src/rx/util/cdarray.cpp
             src/rx/util/error.cpp
             src/rx/util/partition.cpp

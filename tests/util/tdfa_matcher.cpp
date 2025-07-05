@@ -60,12 +60,6 @@ namespace rx::testing
         std::vector<I> registers(this->reg_count());
         std::vector<bool> registers_enabled(this->reg_count(), false);
 
-        /* while tags and captures are still linked,
-         * assign the first tag to the start of the input */
-        registers.at(0) = first;
-        registers_enabled.at(0) = true;
-        /* end */
-
         std::size_t next_state{ this->match_start };
 
         I it{ first };
@@ -133,13 +127,45 @@ namespace rx::testing
             }
         }
         
-        /* convert from vector of it to vector of size_t */
+        /* convert from tag registers to captures */
 
         std::vector<std::size_t> result(this->tag_count(), no_tag);
         
         for (std::size_t i{ 0 }; i < this->tag_count(); ++i)
             if (registers_enabled.at(i + this->tag_count()))
                 result.at(i) = std::ranges::distance(first, registers.at(i + this->tag_count()));
+
+        // auto f = [&](const rx::detail::capture_info::tag_pair_t& p) -> bool {
+        //     return not ((p.first.tag_number > 0 and not registers_enabled.at(p.first.tag_number))
+        //                     or (p.second.tag_number > 0 and not registers_enabled.at(p.second.tag_number)));
+        // };
+
+        // auto t = [&](const rx::detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
+        //     return{ std::next((p.first.tag_number > 0) ? *registers.at(p.first.tag_number)
+        //                         : ((p.first.tag_number == rx::detail::start_of_input_tag) ? first : last), p.first.offset),
+        //             std::next((p.second.tag_number > 0) ? *registers.at(p.second.tag_number)
+        //                         : ((p.second.tag_number == rx::detail::start_of_input_tag) ? first : last), p.second.offset) };
+        // };
+
+        // for (std::size_t i{ 0 }; i < capture_count; ++i)
+        // {
+        //     const auto [beg, end]{ ci.lookup(i) };
+
+        //     auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
+        //                                               | std::views::transform(t)
+        //                                               | std::ranges::to<std::vector>() };
+                    
+        //     if (std::ranges::size(rng) == 0)
+        //     {
+        //         res.insert(res.end(), { detail::no_tag, detail::no_tag });
+        //         continue;
+        //     }
+
+        //     auto [bit, blast]{ std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first) };
+
+        //     res.push_back(std::distance(first, bit));
+        //     res.push_back(std::distance(first, blast));
+        // }
 
         return result;
     }

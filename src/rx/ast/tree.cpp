@@ -16,12 +16,10 @@ import rx.util;
 import :tok;
 import :captures;
 
+// TODO: move the parser to parser.cpp
 
 namespace rx::detail
 {
-    // template<typename CharT>
-    // class tagged_nfa;
-
     /* types */
 
     export enum class assert_type : int_least8_t
@@ -47,7 +45,7 @@ namespace rx::detail
         bool enable_branchreset : 1 { false };
         bool enable_alttocc     : 1 { true };
     };
-    
+
 
     /* ast definition */
 
@@ -72,10 +70,9 @@ namespace rx::detail
             std::vector<std::size_t> idxs;
         };
 
-        struct capture
+        struct tag
         {
-            std::size_t idx;
-            std::uint_least16_t number;
+            tag_number_t number;
         };
 
         using backref = tok::backref;  
@@ -94,7 +91,7 @@ namespace rx::detail
         // TODO: replace char_lit with strings
         // using char_str = std::basic_string<CharT>;
 
-        using type = std::variant<assertion, char_str, char_class, backref, alt, concat, capture, repeat>;
+        using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
         constexpr expr_tree(sv_type sv, parser_flags flags = {});
         
@@ -102,8 +99,8 @@ namespace rx::detail
         
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
         [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }
-        [[nodiscard]] constexpr std::size_t tag_count() const { return 1 + (2 * capture_count_); }
-        [[nodiscard]] constexpr std::size_t capture_count() const { return capture_count_; }
+        [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
+        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; };
 
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
 
@@ -136,7 +133,8 @@ namespace rx::detail
         parser_flags flags_;
         std::vector<type> expressions_;
         std::vector<std::size_t> overwritable_;
-        std::uint_least16_t capture_count_{ 0 };
+        capture_info capture_info_;
+        tag_number_t tag_count_{ 0 };
     };
 
 
@@ -1005,9 +1003,60 @@ namespace rx::detail
                         const auto cap_number{ capstack.pop() };
 
                         if (cap_number.has_value())
-                            semstack.push(new_expression<capture>(child_idx, *cap_number));
+                        {
+                            type& ast{ expressions_.at(child_idx) };
+
+                            if (char_str* lit{ std::get_if<char_str>(&ast) }; lit != nullptr and lit->data.empty())
+                            {
+                                /* empty capturing group; only insert one tag */
+
+                                tag_number_t tag_num{ tag_count_++ };
+                                capture_info_.insert(*cap_number, tag_num, tag_num);
+
+                                if (tag_num < 0)
+                                    throw tree_error("Capture limit exceed");
+
+                                overwritable_.push_back(child_idx);
+                                semstack.push(new_expression<tag>(tag_num));
+                            }
+                            else if (std::holds_alternative<concat>(ast))
+                            {
+                                /* insert tags on either end of existing concat */
+                                tag_number_t lhs_tag{ tag_count_++ };
+                                tag_number_t rhs_tag{ tag_count_++ };
+                                capture_info_.insert(*cap_number, lhs_tag, rhs_tag);
+
+                                if (lhs_tag < 0 or rhs_tag < 0)
+                                    throw tree_error("Capture limit exceed");
+                                
+                                const auto lhs_tag_entry{ new_expression<tag>(lhs_tag) };
+                                const auto rhs_tag_entry{ new_expression<tag>(rhs_tag) };
+
+                                /* calling new_expression invalidates references, so we must re-get ast for target */ 
+                                auto& target{ std::get<concat>(expressions_.at(child_idx)).idxs };
+                                target.insert(target.cbegin(), lhs_tag_entry);
+                                target.insert(target.cend(), rhs_tag_entry);
+                                semstack.push(child_idx);
+                            }
+                            else
+                            {
+                                /* create new concat and put tags on either side */
+                                tag_number_t lhs_tag{ tag_count_++ };
+                                tag_number_t rhs_tag{ tag_count_++ };
+                                capture_info_.insert(*cap_number, lhs_tag, rhs_tag);
+
+                                if (lhs_tag < 0 or rhs_tag < 0)
+                                    throw tree_error("Capture limit exceed");
+
+                                const auto lhs_tag_entry{ new_expression<tag>(lhs_tag) };
+                                const auto rhs_tag_entry{ new_expression<tag>(rhs_tag) };
+                                semstack.push(new_expression<concat>(std::vector{ lhs_tag_entry, child_idx, rhs_tag_entry }));
+                            }
+                        }
                         else
+                        {
                             semstack.push(child_idx); /* non capturing group */
+                        }
                     }
                     break;
                 case sa::cap_parse_flag:
@@ -1123,11 +1172,6 @@ namespace rx::detail
 
         if (not semstack.empty())
             root_idx_ = std::get<std::size_t>(semstack.pop());
-
-        if (auto cc{ capstack.capture_count() }; cc.has_value())
-            capture_count_ = cc.value();
-        else
-            throw pattern_error("Parse Error");
     }
 
     
@@ -1227,28 +1271,13 @@ namespace rx::detail
                 }
                 break;
 
-            case ast_index<capture>:
+            case ast_index<tag>:
                 {
-                    const auto& cap{ std::get<capture>(entry) };
+                    const auto& tag_entry{ std::get<tag>(entry) };
 
-                    if (pos == 1)
-                    {
-                        auto& vec{ tag_vec.at(idx) };
-
-                        vec.emplace_back(cap_num_to_tag(cap.number, false));
-                        vec.emplace_back(cap_num_to_tag(cap.number, true));
-
-                        std::ranges::copy(tag_vec.at(cap.idx), std::back_inserter(vec));
-                        std::ranges::sort(vec);
-
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(cap.idx, 0);
-                    }
-
+                    auto& vec{ tag_vec.at(idx) };
+                    vec.emplace_back(tag_entry.number);
+                    stack.pop_back();
                 }
                 break;
 
