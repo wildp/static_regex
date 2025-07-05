@@ -1,21 +1,19 @@
-module;
+#pragma once
 
-#include <flat_map>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <variant>
 #include <vector>
 
-export module rx.tests:tdfa_matcher;
+#include <rx/etc/cdarray.hpp>
+#include <rx/etc/util.hpp>
+#include <rx/fsm/tdfa.hpp>
 
-// import std;
-import rx.fsm;
-import rx.util;
 
 namespace rx::testing
 {
-    export template<typename CharT>
+    template<typename CharT>
     class tdfa_matcher : public detail::tagged_dfa<CharT>
     {
     public:

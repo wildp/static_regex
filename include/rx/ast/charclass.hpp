@@ -1,16 +1,14 @@
-module;
+#pragma once
 
 #include <cstddef>
 #include <iterator>
 #include <numeric>
 #include <vector>
 
-export module rx.ast:charclass;
+#include <rx/etc/util.hpp>
 
-// import std;
-import rx.util;
 
-export namespace rx::detail
+namespace rx::detail
 {
     enum class named_character_class : std::uint8_t
     {

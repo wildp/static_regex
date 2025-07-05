@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <cstdint>
 #include <flat_map>
@@ -6,9 +6,8 @@ module;
 #include <ranges>
 #include <vector>
 
-export module rx.util:captures;
 
-export namespace rx::detail
+namespace rx::detail
 {
     using tag_number_t = int; /* note: tags must be non-negative */
     inline constexpr tag_number_t start_of_input_tag{ std::numeric_limits<tag_number_t>::min() };

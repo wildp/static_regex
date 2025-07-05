@@ -1,105 +1,16 @@
-module;
+#pragma once
+
+#include <rx/fsm/tnfa.hpp>
 
 #include <algorithm>
 #include <iterator>
 #include <limits>
 #include <ranges>
 #include <utility>
-#include <variant>
-#include <vector>
 
-// TODO: Add fixed tag optimisation (delete unnecessary tags)
-// TODO: Decouple tags from capture numbers and provide mapping
 
-export module rx.fsm:tnfa;
-
-// import std;
-import rx.util;
-import rx.ast;
-
-export namespace rx::detail
+namespace rx::detail
 {
-    template<typename CharT>
-    class tagged_dfa;
-
-    // template<typename CharT>
-    // class multipass_tagged_dfa;
-
-    /* tnfa transitions */
-
-    template<typename CharT>
-    struct n_tr
-    {
-        std::size_t next;
-        CharT lower;
-        CharT upper;
-    };
-
-    struct epsilon_tr
-    {
-        std::size_t next;
-        int priority;
-        int tag; /* use tag = 0 when tag is absent, tag > 0 for regular tags, and tag < 0 for negative tags */
-    };
-
-    struct assert_tr
-    {
-        std::size_t next;
-        assert_type assertion;
-    };
-
-    /* tnfa nodes */
-
-    template<typename CharT>
-    struct tnfa_node
-    {
-        using transition_t = std::variant<n_tr<CharT>, epsilon_tr, assert_tr>;
-
-        std::vector<transition_t> tr;
-    };
-
-    /* tnfa class */
-
-    template<typename CharT>
-    class tagged_nfa
-    {
-    public:
-        constexpr tagged_nfa(const expr_tree<CharT>& ast);
-
-        friend class tagged_dfa<CharT>;
-        // friend class multipass_tagged_dfa<CharT>;
-
-    private:
-        using ast_t = expr_tree<CharT>;
-
-        template<in_variant<typename ast_t::type> T>
-        static constexpr std::size_t ast_index{ index_of_impl<typename ast_t::type, T>::value };
-
-        constexpr std::size_t node_create();
-        constexpr void epsilon(std::size_t q0, std::size_t qf, int priority = 0, int tag = 0);
-        constexpr void make_ntags(std::size_t q0, std::size_t qf, const std::vector<int>& ntags);
-        constexpr void make_wildcard(std::size_t q0, std::size_t qf);
-
-        struct stack_elem
-        {
-            std::size_t q0, qf, idx;
-        };
-    
-    public:
-        static constexpr std::size_t match_start{ 0 };
-        static constexpr std::size_t substr_start{ 1 };
-        static constexpr std::size_t end{ 2 };
-
-        [[nodiscard]] constexpr const tnfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-        [[nodiscard]] constexpr size_t tag_count() const { return tag_count_; }
-        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
-
-    private:
-        std::vector<tnfa_node<CharT>> nodes_{ 3 };
-        std::size_t tag_count_;
-        capture_info capture_info_;
-    };
-
     /* modified thompson's algorithm */
 
     template<typename CharT>

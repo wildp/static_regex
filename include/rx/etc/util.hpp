@@ -1,20 +1,12 @@
-module;
+#pragma once
 
 #include <algorithm>
-#include <cstdint>
 #include <concepts>
 #include <limits>
 #include <variant>
 
-export module rx.util;
 
-// import std;
-export import :captures;
-export import :cdarray;
-export import :error;
-export import :partition;
-
-export namespace rx::detail 
+namespace rx::detail 
 {
     template<class... Ts>
     struct overloads : Ts... { using Ts::operator()...; };

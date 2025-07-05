@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <algorithm>
 #include <cstdint>
@@ -7,15 +7,14 @@ module;
 #include <ranges>
 #include <vector>
 
-export module rx.tests:tree_matcher;
+#include <rx/etc/cdarray.hpp>
+#include <rx/etc/error.hpp>
+#include <rx/ast/tree.hpp>
 
-// import std;
-import rx.util;
-import rx.ast;
 
 namespace rx::testing
 {
-    export template<typename CharT>
+    template<typename CharT>
     class tree_matcher : public detail::expr_tree<CharT>
     {
     public:

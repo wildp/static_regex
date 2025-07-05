@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <algorithm>
 #include <limits>
@@ -8,11 +8,10 @@ module;
 #include <type_traits>
 #include <variant>
 
-export module rx.ast:tok;
+#include <rx/etc/util.hpp>
+#include <rx/etc/error.hpp>
+#include <rx/ast/charclass.hpp>
 
-// import std;
-import rx.util;
-import :charclass;
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
@@ -20,14 +19,17 @@ namespace rx::detail
 {
     /* RE2 limits counted repetitions to 1000 - we do the same here.
      * Note: clang reaches the consteval step limit with >512 repetitions */
-    export constexpr std::int_least16_t counted_repetition_limit{ 1000 };
+    inline constexpr std::int_least16_t counted_repetition_limit{ 1000 };
 
-    export template<typename CharT>
-    class expr_tree;
+    namespace parser
+    {
+        template<typename CharT>
+        class ll1;
+    }
 
     /* token definitions */
 
-    export namespace tok
+    namespace tok
     {
         struct end_of_input {};
         struct vert {};
@@ -111,7 +113,7 @@ namespace rx::detail
 
     /* lexer class definition */
 
-    export template<typename CharT>
+    template<typename CharT>
     class lexer
     {
         using sv_type = std::basic_string_view<CharT>;
@@ -128,7 +130,7 @@ namespace rx::detail
         constexpr lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}; 
         constexpr token_t nexttok();
 
-        friend class expr_tree<CharT>;
+        friend class parser::ll1<CharT>;
 
     private:
         constexpr std::size_t               parse_hex(std::size_t fixed_amt);

@@ -1,9 +1,5 @@
-#include <algorithm>
-#include <string_view>
-#include <utility>
-#include <vector>
+#include <rx/etc/partition.hpp>
 
-import rx.util;
 
 namespace
 {

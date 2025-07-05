@@ -1,10 +1,11 @@
 #include <print>
 
-// import std;
-import rx;
-import rx.ast;
-import rx.fsm;
-import rx.tests;
+#include <rx/regex.hpp>
+#include "tests/headers/printable_tree.hpp"
+#include "tests/headers/tdfa_matcher.hpp"
+#include "tests/headers/tnfa_matcher.hpp"
+#include "tests/headers/tree_matcher.hpp"
+
 
 namespace
 {

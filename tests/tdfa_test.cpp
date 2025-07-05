@@ -1,10 +1,4 @@
-#include <algorithm>
-#include <vector>
-
-import rx.util;
-import rx.ast;
-import rx.fsm;
-import rx.tests;
+#include "headers/tdfa_matcher.hpp"
 
 
 namespace

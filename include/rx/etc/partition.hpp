@@ -1,18 +1,16 @@
-module;
+#pragma once
 
 #include <algorithm>
 #include <concepts>
 #include <vector>
 #include <utility>
 
-export module rx.util:partition;
 
 // TODO: implement partitioning with contents?
 // TODO: make paritioning even more generic
 // TODO: rewrite to only erase once at end of function
 
-
-export namespace rx::detail
+namespace rx::detail
 {
     template<std::integral T>
     constexpr void partition(std::vector<std::pair<T, T>>& vec)

@@ -1,18 +1,18 @@
-module;
+#pragma once
 
 // #include <meta>
 #include <concepts>
 #include <cstddef>
 #include <string_view>
 
-export module rx;
+#include <rx/etc/util.hpp>
+#include <rx/ast/tree.hpp>
+#include <rx/fsm/tnfa.hpp>
+#include <rx/fsm/tnfa.hpp>
+#include <rx/fsm/tdfa.hpp>
 
-// import std;
-import rx.util;
-import rx.ast;
-import rx.fsm;
 
-export namespace rx
+namespace rx
 {
     template<detail::string_literal Pattern>
     requires (std::same_as<char, typename decltype(Pattern.value)::value_type> /* temporary: remove later */) 
@@ -24,7 +24,6 @@ export namespace rx
         }
 
     public:
-
         [[nodiscard]] consteval int test() const noexcept
         {
             using namespace detail;

@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <algorithm>
 #include <optional>
@@ -6,16 +6,15 @@ module;
 #include <string_view>
 #include <vector>
 
-export module rx.tests:tnfa_matcher;
+#include <rx/etc/cdarray.hpp>
+#include <rx/etc/error.hpp>
+#include <rx/ast/tree.hpp>
+#include <rx/fsm/tnfa.hpp>
 
-// import std;
-import rx.ast;
-import rx.fsm;
-import rx.util;
 
 namespace rx::testing
 {
-    export template<typename CharT>
+    template<typename CharT>
     class tnfa_matcher : public detail::tagged_nfa<CharT>
     {
     public:
