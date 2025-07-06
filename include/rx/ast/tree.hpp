@@ -100,7 +100,7 @@ namespace rx::detail
 
         constexpr void optimise_tags();
 
-    private:
+    // private:
         template<in_variant<type> T>
         static constexpr std::size_t ast_index{ index_of_impl<type, T>::value };
 

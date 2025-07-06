@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <compare>
 #include <flat_map>
 #include <vector>
 #include <variant>
@@ -30,42 +31,27 @@ namespace rx::detail
         {
             bool val; /* use false for nil and true for current */
 
-            friend constexpr bool operator==(set, set) = default;
+            friend constexpr bool operator==(set, set) noexcept = default;
         };
 
         struct copy
         {
             reg_t src;
 
-            friend constexpr bool operator==(copy, copy) = default;
+            friend constexpr bool operator==(copy, copy) noexcept = default;
         };
 
-        // struct append
-        // {
-        //     reg_t src;
-        //     std::vector<bool> hist; /* use false for nil and true for current */
-
-        //     friend constexpr bool operator==(const append&, const append&) = default;
-        // };
-
-        using op_t = std::variant<set, copy /*, append*/>;
+        using op_t = std::variant<set, copy>;
 
         // TODO: optimise layout as necessary to be as compact as possible
 
         op_t op;
         reg_t dst;
 
-        // constexpr regop(reg_t destination, op_t&& operation) :
-        //     op{ std::move(operation) }, dst{ destination } {}
-
-        // constexpr regop(reg_t destination, const op_t& operation) :
-        //     op{ operation }, dst{ destination } {}
-
         constexpr regop(reg_t destination, op_t operation) :
             op{ operation }, dst{ destination } {}
 
         friend constexpr bool operator==(regop lhs, regop rhs) = default;
-        // friend constexpr bool operator==(const regop& lhs, const regop& rhs) = default;
     };
 
     using regops_t = std::vector<regop>;

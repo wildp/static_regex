@@ -98,12 +98,12 @@ namespace rx::detail
         return "<unnamed>";
     }
 
-    template <typename... Ts>
+    template<typename... Ts>
     constexpr std::string variant_alternative_name(const std::variant<Ts...>& value)
     {
         template for (constexpr auto e : { (^^Ts)... })
         {
-            if (std::holds_alternative<[: e :]>(value))
+            if (std::holds_alternative<typename [:e:]>(value))
                 return std::string{ std::meta::display_string_of(e) };
         }
 
@@ -115,12 +115,12 @@ namespace rx::detail
     {
         template for (constexpr auto e : { (^^Ts)... })
         {
-            if (std::holds_alternative<[: e :]>(value))
+            if (std::holds_alternative<typename [:e:]>(value))
             {
                 if constexpr (std::meta::is_enum_type(e))
-                    return enum_to_string(std::get<[: e :]>(value));
+                    return enum_to_string(std::get<typename [:e:]>(value));
                 if constexpr (std::meta::has_template_arguments(e) and std::meta::template_of(e) == ^^std::variant)
-                    return variant_alternative_name(std::get<[: e :]>(value));
+                    return variant_alternative_name(std::get<typename [:e:]>(value));
                 else
                     return std::string{ std::meta::display_string_of(e) };
             }

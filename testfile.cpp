@@ -1,4 +1,5 @@
 #include <print>
+#include <meta>
 
 #include <rx/regex.hpp>
 #include "tests/headers/printable_tree.hpp"
@@ -6,6 +7,54 @@
 #include "tests/headers/tnfa_matcher.hpp"
 #include "tests/headers/tree_matcher.hpp"
 
+// template<typename CharT>
+// struct std::formatter<rx::detail::char_class_impl<CharT>> {
+//     constexpr auto parse(std::format_parse_context& ctx) {
+//         return ctx.begin();
+//     }
+
+//     auto format(const rx::detail::char_class_impl<CharT>& obj, std::format_context& ctx) const {
+//         return std::format_to(ctx.out(), "[cc]");
+//     }
+// };
+
+
+// template<typename T>
+// std::string print_struct(const T& value)
+// {
+//     std::string result{ "{" };
+
+//     template for (constexpr auto mem: std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked())))
+//     {
+//         if constexpr (std::is_enum_v<typename [:std::meta::type_of(mem):]>)
+//         {
+//             result += std::format(" .{}={},", std::define_static_string(std::meta::display_string_of(mem)), rx::detail::enum_to_string(value.[:mem:]));
+//         }
+//         else
+//         {
+//             result += std::format(" .{}={},", std::define_static_string(std::meta::display_string_of(mem)), value.[:mem:]);
+//         }
+//     }
+
+//     // if constexpr (std::define_static_array(std::meta::nonstatic_data_members_of(^^T, ctx)).size() > 0)
+//     //     result.pop_back();
+//     result += " }";
+//     return result;
+// }
+
+// template<typename... Ts>
+// std::string variant_contents(const std::variant<Ts...>& value)
+// {
+//     template for (constexpr auto e : { (^^Ts)... })
+//     {
+//         if (std::holds_alternative<typename [:e:]>(value))
+//         {
+//             return std::format("{}: {}", std::define_static_string(std::meta::display_string_of(e)), print_struct(std::get<typename [:e:]>(value)));
+//         }
+//     }
+
+//     return "<error>";
+// }
 
 namespace
 {
@@ -85,6 +134,12 @@ namespace
     {
         rx::testing::printable_expr_tree<char> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
+
+        // std::vector<std::vector<int>> tv{};
+        // tmp.make_tag_vec(tv);
+        // for (std::size_t i{ 0 }; i < tmp.expressions_.size(); ++i)
+        //     std::println("{}: {}: {}", i, tv.at(i), variant_contents(tmp.expressions_.at(i)));
+
         
         rx::testing::tnfa_matcher<char> tnfa{ tmp };
         rx::testing::tdfa_matcher<char> tdfa{ tnfa };
@@ -115,32 +170,23 @@ int main()
 
     // t2("()", { "", "a" });
     // t2("(a)", { "", "a" });
-    t3("a(aa)b|(aa)ac", { "aaab", "aaac" });
-    t2("a(aa)b|(aa)ac", { "aaab", "aaac" });
-    t5("a(aa)b|(aa)ac", { "aaab", "aaac" });
+    // t2("a(aa)b|(aa)ac", { "aaab", "aaac" });
 
+    // t3("a(aa)b|(aa)ac", { "aaab", "aaac" });
     // t3("(a*b)+", { "aaababaaaab" });
     // t3("a(bb|b)b", { "abb", "abbb" });
     // t3("(?|(a)|(b)(c))(d)\\3", { "abb", "abbb" });
 
-    // t5("a(aa)b|(aa)ac");
-    // t5("(a)*(a|b)b*");
-    // t5("(a)*(b)*");
-    // t5("(a)|(b)");
-    // t5("(?:(a)|(b))c");
-    // t5("(a|b)*b");
-    // t5("(a)*");
-    // t5("(ab)*");
-    // t5("(a)");
+    // t5("a(aa)b|(aa)ac", { "aaab", "aaac" });
+    // t5("(a)*(a|b)b*", {});
+    // t5("(a)*(b)*", {});
+    // t5("(a|b)*b", {});
+    // t5("(a)*", {});
+    // t5("(ab)*", {});
+    // t5("(a)", {});
 
-
-    // t5("(?:(1)a(2))*(3)(?:a|(4)b)(5)b*", {});
-    // t5("(?:(1)a(2))*", { "aaa", "aaaaaa" });
-
-    // t5("a(aa)b|(aa)ac", {"aaac", "aaab" });
-
-    // t5("(a)+b*", { "ab", "aab" });
-    // t5("(a)*", { "a", "aa" });
+    // t5("(a)+(b)*", {"ab", "abb", "aaabbb" });
+    // t5("(a)+b*|c*", { "ab", "aab" });
 
     // t5("(?:()a())*()(?:a|()b)()b*", {});
 

@@ -445,16 +445,20 @@ namespace rx::detail
                 {
                     regop::op_t op_rhs{ regop_rhs(ce.registers, h, t) };
 
-                    auto [value_refs, existing]{ map.lookup(t, op_rhs) };
+                    auto [value_ref, existing]{ map.lookup(t, op_rhs) };
 
                     if (not existing)
                     {
                         auto i{ regcount++ };
-                        value_refs = i;
-                        regops.emplace_back(i, /* std::move( */ op_rhs /* ) */);
+                        value_ref = i;
+                        regops.emplace_back(i, op_rhs);
+                    }
+                    else if (not std::ranges::contains(regops, value_ref, &regop::dst))
+                    {
+                        regops.emplace_back(value_ref, op_rhs);
                     }
 
-                    ce.registers.at(t - 1) = value_refs;
+                    ce.registers.at(t - 1) = value_ref;
                 }
             }
         }
@@ -515,7 +519,6 @@ namespace rx::detail
          * we ensure tnfa states have the same tag sequences later                       */
         if (state.precedence != mapped_state_info.precedence)
             return false;
-
         
         register_map_t map, rmap;
 
@@ -539,7 +542,7 @@ namespace rx::detail
                         const reg_t i{ ce1.registers.at(t - 1) };
                         const reg_t j{ ce2.registers.at(t - 1) };
 
-                        if ((not map.contains(i) and not rmap.contains(j)))
+                        if (not map.contains(i) and not rmap.contains(j))
                             map[i] = j, rmap[j] = i;
                         else if (not (map.contains(i) and map.at(i) == j) or not (rmap.contains(j) and rmap.at(j) == i))
                             return false;
@@ -549,6 +552,11 @@ namespace rx::detail
                         const reg_t i{ ce1.registers.at(t - 1) };
                         const reg_t j{ ce2.registers.at(t - 1) };
                         if not consteval { std::println("Hist: {}<=>{} = {}", i, j, h); }
+
+                        // if (not map.contains(i) and not rmap.contains(j))
+                        //     map[i] = j, rmap[j] = i;
+                        // else if (not (map.contains(i) and map.at(i) == j) or not (rmap.contains(j) and rmap.at(j) == i))
+                        //     return false;
                     }
                 }
             }
@@ -566,7 +574,7 @@ namespace rx::detail
             {
                 if not consteval { std::println("{} not in Map", i); }
 
-                // /* skip mapping registers with history */
+                /* skip mapping registers with history */
                 it = o_copy.erase(it);
                 // ++it;
                 continue;
