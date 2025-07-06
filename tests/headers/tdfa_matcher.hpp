@@ -6,6 +6,7 @@
 #include <variant>
 #include <vector>
 
+#include "rx/etc/captures.hpp"
 #include <rx/etc/cdarray.hpp>
 #include <rx/etc/util.hpp>
 #include <rx/fsm/tdfa.hpp>
@@ -127,44 +128,45 @@ namespace rx::testing
         
         /* convert from tag registers to captures */
 
-        std::vector<std::size_t> result(this->tag_count(), no_tag);
-        
-        for (std::size_t i{ 0 }; i < this->tag_count(); ++i)
-            if (registers_enabled.at(i + this->tag_count()))
-                result.at(i) = std::ranges::distance(first, registers.at(i + this->tag_count()));
+        std::vector<std::size_t> res;
+        const capture_info& ci{ this->get_capture_info() };
+        const std::size_t tag_count{ this->tag_count() };
 
-        // auto f = [&](const rx::detail::capture_info::tag_pair_t& p) -> bool {
-        //     return not ((p.first.tag_number > 0 and not registers_enabled.at(p.first.tag_number))
-        //                     or (p.second.tag_number > 0 and not registers_enabled.at(p.second.tag_number)));
-        // };
+        using namespace rx::detail;
+    
+        auto f = [&](const capture_info::tag_pair_t& p) -> bool {
+            return not ((p.first.tag_number >= 0 and not registers_enabled.at(tag_count + p.first.tag_number))
+                            or (p.second.tag_number >= 0 and not registers_enabled.at(tag_count + p.second.tag_number)));
+        };
 
-        // auto t = [&](const rx::detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
-        //     return{ std::next((p.first.tag_number > 0) ? *registers.at(p.first.tag_number)
-        //                         : ((p.first.tag_number == rx::detail::start_of_input_tag) ? first : last), p.first.offset),
-        //             std::next((p.second.tag_number > 0) ? *registers.at(p.second.tag_number)
-        //                         : ((p.second.tag_number == rx::detail::start_of_input_tag) ? first : last), p.second.offset) };
-        // };
+        auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<I, I> {
+            return { std::next((p.first.tag_number >= 0) ? registers.at(tag_count + p.first.tag_number)
+                                : ((p.first.tag_number == start_of_input_tag) ? first : last), p.first.offset),
+                     std::next((p.second.tag_number >= 0) ? registers.at(tag_count + p.second.tag_number)
+                                : ((p.second.tag_number == start_of_input_tag) ? first : last), p.second.offset) };
+        };
 
-        // for (std::size_t i{ 0 }; i < capture_count; ++i)
-        // {
-        //     const auto [beg, end]{ ci.lookup(i) };
+        for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
+        {
+            const auto [beg, end]{ ci.lookup(i) };
 
-        //     auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
-        //                                               | std::views::transform(t)
-        //                                               | std::ranges::to<std::vector>() };
+            auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
+                                                      | std::views::transform(t)
+                                                      | std::ranges::to<std::vector>() };
                     
-        //     if (std::ranges::size(rng) == 0)
-        //     {
-        //         res.insert(res.end(), { detail::no_tag, detail::no_tag });
-        //         continue;
-        //     }
+            if (std::ranges::size(rng) == 0)
+            {
+                res.insert(res.end(), { detail::no_tag, detail::no_tag });
+                continue;
+            }
 
-        //     auto [bit, blast]{ std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first) };
+            auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<I, I>::first) };
+            auto [bit, blast]{ *max_elem };
 
-        //     res.push_back(std::distance(first, bit));
-        //     res.push_back(std::distance(first, blast));
-        // }
+            res.push_back(std::distance(first, bit));
+            res.push_back(std::distance(first, blast));
+        }
 
-        return result;
+        return res;
     }
 }

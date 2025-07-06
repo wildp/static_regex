@@ -135,12 +135,24 @@ namespace
         rx::testing::printable_expr_tree<char> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
 
-        // std::vector<std::vector<int>> tv{};
-        // tmp.make_tag_vec(tv);
-        // for (std::size_t i{ 0 }; i < tmp.expressions_.size(); ++i)
-        //     std::println("{}: {}: {}", i, tv.at(i), variant_contents(tmp.expressions_.at(i)));
+        const auto& ci{ tmp.get_capture_info() };
+        for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
+        {
+            const auto [beg, end]{ ci.lookup(i) };
+            for (auto it{ beg }; it != end; ++it)
+                std::println("{}: {}+{}, {}+{}", i, it->first.tag_number, it->first.offset, it->second.tag_number, it->second.offset);
+        }
 
-        
+        tmp.optimise_tags();
+
+        // const auto& ci{ tmp.get_capture_info() };
+        for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
+        {
+            const auto [beg, end]{ ci.lookup(i) };
+            for (auto it{ beg }; it != end; ++it)
+                std::println("{}: {}+{}, {}+{}", i, it->first.tag_number, it->first.offset, it->second.tag_number, it->second.offset);
+        }
+
         rx::testing::tnfa_matcher<char> tnfa{ tmp };
         rx::testing::tdfa_matcher<char> tdfa{ tnfa };
         std::println("Pattern ok\n");
@@ -183,12 +195,12 @@ int main()
     // t5("(a|b)*b", {});
     // t5("(a)*", {});
     // t5("(ab)*", {});
-    // t5("(a)", {});
+    // t5("(a)", { "a" });
 
     // t5("(a)+(b)*", {"ab", "abb", "aaabbb" });
     // t5("(a)+b*|c*", { "ab", "aab" });
 
-    // t5("(?:()a())*()(?:a|()b)()b*", {});
+    t5("(?:()a())*()(?:a|()b)()b*", { "ab" });
 
 
     return 0;

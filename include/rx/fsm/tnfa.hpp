@@ -84,13 +84,13 @@ namespace rx::detail
         static constexpr std::size_t end{ 2 };
 
         [[nodiscard]] constexpr const tnfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-        [[nodiscard]] constexpr size_t tag_count() const { return tag_count_; }
+        [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
     private:
         std::vector<tnfa_node<CharT>> nodes_{ 3 };
-        std::size_t tag_count_;
         capture_info capture_info_;
+        std::size_t tag_count_;
     };
 }
 

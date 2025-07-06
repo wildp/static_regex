@@ -911,7 +911,31 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, const std::size_t rhs_idx)
     {
-        if (type& ast{ get_expr(rhs_idx) }; std::holds_alternative<concat>(ast))
+        if (type& ast{ get_expr(lhs_idx) }; std::holds_alternative<concat>(ast))
+        {
+            /* append rhs into existing concat */
+            /* this case _should_ only arise from captures, so we can skip merging strings */
+            auto& target{ std::get<concat>(ast).idxs };
+            
+            type& rhs{ get_expr(rhs_idx) };
+
+            if (std::holds_alternative<concat>(rhs))
+            {
+                /* append contents of rhs concat to lhs concat  */
+                auto& src{ std::get<concat>(rhs).idxs };
+                target.append_range(src);
+                src.clear();
+                overwritable_.push_back(rhs_idx);
+            }
+            else
+            {
+                /* append rhs to existing concat */
+                target.push_back(rhs_idx);
+            }
+
+            return lhs_idx;
+        }
+        else if (type& ast{ get_expr(rhs_idx) }; std::holds_alternative<concat>(ast))
         {
             /* insert lhs into existing concat */
             auto& ast_concat{ std::get<concat>(ast) };

@@ -4,11 +4,11 @@
 
 #include <cstddef>
 #include <cstdlib>
-#include <compare>
 #include <flat_map>
 #include <vector>
 #include <variant>
 
+#include "rx/etc/captures.hpp"
 #include <rx/etc/partition.hpp>
 #include <rx/fsm/tnfa.hpp>
 
@@ -93,17 +93,18 @@ namespace rx::detail
 
         [[nodiscard]] constexpr const tdfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
         [[nodiscard]] constexpr const final_nodes_t& final_nodes() const { return final_nodes_; }
-        [[nodiscard]] constexpr size_t reg_count() const { return register_count_; }
-        [[nodiscard]] constexpr size_t tag_count() const { return tag_count_; }
+        [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
+        [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
+        [[nodiscard]] constexpr const capture_info get_capture_info() const { return capture_info_; }
 
     private:
         using data_t = std::vector<tdfa_node<CharT>>;
 
         data_t          nodes_;
         final_nodes_t   final_nodes_;
+        capture_info    capture_info_;
+        std::size_t     tag_count_;
         reg_t           register_count_{ 0 };
-
-        std::size_t     tag_count_; // TODO: replace with register to tag mapping information
     };
 }
 

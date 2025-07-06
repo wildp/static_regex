@@ -70,7 +70,7 @@ namespace rx::detail
 
     template<typename CharT>
     constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast) : 
-        tag_count_{ ast.tag_count() }, capture_info_{ ast.get_capture_info() }
+        capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }
     {
         std::vector<std::vector<int>> tag_vec{};
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
@@ -316,6 +316,9 @@ namespace rx::detail
 
             }
         }
+        
+
+        // TODO: maybe add this in the ast instead of at this stage? 
 
         /* join search_start to match_start with ".*?t", where t is the start_tag */
 

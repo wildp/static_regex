@@ -503,16 +503,6 @@ namespace rx::detail
     template<typename CharT>
     constexpr bool factory<CharT>::mappable(const node_info& state, std::size_t mapped_state, regops_t& o, const reg_t regcount) const
     {
-        constexpr auto print_regop = [](const regop& op, std::string_view indent = "") {
-            if (auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
-                std::println("{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
-            else if (auto* copy{ std::get_if<regop::copy>(&op.op) }; copy != nullptr)
-                std::println("{}r{} <- r{}", indent, op.dst, copy->src);
-            else
-                std::println("{}ERROR", indent);
-        };
-
-
         const auto& mapped_state_info{ state_info_.at(mapped_state) };
 
         /* different precedences also imply differing sets of states (for now at least);
@@ -521,8 +511,6 @@ namespace rx::detail
             return false;
         
         register_map_t map, rmap;
-
-        if not consteval { std::println("\nAttempting to map to {}:", mapped_state); }
         
         for (const auto& ce1 : state.config)
         {
@@ -547,24 +535,11 @@ namespace rx::detail
                         else if (not (map.contains(i) and map.at(i) == j) or not (rmap.contains(j) and rmap.at(j) == i))
                             return false;
                     }
-                    else
-                    {
-                        const reg_t i{ ce1.registers.at(t - 1) };
-                        const reg_t j{ ce2.registers.at(t - 1) };
-                        if not consteval { std::println("Hist: {}<=>{} = {}", i, j, h); }
-
-                        // if (not map.contains(i) and not rmap.contains(j))
-                        //     map[i] = j, rmap[j] = i;
-                        // else if (not (map.contains(i) and map.at(i) == j) or not (rmap.contains(j) and rmap.at(j) == i))
-                        //     return false;
-                    }
                 }
             }
         }
 
         regops_t o_copy{ o };
-
-        if not consteval { std::println("Current Regops:"); for (const auto& op: o_copy) print_regop(op, "\t"); std::println("Map: {}", map); }
 
         for (auto it{ o_copy.begin() }; it != o_copy.end();)
         {
@@ -572,11 +547,8 @@ namespace rx::detail
 
             if (not map.contains(i))
             {
-                if not consteval { std::println("{} not in Map", i); }
-
                 /* skip mapping registers with history */
                 it = o_copy.erase(it);
-                // ++it;
                 continue;
             }
 
@@ -595,17 +567,10 @@ namespace rx::detail
 
         o_new.append_range(o_copy);
 
-        if not consteval { std::println("New Regops:"); for (const auto& op: o_new) print_regop(op, "\t"); }
-
         const bool success{ toposort_regops(o_new.begin(), o_new.end(), regcount) };
 
-        if not consteval { std::println("Sorted Regops:"); for (const auto& op: o_new) print_regop(op, "\t"); }
-
         if (success)
-        {
             o = std::move(o_new);
-            if not consteval { std::println("Successfully mapped to {}:", mapped_state); }
-        }
 
         return success;
     }
@@ -643,7 +608,7 @@ namespace rx::detail
 {
     template<typename CharT>
     constexpr tagged_dfa<CharT>::tagged_dfa(const tnfa_t& tnfa) : 
-        tag_count_{ tnfa.tag_count() }
+        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }
     {
         factory<CharT>{ tnfa, *this, tag_count_, false };
     }

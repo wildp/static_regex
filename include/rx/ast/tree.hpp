@@ -97,18 +97,19 @@ namespace rx::detail
         [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; };
 
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
-
         constexpr void optimise_tags();
 
-    // private:
+    private:
         template<in_variant<type> T>
         static constexpr std::size_t ast_index{ index_of_impl<type, T>::value };
 
+        [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
+
         std::size_t root_idx_{ 0 };
-        parser_flags flags_;
         std::vector<type> expressions_;
         capture_info capture_info_;
         tag_number_t tag_count_{ 0 };
+        parser_flags flags_;
     };
 }
 

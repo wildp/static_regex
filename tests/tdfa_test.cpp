@@ -114,6 +114,7 @@ static_assert(tdfa_capture("(a)+(b)*", "ab", { 0, 1, 1, 2 }));
 static_assert(tdfa_capture("(a)+(b)*", "aab", { 1, 2, 2, 3 }));
 static_assert(tdfa_capture("(aa)+a*", "aaaaa", { 2, 4 }));
 static_assert(tdfa_capture("(aa)+?a*", "aaaaa", { 0, 2 }));
+static_assert(tdfa_capture("(a((a)))(a)c", "aaac", { 0, 2, 1, 2, 1, 2, 2, 3 }));
 static_assert(tdfa_capture("a(aa)b|(aa)ac", "aaab", { 1, 3, no_tag, no_tag }));
 static_assert(tdfa_capture("a(aa)b|(aa)ac", "aaac", { no_tag, no_tag, 0, 2 }));
 

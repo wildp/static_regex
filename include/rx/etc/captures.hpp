@@ -1,9 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <flat_map>
 #include <numeric>
 #include <ranges>
+#include <utility>
 #include <vector>
 
 
@@ -21,38 +23,29 @@ namespace rx::detail
         struct pair_entry
         {
             tag_number_t    tag_number;
-            int             offset;         /* note: offset should be positive */
+            int             offset;         /* note: offset should normally be negative */
         };
 
         using tag_pair_t = std::pair<pair_entry, pair_entry>;
+        using tag_remapper_t = std::flat_map<tag_number_t, tag_number_t>;
 
-        // We use a temporary workaround since constexpr flat_map has been implemented while constexpr flat_map hasn't
-#if __cpp_lib_constexpr_flat_map >= 202502L
-        using capture_map_t = std::flat_multimap<std::size_t, tag_pair_t>;
-#else
-        using capture_map_t = std::flat_map<std::size_t, std::vector<tag_pair_t>>;
-#endif
+        using key_type = capture_number_t;
+        using value_type = tag_pair_t;
 
         constexpr void insert(capture_number_t cap, tag_number_t lhs, tag_number_t rhs)
         {
-#if __cpp_lib_constexpr_flat_map >= 202502L
-            data_.emplace(cap, std::make_pair(pair_entry{ .tag_number = lhs, .offset = 0 },
-                                              pair_entry{ .tag_number = rhs, .offset = 0 }));
-#else
-            data_[cap].emplace_back(std::make_pair(pair_entry{ .tag_number = lhs, .offset = 0 },
-                                                   pair_entry{ .tag_number = rhs, .offset = 0 }));
-#endif
+            const auto key_it{ std::ranges::upper_bound(keys_, cap) };
+            const auto value_it{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_it) };
+
+            keys_.emplace(key_it, cap);
+            values_.emplace(value_it, pair_entry{ .tag_number = lhs, .offset = 0 }, pair_entry{ .tag_number = rhs, .offset = 0 });
         }
 
         [[nodiscard]] constexpr capture_number_t capture_count() const
         {
-#if __cpp_lib_constexpr_flat_map >= 202502L
-            auto tmp{ data_.keys() };
-            auto [last, _]{ std::ranges::unique(tmp) };
-            return std::saturate_cast<capture_number_t>(std::ranges::distance(std::ranges::begin(tmp), last));
-#else
-            return std::saturate_cast<capture_number_t>(data_.keys().size());
-#endif
+            auto key_copy{ keys_ };
+            auto [last, _]{ std::ranges::unique(key_copy) };
+            return std::saturate_cast<capture_number_t>(std::ranges::distance(std::ranges::begin(key_copy), last));
         }
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
@@ -63,41 +56,69 @@ namespace rx::detail
                 };
             };
 
-#if __cpp_lib_constexpr_flat_map >= 202502L
-            const auto& ref{ data_.values() };
-#else
-            const auto ref{ data_.values() | std::views::join };
-#endif
             /* for some reason, this doesn't seem to work? */
-            // return { std::ranges::contains(ref, tag, compose(&pair_entry::tag_number, &tag_pair_t::first)),
-            //          std::ranges::contains(ref, tag, compose(&pair_entry::tag_number, &tag_pair_t::second)) };
-
-            bool is_lhs{ false };
-            bool is_rhs{ false };
-
-            for (const auto& val : ref)
-            {
-                if (std::invoke(compose(&pair_entry::tag_number, &tag_pair_t::first), val) == tag)
-                    is_lhs = true;
-                if (std::invoke(compose(&pair_entry::tag_number, &tag_pair_t::second), val) == tag)
-                    is_rhs = true;
-            }
-
-            return std::make_pair(is_lhs, is_rhs);
+            return { std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::first)),
+                     std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::second)) };
         }
 
         [[nodiscard]] constexpr auto lookup(capture_number_t cap) const
         {
-#if __cpp_lib_constexpr_flat_map >= 202502L
-            return data_.equal_range(cap);
-#else
-            // temporary but semantically different implementation
-            const auto& tmp{ data_.at(cap) };
-            return std::make_pair(std::ranges::begin(tmp), std::ranges::end(tmp));
-#endif
+            auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
+
+            return std::make_pair(std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
+                                  std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end));
+        }
+
+        [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map) 
+        {
+            constexpr auto compose = [](const auto& g, const auto& f) {
+                return [=]<typename T>(T&& arg) { 
+                    return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+                };
+            };
+
+            for (auto& val: values_)
+            {
+                if (auto it{ map.find(val.first.tag_number) }; it != map.end())
+                {
+                    val.first.offset += it->second.offset;
+                    val.first.tag_number = it->second.tag_number;
+                }
+
+                if (auto it{ map.find(val.second.tag_number) }; it != map.end())
+                {
+                    val.second.offset += it->second.offset;
+                    val.second.tag_number = it->second.tag_number;
+                }
+            }
+
+            tag_remapper_t remapper;
+            
+            std::vector<tag_number_t> set;
+            set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::first)));
+            set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::second)));
+            std::ranges::sort(set);
+            auto [tmp_beg, tmp_end]{ std::ranges::unique(set) };
+            set.erase(tmp_beg, tmp_end);
+            std::erase_if(set, [](tag_number_t n) { return n < 0; });
+
+            for (tag_number_t i{ 0 }; std::cmp_less(i, set.size()); ++i)
+                remapper[set.at(i)] = i;
+
+            for (auto& val: values_)
+            {
+                if (auto it{ remapper.find(val.first.tag_number) }; it != remapper.end())
+                    val.first.tag_number = it->second;
+
+                if (auto it{ remapper.find(val.second.tag_number) }; it != remapper.end())
+                    val.second.tag_number = it->second;
+            }
+
+            return remapper;
         }
 
     private:
-        capture_map_t data_;
+        std::vector<capture_number_t> keys_;
+        std::vector<tag_pair_t> values_;
     };
 }
