@@ -14,6 +14,8 @@
 #include <format>
 #endif // RX_TDFA_ENABLE_DUMPER
 
+#include <rx/etc/partition.hpp>
+
 
 namespace rx::detail
 {
@@ -151,6 +153,9 @@ namespace rx::detail
         tag_sequence_t  new_tag_seq;
 
         [[maybe_unused]] friend constexpr bool operator==(const closure_entry&, const closure_entry&) = default;
+
+        constexpr closure_entry(std::size_t state, reg_vec reg, tag_sequence_t seq = {}, tag_sequence_t newseq = {}) :
+            tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) }, new_tag_seq{ std::move(newseq) } {}
     };
 
     namespace
@@ -164,7 +169,13 @@ namespace rx::detail
     using config_set_t = std::vector<configuration>;
     using closure_t = std::vector<closure_entry>;
     using register_map_t = std::flat_map<reg_t, reg_t>;
-    
+
+    template<typename CharT>
+    using multistep_closure = partition_entry<CharT, closure_entry>;
+
+    template<typename CharT>
+    using multistep_closures_t = std::vector<multistep_closure<CharT>>;
+
     class precedence_v1
     {
     public:
@@ -215,17 +226,6 @@ namespace rx::detail
 
     // TODO: benchmark precedence_v1 vs precedence_v2
     using precedence_t = precedence_v1;
-    
-    template<typename CharT>
-    struct multistep_closure
-    {
-        CharT       lower;
-        CharT       upper;
-        closure_t   closure;
-    };
-
-    template<typename CharT>
-    using multistep_closure_t = std::vector<multistep_closure<CharT>>;
 
     struct node_info
     {
@@ -280,7 +280,8 @@ namespace rx::detail
     private:
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o);
-        [[nodiscard]] constexpr multistep_closure_t<CharT> multistep(std::size_t state) const;
+        [[nodiscard]] constexpr multistep_closures_t<CharT> multistep_v1(std::size_t state) const;
+        [[nodiscard]] constexpr multistep_closures_t<CharT> multistep_v2(std::size_t state) const;
         [[nodiscard]] constexpr regops_t transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const;
         [[nodiscard]] constexpr regops_t final_regops(const reg_vec& r, const tag_sequence_t& tag_seq) const;
         [[nodiscard]] constexpr regop::op_t regop_rhs(const reg_vec& r, std::vector<bool>& hist, tag_t tag) const;
@@ -386,9 +387,9 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto factory<CharT>::multistep(std::size_t state) const -> multistep_closure_t<CharT>
+    constexpr auto factory<CharT>::multistep_v1(std::size_t state) const -> multistep_closures_t<CharT>
     {
-        multistep_closure_t<CharT> multi_closure;
+        multistep_closures_t<CharT> multi_closures;
 
         auto configs{ state_info_.at(state).config };
         const auto& p{ state_info_.at(state).precedence };
@@ -397,8 +398,6 @@ namespace rx::detail
 
         using elem_t = std::pair<n_tr<CharT>, std::reference_wrapper<const configuration>>;
         std::vector<elem_t> transitions;
-
-        // TODO: reimplement to only use 1 pass (in a new partition() function)
 
         for (const auto& cfg : configs)
         {
@@ -412,20 +411,53 @@ namespace rx::detail
         for (const auto& [tr, _] : transitions)
             symbol_pairs.emplace_back(tr.lower, tr.upper);
 
-        partition(symbol_pairs);
+        partition_v1(symbol_pairs);
 
         for (auto [lower, upper] : symbol_pairs)
         {
-            multi_closure.emplace_back(lower, upper, closure_t{});
+            multi_closures.emplace_back(lower, upper);
 
             for (const auto& [t, cfg] : transitions)
             {
                 if (t.lower <= lower and upper <= t.upper)
                 {
-                    multi_closure.back().closure.emplace_back(t.next, cfg.get().registers, cfg.get().tag_seq, tag_sequence_t{});
+                    multi_closures.back().data.emplace_back(t.next, cfg.get().registers, cfg.get().tag_seq);
                 }
             }   
         }
+
+        return multi_closures;
+    }
+
+    template<typename CharT>
+    constexpr auto factory<CharT>::multistep_v2(std::size_t state) const -> multistep_closures_t<CharT>
+    {
+        // TODO: benchmark against multistep v1
+
+        multistep_closures_t<CharT> multi_closure;
+
+        // TODO: make comparisons constant time instead of linear w.r.t. size of closure contents
+        auto configs{ state_info_.at(state).config };
+        const auto& p{ state_info_.at(state).precedence };
+
+        std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
+
+        using elem_t = std::pair<n_tr<CharT>, std::reference_wrapper<const configuration>>;
+        std::vector<elem_t> transitions;
+
+        for (const auto& cfg : configs)
+        {
+            multi_closure.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).tr
+                                       | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<CharT>>(t); })
+                                       | std::views::transform([&cfg](const auto& t) -> multistep_closure<CharT> {
+                                            n_tr<CharT> tr{ std::get<n_tr<CharT>>(t) };
+                                            multistep_closure<CharT> ret{ tr.lower, tr.upper };
+                                            ret.data.emplace_back(tr.next, cfg.registers, cfg.tag_seq);
+                                            return ret;
+                                        }));
+        }
+
+        partition_v2(multi_closure);
 
         return multi_closure;
     }
@@ -583,7 +615,8 @@ namespace rx::detail
         reg_vec initial_reg(tag_count_);
         std::ranges::iota(initial_reg, 0);
 
-        closure_t c{{ (is_search ? tnfa_t::substr_start : tnfa_t::match_start), std::move(initial_reg), {}, {} }};
+        closure_t c;
+        c.emplace_back(is_search ? tnfa_t::substr_start : tnfa_t::match_start, std::move(initial_reg));
         c = e_closure(std::move(c));
         add_initial_state(result, c, precedence_t{ c });
 
@@ -591,13 +624,14 @@ namespace rx::detail
         {
             tag_op_map map;
 
-            for (auto& [lower, upper, c] : multistep(state))
+            for (auto& [pair, c] : multistep_v2(state) /* multistep_v1(state) */)
             {
                 c = e_closure(std::move(c));
                 auto o{ transition_regops(c, result.register_count_, map) };
                 const auto s{ add_state(result, c, precedence_t{ c }, o) };
 
                 /* Add transition to tdfa */
+                const auto [lower, upper]{ pair };
                 result.nodes_.at(state).tr.emplace_back(s, lower, upper, std::move(o));
             }
         }

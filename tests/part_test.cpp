@@ -17,7 +17,7 @@ namespace
     {
         auto input_vec{ sv_to_test(input) };
         const auto target_vec{ sv_to_test(target) };
-        rx::detail::partition(input_vec);
+        rx::detail::partition_v1(input_vec);
         return std::ranges::equal(input_vec, target_vec);
     }
 }
