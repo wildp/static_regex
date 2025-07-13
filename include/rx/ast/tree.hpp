@@ -50,7 +50,8 @@ namespace rx::detail
     class expr_tree
     {
     public:
-        using sv_type = std::basic_string_view<CharT>;
+        using char_type = CharT;
+        using sv_type = std::basic_string_view<char_type>;
 
         struct assertion
         {
@@ -82,14 +83,14 @@ namespace rx::detail
             repeater_mode mode;     /* default = greedy */
         };
 
-        using char_str = tok::char_str<CharT>;
-        using char_class = tok::char_class<CharT>;
+        using char_str = tok::char_str<char_type>;
+        using char_class = tok::char_class<char_type>;
 
         using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
         constexpr expr_tree(sv_type sv, parser_flags flags = {});
 
-        friend class parser::ll1<CharT>;
+        friend class parser::ll1<char_type>;
         
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
         [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }

@@ -14,27 +14,33 @@
 
 namespace rx::testing
 {
-    template<typename CharT>
-    class printable_expr_tree : public detail::expr_tree<CharT>
+    template<typename T>
+    class printable;
+
+    template<rx::detail::derived_from_class_template<^^rx::detail::expr_tree> Base>
+    class printable<Base> : public Base
     {
     public:
-        using detail::expr_tree<CharT>::expr_tree;
+        using base_type = Base;
+        using this_type = printable<base_type>;
+        using char_type = this_type::char_type;
+        using string_type = std::basic_string<char_type>;
+
+        using Base::Base;
 
         template<bool ExtraParens = false>
-        [[nodiscard]] constexpr std::basic_string<CharT> to_pattern() const;
+        [[nodiscard]] constexpr string_type to_pattern() const;
 
         [[nodiscard]] constexpr auto to_pattern_parens() const { return to_pattern<true>(); }
     };
 
     /* printer for patterns */
 
-    template<typename CharT>
+    template<rx::detail::derived_from_class_template<^^rx::detail::expr_tree> Base>
     template<bool ExtraParens>
-    [[nodiscard]] constexpr std::basic_string<CharT> printable_expr_tree<CharT>::to_pattern() const
+    [[nodiscard]] constexpr auto printable<Base>::to_pattern() const -> string_type
     {
-        using expr_tree_t = printable_expr_tree<CharT>;
-
-        static constexpr auto append_int = [](std::basic_string<CharT>& result, const std::integral auto value) {
+        static constexpr auto append_int = [](string_type& result, const std::integral auto value) {
             static constexpr decltype(value) base{ 10 };
             std::vector<char> buf;
             if (value == 0)
@@ -46,7 +52,7 @@ namespace rx::testing
             std::ranges::move(buf.rbegin(), buf.rend(), std::back_insert_iterator(result));
         };
 
-        static constexpr auto escape = [](std::basic_string<CharT>& result, CharT c) {
+        static constexpr auto escape = [](string_type& result, char_type c) {
             if (c == '\177' or (c >= '\0' and c < '\40')) {
                 result += '\\';
                 switch (c) {
@@ -60,8 +66,8 @@ namespace rx::testing
                 case '\v': result += 'v'; break;
                 default:
                     {
-                        static constexpr CharT octal_base{ 010 };
-                        std::basic_string<CharT> tmp;
+                        static constexpr char_type octal_base{ 010 };
+                        string_type tmp;
                         for (; c != 0; c /= octal_base)
                             tmp.push_back('0' + (c % octal_base));
                         result.append(tmp.rbegin(), tmp.rend());
@@ -75,12 +81,12 @@ namespace rx::testing
             }
         };
 
-        std::basic_string<CharT> result;
+        string_type result;
         const auto& ci{ this->get_capture_info() };
 
-        auto visitor = [&ci](this const auto& rec, std::basic_string<CharT>& result, const expr_tree_t& pet, std::size_t pos) -> void {
+        auto visitor = [&ci](this const auto& rec, string_type& result, const this_type& pet, std::size_t pos) -> void {
             pet.get_expr(pos).visit(detail::overloads{
-                [&](const expr_tree_t::assertion& asr) {
+                [&](const this_type::assertion& asr) {
                     switch (asr.type)
                     {
                     case detail::assert_type::text_start:
@@ -93,24 +99,24 @@ namespace rx::testing
                         throw std::runtime_error("unrecognised assert_type");
                     }
                 },
-                [&](const expr_tree_t::concat& cat) {
+                [&](const this_type::concat& cat) {
                     for (const auto idx : cat.idxs) rec(result, pet, idx);
                 },
-                [&](const expr_tree_t::alt& alt) {
+                [&](const this_type::alt& alt) {
                     for (const auto idx : alt.idxs) { rec(result, pet, idx); result += '|'; }
                     if (alt.idxs.size() > 0) result.pop_back();
                 },
-                [&](const expr_tree_t::tag& tag) {
+                [&](const this_type::tag& tag) {
                     auto [is_lhs, is_rhs]{ ci.capture_side(tag.number) };
 
                     if (is_lhs) result += '(';
                     if (is_rhs) result += ')';
                 },
-                [&](const expr_tree_t::backref& bref) {
+                [&](const this_type::backref& bref) {
                     result += '\\';
                     append_int(result, bref.number);
                 },
-                [&](const expr_tree_t::repeat& rep) {
+                [&](const this_type::repeat& rep) {
                     if constexpr (ExtraParens) result += '(';
                     rec(result, pet, rep.idx);
                     if constexpr (ExtraParens) result += ')';
@@ -129,12 +135,12 @@ namespace rx::testing
                     if (rep.mode == detail::repeater_mode::lazy) result += '?';
                     else if (rep.mode == detail::repeater_mode::possessive) result += '+';
                 },
-                [&](const expr_tree_t::char_str& lit) {
+                [&](const this_type::char_str& lit) {
                     result += lit.data;
                 },
-                [&](const expr_tree_t::char_class& cla) {
+                [&](const this_type::char_class& cla) {
                     if (cla.data.get().size() == 1) {
-                        using uct = typename expr_tree_t::char_class::underlying_char_type;
+                        using uct = typename this_type::char_class::underlying_char_type;
                         const auto& [lower, upper]{ cla.data.get().front() };
                         if ((not cla.data.is_negated() and lower == std::numeric_limits<uct>::min() and upper == std::numeric_limits<uct>::max())
                             or (cla.data.is_negated() and lower == '\n' and upper == '\n')) {

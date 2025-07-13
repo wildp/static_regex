@@ -15,8 +15,9 @@ namespace rx::detail::parser
     class ll1
     {
     public:
-        using ast_t = expr_tree<CharT>;
-        using sv_type = std::basic_string_view<CharT>;
+        using char_type = CharT;
+        using ast_t = expr_tree<char_type>;
+        using sv_type = std::basic_string_view<char_type>;
         
         constexpr ll1(ast_t& ast, sv_type sv);
         
@@ -59,8 +60,8 @@ namespace rx::detail::parser
         constexpr capture_info& get_capture_info() { return ref_.get().capture_info_; }
         constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
-        template<in_variant<typename lexer<CharT>::token_t> T>
-        static constexpr std::size_t tok_index{ index_of_impl<typename lexer<CharT>::token_t, T>::value };
+        template<in_variant<typename lexer<char_type>::token_t> T>
+        static constexpr std::size_t tok_index{ index_of_impl<typename lexer<char_type>::token_t, T>::value };
 
         template<in_variant<type> T, typename... Args>
         [[nodiscard]] constexpr std::size_t new_expression(Args... args)
@@ -84,7 +85,7 @@ namespace rx::detail::parser
 
         std::reference_wrapper<ast_t> ref_;
         std::vector<std::size_t> overwritable_;
-        lexer<CharT> lex_;
+        lexer<char_type> lex_;
         capture_stack capstack_;
     };
 
@@ -129,7 +130,8 @@ namespace rx::detail::parser
     class ll1_stack
     {
     public:
-        using terminal = lexer<CharT>::token_t;
+        using char_type = CharT;
+        using terminal = lexer<char_type>::token_t;
         using elem_t = std::variant<terminal, nonterminal, semantic_action>;
         
         constexpr void pop() { data_.pop_back(); }
@@ -155,8 +157,9 @@ namespace rx::detail::parser
     class semantic_stack
     {
     public:
-        using terminal = ll1_stack<CharT>::terminal;
-        using elem_t = std::variant<std::size_t, typename lexer<CharT>::token_t, repeater_mode>;
+        using char_type = CharT;
+        using terminal = ll1_stack<char_type>::terminal;
+        using elem_t = std::variant<std::size_t, typename lexer<char_type>::token_t, repeater_mode>;
         
         [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
         constexpr void push(elem_t&& elems) { data_.push_back(std::move(elems)); }
@@ -182,7 +185,7 @@ namespace rx::detail::parser
     constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv) : 
         ref_{ ast }, lex_{ sv }, capstack_{}
     {
-        using terminal = ll1_stack<CharT>::terminal;
+        using terminal = ll1_stack<char_type>::terminal;
 
         if (sv.empty())
         {
@@ -191,8 +194,8 @@ namespace rx::detail::parser
             return;
         }
 
-        ll1_stack<CharT> stack;
-        semantic_stack<CharT> semstack;
+        ll1_stack<char_type> stack;
+        semantic_stack<char_type> semstack;
 
         auto token{ lex_.nexttok() };
 
@@ -682,7 +685,7 @@ namespace rx::detail::parser
     {
         if (capstack_.caseless())
         {
-            static constexpr auto is_alphabetic = [](CharT c) -> bool { return ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z'); };
+            static constexpr auto is_alphabetic = [](char_type c) -> bool { return ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z'); };
 
             if (auto c{ lit.get_if_single() })
             {
@@ -702,7 +705,7 @@ namespace rx::detail::parser
             {
                 /* several characters (need to insert concat) */
 
-                if constexpr(char_is_multibyte<CharT>)
+                if constexpr(char_is_multibyte<char_type>)
                 {
                     // TODO: implement this using utf32 proxy iterators
                     throw tree_error("Caseless flag on multibyte strings not implemented");
@@ -1239,6 +1242,6 @@ namespace rx::detail
     constexpr expr_tree<CharT>::expr_tree(const sv_type sv, parser_flags flags) :
             flags_{ flags } 
     {
-        parser::ll1<CharT> ll1_parser(*this, sv);
+        parser::ll1<char_type> ll1_parser(*this, sv);
     }
 }

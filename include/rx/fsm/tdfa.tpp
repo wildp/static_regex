@@ -11,11 +11,6 @@
 #include <utility>
 #include <variant>
 
-#if RX_TDFA_ENABLE_DUMPER
-#include <print>
-#include <format>
-#endif // RX_TDFA_ENABLE_DUMPER
-
 #include <rx/etc/partition.hpp>
 
 
@@ -910,16 +905,17 @@ namespace rx::detail::tdfa
     class factory
     {
     public:
-        using tnfa_t = tagged_nfa<CharT>;
-        using tdfa_t = tagged_dfa<CharT>;
+        using char_type = CharT;
+        using tnfa_t = tagged_nfa<char_type>;
+        using tdfa_t = tagged_dfa<char_type>;
 
         constexpr explicit factory(const tnfa_t& input, tdfa_t& result, std::size_t tag_count, bool is_search = false);
 
     private:
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o);
-        [[nodiscard]] constexpr multistep_closures_t<CharT> multistep_v1(std::size_t state) const;
-        [[nodiscard]] constexpr multistep_closures_t<CharT> multistep_v2(std::size_t state) const;
+        [[nodiscard]] constexpr multistep_closures_t<char_type> multistep_v1(std::size_t state) const;
+        [[nodiscard]] constexpr multistep_closures_t<char_type> multistep_v2(std::size_t state) const;
         [[nodiscard]] constexpr regops_t transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const;
         [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
         [[nodiscard]] constexpr regop::op_t regop_rhs(const std::vector<bool>& hist) const;
@@ -1054,26 +1050,26 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr auto factory<CharT>::multistep_v1(std::size_t state) const -> multistep_closures_t<CharT>
+    constexpr auto factory<CharT>::multistep_v1(std::size_t state) const -> multistep_closures_t<char_type>
     {
-        multistep_closures_t<CharT> multi_closures;
+        multistep_closures_t<char_type> multi_closures;
 
         auto configs{ state_info_.at(state).config };
         const auto& p{ state_info_.at(state).precedence };
 
         std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
 
-        using elem_t = std::pair<n_tr<CharT>, std::reference_wrapper<const configuration>>;
+        using elem_t = std::pair<n_tr<char_type>, std::reference_wrapper<const configuration>>;
         std::vector<elem_t> transitions;
 
         for (const auto& cfg : configs)
         {
             transitions.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).tr
-                                     | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<CharT>>(t); })
-                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { std::get<n_tr<CharT>>(t), std::cref(cfg) }; }));
+                                     | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<char_type>>(t); })
+                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { std::get<n_tr<char_type>>(t), std::cref(cfg) }; }));
         }
 
-        std::vector<std::pair<CharT, CharT>> symbol_pairs;
+        std::vector<std::pair<char_type, char_type>> symbol_pairs;
 
         for (const auto& [tr, _] : transitions)
             symbol_pairs.emplace_back(tr.lower, tr.upper);
@@ -1097,11 +1093,11 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr auto factory<CharT>::multistep_v2(std::size_t state) const -> multistep_closures_t<CharT>
+    constexpr auto factory<CharT>::multistep_v2(std::size_t state) const -> multistep_closures_t<char_type>
     {
         // TODO: benchmark against multistep v1
 
-        multistep_closures_t<CharT> multi_closure;
+        multistep_closures_t<char_type> multi_closure;
 
         // TODO: make comparisons constant time instead of linear w.r.t. size of closure contents
         auto configs{ state_info_.at(state).config };
@@ -1109,16 +1105,16 @@ namespace rx::detail::tdfa
 
         std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
 
-        using elem_t = std::pair<n_tr<CharT>, std::reference_wrapper<const configuration>>;
+        using elem_t = std::pair<n_tr<char_type>, std::reference_wrapper<const configuration>>;
         std::vector<elem_t> transitions;
 
         for (const auto& cfg : configs)
         {
             multi_closure.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).tr
-                                       | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<CharT>>(t); })
-                                       | std::views::transform([&cfg](const auto& t) -> multistep_closure<CharT> {
-                                            n_tr<CharT> tr{ std::get<n_tr<CharT>>(t) };
-                                            multistep_closure<CharT> ret{ tr.lower, tr.upper };
+                                       | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<char_type>>(t); })
+                                       | std::views::transform([&cfg](const auto& t) -> multistep_closure<char_type> {
+                                            n_tr<char_type> tr{ std::get<n_tr<char_type>>(t) };
+                                            multistep_closure<char_type> ret{ tr.lower, tr.upper };
                                             ret.data.emplace_back(tr.next, cfg.registers, cfg.tag_seq);
                                             return ret;
                                         }));
@@ -1408,82 +1404,12 @@ namespace rx::detail
     constexpr tagged_dfa<CharT>::tagged_dfa(const tnfa_t& tnfa) : 
         capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }
     {
-        tdfa::factory<CharT>{ tnfa, *this, tag_count_, false };
+        tdfa::factory<char_type>{ tnfa, *this, tag_count_, false };
     }
 
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::optimise_registers() 
     {
-        std::invoke(tdfa::opt<CharT>{}, *this);
+        std::invoke(tdfa::opt<char_type>{}, *this);
     }
-
-
-    
-#if RX_TDFA_ENABLE_DUMPER
-    template<typename CharT>
-    void tagged_dfa<CharT>::dump() const    
-    {
-        constexpr auto print_regop = [](const tdfa::regop& op, std::string_view indent = "") {
-            if (auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
-                std::println("{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
-            else if (auto* copy{ std::get_if<tdfa::regop::copy>(&op.op) }; copy != nullptr)
-                std::println("{}r{} <- r{}", indent, op.dst, copy->src);
-            else
-                std::unreachable();
-        };
-
-        for (std::size_t i{ 0 }; i < this->nodes_.size(); ++i)
-        {
-            if (this->final_nodes_.contains(i))
-                std::println("Node {}: (ACCEPTING)", i);
-            else
-                std::println("Node {}:", i);
-
-            for (const auto& tr : this->nodes_.at(i).tr)
-            {
-                if (tr.lower == tr.upper)
-                    std::print("\t\'{}\' -> Node {}:", tr.lower, tr.next);
-                else
-                    std::print("\t[\'{}\',\'{}\'] -> Node {}:", tr.lower, tr.upper, tr.next);
-
-                if (tr.op_index != tdfa::no_transition_regops)
-                    std::println(" [Block {}]", tr.op_index);
-                else
-                    std::println();
-
-                for (const auto& op : this->get_regops(tr.op_index))
-                    print_regop(op, "\t\t");
-            }
-
-            if (this->final_nodes_.contains(i))
-            {
-                std::print("\t'' -> ACCEPT:");
-
-                if (this->final_nodes_.at(i) != tdfa::no_transition_regops)
-                    std::println(" [Block {}]", this->final_nodes_.at(i));
-                else
-                    std::println();
-
-                for (const auto& op : this->get_regops(this->final_nodes_.at(i)))
-                    print_regop(op, "\t\t");
-            }
-
-            if (this->fallback_nodes_.contains(i))
-            {
-                std::print("\tFALLBACK -> ACCEPT:");
-
-                if (this->fallback_nodes_.at(i) != tdfa::no_transition_regops)
-                    std::println(" [Block {}]", this->fallback_nodes_.at(i));
-                else
-                    std::println();
-
-
-                for (const auto& op : this->get_regops(this->fallback_nodes_.at(i)))
-                    print_regop(op, "\t\t");
-            }
-        }
-
-        std::println("Final Registers: {}", this->final_registers_);
-    }
-#endif // RX_TDFA_ENABLE_DUMPER
 }

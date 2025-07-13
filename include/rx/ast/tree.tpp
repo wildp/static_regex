@@ -13,11 +13,6 @@
 #include <variant>
 
 
-// #include <print>
-
-
-// TODO: Add fixed tag optimisation (delete unnecessary tags)
-
 namespace rx::detail
 {
     /* helper for tagged nfa conversion */

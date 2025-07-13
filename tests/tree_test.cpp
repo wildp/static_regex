@@ -3,34 +3,37 @@
 
 namespace 
 {
+    template<typename CharT>
+    using printable_expr_tree = rx::testing::printable<rx::detail::expr_tree<CharT>>;
+
     constexpr rx::detail::parser_flags tree_test_flags{ .enable_alttocc=false };
 
     template<typename CharT>
     consteval bool parse(const CharT* str)
     {
-        const rx::testing::printable_expr_tree<CharT> ast{ str, tree_test_flags };
+        const printable_expr_tree<CharT> ast{ str, tree_test_flags };
         return (ast.to_pattern() == str);
     }
 
     template<typename CharT>
     consteval bool parse(const CharT* str, const CharT* result)
     {
-        const rx::testing::printable_expr_tree<CharT> ast{ str, tree_test_flags };
+        const printable_expr_tree<CharT> ast{ str, tree_test_flags };
         return (ast.to_pattern() == result);
     }
 
     template<typename CharT>
     consteval bool alt_to_cc(const CharT* str, const CharT* result)
     {
-        const rx::testing::printable_expr_tree<CharT> ast{ str };
+        const printable_expr_tree<CharT> ast{ str };
         return (ast.to_pattern() == result);
     }
 
     template<typename CharT>
     consteval bool equal_to(const CharT* str1, const CharT* str2)
     {
-        const rx::testing::printable_expr_tree<CharT> ast1{ str1, tree_test_flags };
-        const rx::testing::printable_expr_tree<CharT> ast2{ str2, tree_test_flags };
+        const printable_expr_tree<CharT> ast1{ str1, tree_test_flags };
+        const printable_expr_tree<CharT> ast2{ str2, tree_test_flags };
         return (ast1.to_pattern() == ast2.to_pattern());
     }
 

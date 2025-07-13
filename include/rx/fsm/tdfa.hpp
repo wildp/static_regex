@@ -1,7 +1,5 @@
 #pragma once
 
-#define RX_TDFA_ENABLE_DUMPER 1
-
 #include <cstddef>
 #include <cstdlib>
 #include <flat_map>
@@ -81,17 +79,14 @@ namespace rx::detail
     class tagged_dfa
     {
     public:
-        using tnfa_t = tagged_nfa<CharT>;
+        using char_type = CharT;
+        using tnfa_t = tagged_nfa<char_type>;
 
         explicit constexpr tagged_dfa(const tnfa_t& tnfa);
         constexpr void optimise_registers();
 
-        friend class tdfa::factory<CharT>;
-        friend class tdfa::opt<CharT>;
-
-#if RX_TDFA_ENABLE_DUMPER
-        void dump() const;
-#endif // RX_TDFA_ENABLE_DUMPER
+        friend class tdfa::factory<char_type>;
+        friend class tdfa::opt<char_type>;
 
     protected:
         static constexpr std::size_t match_start{ 0 };
@@ -101,12 +96,13 @@ namespace rx::detail
         [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_nodes_t& fallback_nodes() const { return fallback_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
+        [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
         [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
     private:
-        using data_t = std::vector<tdfa::node<CharT>>;
+        using data_t = std::vector<tdfa::node<char_type>>;
         using regop_data_t = std::vector<tdfa::regops_t>;
 
         data_t              nodes_;

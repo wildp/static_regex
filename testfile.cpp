@@ -3,6 +3,7 @@
 
 #include <rx/regex.hpp>
 #include "tests/headers/printable_tree.hpp"
+#include "tests/headers/printable_tdfa.hpp"
 #include "tests/headers/tdfa_matcher.hpp"
 #include "tests/headers/tnfa_matcher.hpp"
 #include "tests/headers/tree_matcher.hpp"
@@ -58,6 +59,8 @@
 
 namespace
 {
+    using namespace rx::testing;
+
     [[maybe_unused]] void t1()
     {
         using namespace rx::literals;
@@ -67,7 +70,7 @@ namespace
 
     [[maybe_unused]] void t2(std::string_view pat, const std::vector<std::string_view>& test)
     {
-        rx::testing::printable_expr_tree<char> tmp{ pat };
+        printable<rx::detail::expr_tree<char>> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
 
         // const auto& ci{ tmp.get_capture_info() };
@@ -95,10 +98,9 @@ namespace
     [[maybe_unused]] void t3(std::string_view pat, const std::vector<std::string_view>& test)
     {
         rx::detail::parser_flags f{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true };
-        rx::testing::tree_matcher<char> tree{ pat, f };
+        printable<tree_matcher<char>> tree{ pat, f };
 
-        rx::testing::printable_expr_tree<char> tmp{ pat, f };
-        std::println("Pattern: {}", tmp.to_pattern());
+        std::println("Pattern: {}", tree.to_pattern());
 
         for (auto sv : test)
         {
@@ -113,7 +115,7 @@ namespace
 
     [[maybe_unused]] void t4(std::string_view pat, const std::vector<std::string_view>& test)
     {
-        rx::testing::printable_expr_tree<char> tmp{ pat };
+        printable<rx::detail::expr_tree<char>> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
         
         rx::testing::tnfa_matcher<char> tnfa{ tmp };
@@ -132,7 +134,7 @@ namespace
 
     [[maybe_unused]] void t5(std::string_view pat, const std::vector<std::string_view>& test)
     {
-        rx::testing::printable_expr_tree<char> tmp{ pat };
+        printable<rx::detail::expr_tree<char>> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
 
         const auto& ci{ tmp.get_capture_info() };
@@ -153,11 +155,11 @@ namespace
                 std::println("{}: {}+{}, {}+{}", i, it->first.tag_number, it->first.offset, it->second.tag_number, it->second.offset);
         }
 
-        rx::testing::tnfa_matcher<char> tnfa{ tmp };
-        rx::testing::tdfa_matcher<char> tdfa{ tnfa };
+        rx::detail::tagged_nfa<char> tnfa{ tmp };
+        printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
         std::println("Pattern ok\n");
 
-        tdfa.dump();
+        tdfa.print();
         std::println("\n");
 
         for (auto sv : test)
@@ -173,17 +175,17 @@ namespace
 
     [[maybe_unused]] void t6(std::string_view pat, const std::vector<std::string_view>& test)
     {
-        rx::testing::printable_expr_tree<char> tmp{ pat };
+        printable<rx::detail::expr_tree<char>> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
         tmp.optimise_tags();
-        rx::testing::tnfa_matcher<char> tnfa{ tmp };
-        rx::testing::tdfa_matcher<char> tdfa{ tnfa };
+        rx::detail::tagged_nfa<char> tnfa{ tmp };
+        printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
         std::println("Pattern ok\n");
 
         tdfa.optimise_registers();
         std::println("Opt ok\n");
 
-        tdfa.dump();
+        tdfa.print();
         std::println("\n");
 
         for (auto sv : test)

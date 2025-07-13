@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <concepts>
 #include <limits>
+#include <meta>
 #include <variant>
 
 
@@ -14,9 +15,47 @@ namespace rx::detail
     template<typename T, typename... Ts>
     concept one_of = (std::same_as<T, Ts> or ...);
 
+    consteval bool derived_from_class_template_impl(std::meta::info derived, std::meta::info template_class)
+    {
+        if (not std::meta::is_class_template(template_class) or not std::meta::is_class_type(derived))
+            return false;
+
+        std::vector<std::meta::info> to_visit{ derived };
+
+        /* Keeping track of visited bases is necessary to avoid non-termination from CRTP */
+        std::vector<std::meta::info> visited;
+
+        std::size_t count{ 0 };
+
+        while (not to_visit.empty())
+        {
+            std::meta::info current{ to_visit.back() };
+            to_visit.pop_back();
+            
+            if (std::ranges::contains(visited, current))
+                continue;
+
+            visited.push_back(current);
+
+            if (std::meta::has_template_arguments(current))
+                if (std::meta::template_of(current) == template_class)
+                    count += 1;
+
+            for (std::meta::info base : std::meta::bases_of(current, std::meta::access_context::current()))
+                to_visit.push_back(std::meta::type_of(base));
+        }
+
+        return count == 1;
+    }
+
+    template<typename T, std::meta::info template_class>
+    concept derived_from_class_template = derived_from_class_template_impl(^^T, template_class);
+
+    // TODO: replace with P2996 implementation
     template<typename, typename>
     struct type_in_variant_impl {};
 
+    // TODO: replace with P2996 implementation
     template<typename T, typename... Ts>
     struct type_in_variant_impl<T, std::variant<Ts...>> : std::bool_constant<rx::detail::one_of<T, Ts...>> {};
 
@@ -78,7 +117,6 @@ namespace rx::detail
 
 
 #if RX_TREE_DEBUG_PARSER
-#include <meta>
 #include <print>
 
 namespace rx::detail
