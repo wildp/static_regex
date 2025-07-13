@@ -24,7 +24,7 @@
 // {
 //     std::string result{ "{" };
 
-//     template for (constexpr auto mem: std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked())))
+//     template for (constexpr auto mem : std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked())))
 //     {
 //         if constexpr (std::is_enum_v<typename [:std::meta::type_of(mem):]>)
 //         {
@@ -75,7 +75,7 @@ namespace
         // for (std::size_t i{ 0 }; i < cc; ++i)
         // {
         //     auto [beg, end]{ ci.lookup(i) };
-        //     for (const auto& e: std::vector(beg, end))
+        //     for (const auto& e : std::vector(beg, end))
         //         std::println("{}: {}+{}, {}+{}", i, e.first.tag_number, e.first.offset, e.second.tag_number, e.second.offset);
         // }
 

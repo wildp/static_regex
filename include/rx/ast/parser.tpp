@@ -206,11 +206,11 @@ namespace rx::detail::parser
             {
                 std::println("-------------------------");
                 std::print("stack = ");
-                for (const auto& elem: stack | std::views::reverse)
+                for (const auto& elem : stack | std::views::reverse)
                     std::print(" {}", pretty_print_2(elem));
                 std::println();
                 std::print("semstack = ");
-                for (const auto& elem: semstack | std::views::reverse)
+                for (const auto& elem : semstack | std::views::reverse)
                     std::print(" {}", pretty_print_2(elem));
                 std::println();
             }

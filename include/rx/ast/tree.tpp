@@ -329,7 +329,7 @@ namespace rx::detail
 
         /* re-number tags in ast */
 
-        for (auto& expr: expressions_)
+        for (auto& expr : expressions_)
         {
             if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
             {

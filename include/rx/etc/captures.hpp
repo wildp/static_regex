@@ -77,7 +77,7 @@ namespace rx::detail
                 };
             };
 
-            for (auto& val: values_)
+            for (auto& val : values_)
             {
                 if (auto it{ map.find(val.first.tag_number) }; it != map.end())
                 {
@@ -105,7 +105,7 @@ namespace rx::detail
             for (tag_number_t i{ 0 }; std::cmp_less(i, set.size()); ++i)
                 remapper[set.at(i)] = i;
 
-            for (auto& val: values_)
+            for (auto& val : values_)
             {
                 if (auto it{ remapper.find(val.first.tag_number) }; it != remapper.end())
                     val.first.tag_number = it->second;

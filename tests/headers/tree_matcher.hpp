@@ -285,7 +285,7 @@ namespace rx::testing
                     },
                     [&](const expr_tree_t::char_str& lit) -> rc
                     {
-                        for (const auto c: lit.data)
+                        for (const auto c : lit.data)
                         {
                             if (s.it == last or *s.it != c)
                                 return rc::match_failure; /* unsuccessful match */

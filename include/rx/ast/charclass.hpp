@@ -331,7 +331,7 @@ namespace rx::detail
 
         std::vector<char_range> to_insert;
 
-        for (const auto [lower, upper]: data_)
+        for (const auto [lower, upper] : data_)
         {
             if (upper >= 'a' and lower <= 'Z')
             {
