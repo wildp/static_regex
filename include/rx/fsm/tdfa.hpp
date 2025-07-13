@@ -12,17 +12,15 @@
 #include <rx/fsm/tnfa.hpp>
 
 
-// TODO: switch from vectors and std::find to std::unordered_map when supported?
-
-namespace rx::detail
+namespace rx::detail::tdfa
 {
     template<typename CharT>
     class factory;
-}
 
-namespace rx::detail
-{
-    using reg_t = std::uint_least32_t;
+    template<typename CharT>
+    class opt;
+
+        using reg_t = std::uint_least32_t;
 
     struct regop
     {
@@ -54,25 +52,31 @@ namespace rx::detail
     };
 
     using regops_t = std::vector<regop>;
+    inline static constexpr regops_t empty_regops{};
 
-    using final_nodes_t = std::flat_map<std::size_t, regops_t>;
+    using final_nodes_t = std::flat_map<std::size_t, std::size_t>;
+    using final_regs_t = std::vector<reg_t>;
+
+    inline constexpr std::size_t no_transition_regops{ std::numeric_limits<std::size_t>::max() };
 
     template<typename CharT>
     struct transition
     {
-        std::size_t next{ 0 };
+        std::size_t next;
+        std::size_t op_index; /* use intmax for no ops */
         CharT lower;
         CharT upper;
-
-        regops_t ops;
     };
 
     template<typename CharT>
-    struct tdfa_node
+    struct node
     {
         std::vector<transition<CharT>> tr;
     };
+}
 
+namespace rx::detail
+{
     template<typename CharT>
     class tagged_dfa
     {
@@ -80,8 +84,10 @@ namespace rx::detail
         using tnfa_t = tagged_nfa<CharT>;
 
         explicit constexpr tagged_dfa(const tnfa_t& tnfa);
+        constexpr void optimise_registers();
 
-        friend class factory<CharT>;
+        friend class tdfa::factory<CharT>;
+        friend class tdfa::opt<CharT>;
 
 #if RX_TDFA_ENABLE_DUMPER
         void dump() const;
@@ -90,20 +96,27 @@ namespace rx::detail
     protected:
         static constexpr std::size_t match_start{ 0 };
 
-        [[nodiscard]] constexpr const tdfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-        [[nodiscard]] constexpr const final_nodes_t& final_nodes() const { return final_nodes_; }
+        [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
+        [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { if (i == tdfa::no_transition_regops) return tdfa::empty_regops; else return regops_.at(i); }
+        [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
+        [[nodiscard]] constexpr const tdfa::final_nodes_t& fallback_nodes() const { return fallback_nodes_; }
+        [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
         [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
     private:
-        using data_t = std::vector<tdfa_node<CharT>>;
+        using data_t = std::vector<tdfa::node<CharT>>;
+        using regop_data_t = std::vector<tdfa::regops_t>;
 
-        data_t          nodes_;
-        final_nodes_t   final_nodes_;
-        capture_info    capture_info_;
-        std::size_t     tag_count_;
-        reg_t           register_count_{ 0 };
+        data_t              nodes_;
+        tdfa::final_nodes_t final_nodes_;
+        tdfa::final_nodes_t fallback_nodes_;
+        tdfa::final_regs_t  final_registers_;
+        regop_data_t        regops_;
+        capture_info        capture_info_;
+        std::size_t         tag_count_;
+        tdfa::reg_t         register_count_{ 0 };
     };
 }
 

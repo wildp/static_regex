@@ -143,7 +143,7 @@ namespace
                 std::println("{}: {}+{}, {}+{}", i, it->first.tag_number, it->first.offset, it->second.tag_number, it->second.offset);
         }
 
-        tmp.optimise_tags();
+        // tmp.optimise_tags();
 
         // const auto& ci{ tmp.get_capture_info() };
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
@@ -156,6 +156,32 @@ namespace
         rx::testing::tnfa_matcher<char> tnfa{ tmp };
         rx::testing::tdfa_matcher<char> tdfa{ tnfa };
         std::println("Pattern ok\n");
+
+        tdfa.dump();
+        std::println("\n");
+
+        for (auto sv : test)
+        {
+            auto result{ tdfa.submatches(sv) };
+
+            if (result.has_value())
+                std::println("'{}': Match: {}", sv, *result);
+            else
+                std::println("'{}': No Match", sv);
+        }
+    }
+
+    [[maybe_unused]] void t6(std::string_view pat, const std::vector<std::string_view>& test)
+    {
+        rx::testing::printable_expr_tree<char> tmp{ pat };
+        std::println("Pattern: {}", tmp.to_pattern());
+        tmp.optimise_tags();
+        rx::testing::tnfa_matcher<char> tnfa{ tmp };
+        rx::testing::tdfa_matcher<char> tdfa{ tnfa };
+        std::println("Pattern ok\n");
+
+        tdfa.optimise_registers();
+        std::println("Opt ok\n");
 
         tdfa.dump();
         std::println("\n");
@@ -193,14 +219,14 @@ int main()
     // t5("(a)*(a|b)b*", {});
     // t5("(a)*(b)*", {});
     // t5("(a|b)*b", {});
-    // t5("(a)*", {});
+    // t5("(a)*", { "", "a", "aa" });
     // t5("(ab)*", {});
     // t5("(a)", { "a" });
 
     // t5("(a)+(b)*", {"ab", "abb", "aaabbb" });
     // t5("(a)+b*|c*", { "ab", "aab" });
 
-    t5("(?:()a())*()(?:a|()b)()b*", { "ab" });
+    t6("(?:()a())*()(?:a|()b)()b*", { "ab" });
 
 
     return 0;

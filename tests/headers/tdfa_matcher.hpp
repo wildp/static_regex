@@ -74,14 +74,14 @@ namespace rx::testing
                 {
                     next_state = t.next;
 
-                    for (const auto& op : t.ops)
+                    for (const auto& op : this->get_regops(t.op_index))
                     {
-                        if (auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+                        if (auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
                         {
                             if (set->val) registers.at(op.dst) = it;
                             registers_enabled.at(op.dst) = set->val;
                         }
-                        else if (auto* copy{ std::get_if<regop::copy>(&op.op) }; copy != nullptr)
+                        else if (auto* copy{ std::get_if<tdfa::regop::copy>(&op.op) }; copy != nullptr)
                         {
                             registers.at(op.dst) = registers.at(copy->src);
                             registers_enabled.at(op.dst) = registers_enabled.at(copy->src);
@@ -108,14 +108,14 @@ namespace rx::testing
         if (not fsi.contains(next_state))
             return {}; /* state is not an accepting state */
 
-        for (const auto& op : fsi.at(next_state))
+        for (const auto& op : this->get_regops(fsi.at(next_state)))
         {
-            if (auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+            if (auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
             {
                 if (set->val) registers.at(op.dst) = it;
                 registers_enabled.at(op.dst) = set->val;
             }
-            else if (auto* copy{ std::get_if<regop::copy>(&op.op) }; copy != nullptr)
+            else if (auto* copy{ std::get_if<tdfa::regop::copy>(&op.op) }; copy != nullptr)
             {
                 registers.at(op.dst) = registers.at(copy->src);
                 registers_enabled.at(op.dst) = registers_enabled.at(copy->src);
@@ -130,19 +130,19 @@ namespace rx::testing
 
         std::vector<std::size_t> res;
         const capture_info& ci{ this->get_capture_info() };
-        const std::size_t tag_count{ this->tag_count() };
+        const auto& final_reg{ this->final_registers() };
 
         using namespace rx::detail;
     
         auto f = [&](const capture_info::tag_pair_t& p) -> bool {
-            return not ((p.first.tag_number >= 0 and not registers_enabled.at(tag_count + p.first.tag_number))
-                            or (p.second.tag_number >= 0 and not registers_enabled.at(tag_count + p.second.tag_number)));
+            return not ((p.first.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.first.tag_number)))
+                            or (p.second.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.second.tag_number))));
         };
 
         auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<I, I> {
-            return { std::next((p.first.tag_number >= 0) ? registers.at(tag_count + p.first.tag_number)
+            return { std::next((p.first.tag_number >= 0) ? registers.at(final_reg.at(p.first.tag_number))
                                 : ((p.first.tag_number == start_of_input_tag) ? first : last), p.first.offset),
-                     std::next((p.second.tag_number >= 0) ? registers.at(tag_count + p.second.tag_number)
+                     std::next((p.second.tag_number >= 0) ? registers.at(final_reg.at(p.second.tag_number))
                                 : ((p.second.tag_number == start_of_input_tag) ? first : last), p.second.offset) };
         };
 
