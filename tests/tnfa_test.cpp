@@ -24,6 +24,20 @@ namespace
 
         return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
     }
+
+    template<typename CharT>
+    consteval bool tnfa_ends_with(const CharT* pattern, const CharT* str, std::size_t start_pos)
+    {
+        rx::detail::expr_tree<CharT> ast{ pattern };
+        ast.insert_search_prefix();
+        rx::testing::tnfa_matcher<CharT> tnfa{ ast };
+        auto match_result{ tnfa.submatches(str) };
+
+        if (not match_result.has_value())
+            return false;
+
+        return match_result.value().at(0) == start_pos;
+    }
 }
 
 using rx::detail::no_tag;
@@ -118,3 +132,10 @@ static_assert(tnfa_match(".", "."));
 static_assert(not tnfa_match(".", "\n"));
 static_assert(tnfa_match("(?s).", "\n"));
 // TODO: add test cases for non ascii chars
+
+/* search tests */
+static_assert(tnfa_ends_with("ab", "ab", 0));
+static_assert(tnfa_ends_with("aa", "aaa", 1));
+static_assert(tnfa_ends_with("cde", "abcde", 2));
+static_assert(tnfa_ends_with("cde", "cdecde", 3));
+static_assert(tnfa_ends_with("bcd", "abcdbcd", 4));

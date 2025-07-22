@@ -51,6 +51,11 @@ namespace rx::detail
             values_.emplace(value_it, pair_entry{ .tag_number = lhs, .offset = 0 }, pair_entry{ .tag_number = rhs, .offset = 0 });
         }
 
+        constexpr void set_match_start_tag(tag_number_t value)
+        {
+            values_.at(0).first.tag_number = value;
+        }
+
         [[nodiscard]] constexpr capture_number_t capture_count() const
         {
             auto key_copy{ keys_ };

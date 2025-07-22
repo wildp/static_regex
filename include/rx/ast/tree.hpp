@@ -99,6 +99,7 @@ namespace rx::detail
 
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
         constexpr void optimise_tags();
+        constexpr void insert_search_prefix();
 
     private:
         template<in_variant<type> T>
