@@ -44,8 +44,8 @@ namespace rx::detail::parser
             modes mode;
 
             constexpr cse() noexcept :
-                number{ 0 },
-                number_end{ 0 },
+                number{ 1 },
+                number_end{ 1 },
                 flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
                 mode{ modes::non_capturing }
             {

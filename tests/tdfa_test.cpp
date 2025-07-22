@@ -25,7 +25,7 @@ namespace
         if (not match_result.has_value())
             return false;
 
-        return std::ranges::equal(match_result.value(), captures);
+        return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
     }
 }
 

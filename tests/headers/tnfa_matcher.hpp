@@ -137,8 +137,8 @@ namespace rx::testing
 
         if (result == c.end())
             return {};
-        // return make_submatch_results(result->second, input.size());
-        return std::vector(result->second.begin(), result->second.end());
+
+        return make_submatch_results(result->second, input.size());
     }
 
     /* tag remapping */
@@ -166,11 +166,9 @@ namespace rx::testing
 
         for (std::size_t i{ 0 }; i < capture_count; ++i)
         {
-            const auto [beg, end]{ ci.lookup(i) };
-
-            auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
-                                                      | std::views::transform(t)
-                                                      | std::ranges::to<std::vector>() };
+            auto rng{ ci.lookup(i) | std::views::filter(f)
+                                   | std::views::transform(t)
+                                   | std::ranges::to<std::vector>() };
                     
             if (std::ranges::size(rng) == 0)
             {

@@ -5,6 +5,7 @@
 #include <flat_map>
 #include <numeric>
 #include <ranges>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -32,8 +33,17 @@ namespace rx::detail
         using key_type = capture_number_t;
         using value_type = tag_pair_t;
 
+        constexpr capture_info()
+        {
+            keys_.emplace_back(0);
+            values_.emplace_back(pair_entry{ .tag_number = start_of_input_tag, .offset = 0 }, pair_entry{ .tag_number = end_of_input_tag, .offset = 0 });
+        }
+
         constexpr void insert(capture_number_t cap, tag_number_t lhs, tag_number_t rhs)
         {
+            if (cap == 0)
+                throw std::invalid_argument("Cannot insert capture with number 0");
+
             const auto key_it{ std::ranges::upper_bound(keys_, cap) };
             const auto value_it{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_it) };
 
@@ -65,8 +75,8 @@ namespace rx::detail
         {
             auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
 
-            return std::make_pair(std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
-                                  std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end));
+            return std::ranges::subrange{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
+                                          std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end) };
         }
 
         [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map) 

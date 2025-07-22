@@ -464,7 +464,6 @@ namespace rx::detail
         if (bref.number == 0)
             throw pattern_error("Backreference to non-existent submatch");
 
-        bref.number -= 1;
         return bref;
     }
 
@@ -581,14 +580,9 @@ namespace rx::detail
         }
 
         if (bref.number == 0)
-        {
             return char_str<CharT>{ result };
-        }
         else
-        {
-            bref.number -= 1;
             return bref;
-        }
     }
 
     template<typename CharT>
