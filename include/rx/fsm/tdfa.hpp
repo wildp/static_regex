@@ -6,7 +6,7 @@
 #include <vector>
 #include <variant>
 
-#include "rx/etc/captures.hpp"
+#include <rx/etc/captures.hpp>
 #include <rx/fsm/tnfa.hpp>
 
 
@@ -50,7 +50,7 @@ namespace rx::detail::tdfa
     };
 
     using regops_t = std::vector<regop>;
-    inline static constexpr regops_t empty_regops{};
+    inline constexpr regops_t empty_regops{};
 
     using final_nodes_t = std::flat_map<std::size_t, std::size_t>;
     using final_regs_t = std::vector<reg_t>;
@@ -84,9 +84,13 @@ namespace rx::detail
 
         explicit constexpr tagged_dfa(const tnfa_t& tnfa);
         constexpr void optimise_registers();
+        constexpr void to_structural_type();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;
+
+        template<typename CharT2>
+        friend struct tdfa_info;
 
     protected:
         static constexpr std::size_t match_start{ 0 };
@@ -113,6 +117,7 @@ namespace rx::detail
         capture_info        capture_info_;
         std::size_t         tag_count_;
         tdfa::reg_t         register_count_{ 0 };
+        bool                is_search_;
     };
 }
 

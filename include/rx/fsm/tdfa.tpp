@@ -14,6 +14,8 @@
 #include <rx/etc/partition.hpp>
 
 
+// TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
+
 namespace rx::detail::tdfa
 {
     /* tdfa normalisation */
@@ -1275,7 +1277,7 @@ namespace rx::detail::tdfa
         {
             /* we assume all final states can be a fallback state, which is an overapproximation */
 
-            const auto& final_ops{ result.final_nodes_.at(fop_index) };
+            const auto& final_ops{ result.get_regops(fop_index) };
 
             /* determine clobbered registers */
 
@@ -1299,13 +1301,13 @@ namespace rx::detail::tdfa
                 {
                     const auto& tr{ result.nodes_.at(s).tr.at(i) };
 
-                    for (const auto& op : result.get_node(tr.op_index))
+                    for (const auto& op : result.get_regops(tr.op_index))
                         clobbered.at(op.dst) = true;
 
                     ++i;
                     if (not added.at(tr.next))
                     {
-                        stack.push_back(tr.next);
+                        stack.emplace_back(tr.next, 0);
                         added.at(tr.next) = true;
                     }
                 }
@@ -1342,7 +1344,7 @@ namespace rx::detail::tdfa
         for (auto& tr : result.nodes_.at(state).tr)
         {
             /* not final node => non accepting path exists from tr.next (end of inputs can be anywhere) */
-            if (not result.final_nodes.contains(tr.next))
+            if (not result.final_nodes_.contains(tr.next))
             {
                 if (tr.op_index == no_transition_regops)
                 {
@@ -1395,6 +1397,8 @@ namespace rx::detail::tdfa
                 }
             }
         }
+
+        fallback_regops(result);
     }
 }
 
@@ -1402,7 +1406,7 @@ namespace rx::detail
 {
     template<typename CharT>
     constexpr tagged_dfa<CharT>::tagged_dfa(const tnfa_t& tnfa) : 
-        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }
+        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, is_search_{ tnfa.is_search_ }
     {
         tdfa::factory<char_type>{ tnfa, *this, tag_count_, false };
     }

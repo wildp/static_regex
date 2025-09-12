@@ -91,6 +91,7 @@ namespace rx::detail
         std::vector<tnfa_node<CharT>> nodes_{ 3 };
         capture_info capture_info_;
         std::size_t tag_count_;
+        bool is_search_;
     };
 }
 

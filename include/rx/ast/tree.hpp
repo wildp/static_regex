@@ -95,7 +95,8 @@ namespace rx::detail
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
         [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
-        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; };
+        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
+        [[nodiscard]] constexpr bool is_search() const { return is_search_; }
 
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
         constexpr void optimise_tags();
@@ -112,6 +113,7 @@ namespace rx::detail
         capture_info capture_info_;
         tag_number_t tag_count_{ 0 };
         parser_flags flags_;
+        bool is_search_{ false };
     };
 }
 

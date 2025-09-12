@@ -50,9 +50,9 @@ namespace rx::testing
             for (const auto& tr : this->get_node(i).tr)
             {
                 if (tr.lower == tr.upper)
-                    std::print("\t\'{}\' -> Node {}:", tr.lower, tr.next);
+                    std::print("\t{:?} -> Node {}:", tr.lower, tr.next);
                 else
-                    std::print("\t[\'{}\',\'{}\'] -> Node {}:", tr.lower, tr.upper, tr.next);
+                    std::print("\t[{:?},{:?}] -> Node {}:", tr.lower, tr.upper, tr.next);
 
                 if (tr.op_index != no_transition_regops)
                     std::println(" [Block {}]", tr.op_index);
