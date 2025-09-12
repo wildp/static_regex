@@ -65,7 +65,7 @@ namespace
     {
         using namespace rx::literals;
         auto matcher = "Hello World"_rx;
-        std::println("{}", matcher.test());
+        std::println("{}", matcher.match("Hello World").has_value());
     }
 
     [[maybe_unused]] void t2(std::string_view pat, const std::vector<std::string_view>& test)
@@ -139,21 +139,15 @@ namespace
 
         const auto& ci{ tmp.get_capture_info() };
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
-        {
-            const auto [beg, end]{ ci.lookup(i) };
-            for (auto it{ beg }; it != end; ++it)
-                std::println("{}: {}+{}, {}+{}", i, it->first.tag_number, it->first.offset, it->second.tag_number, it->second.offset);
-        }
+            for (const auto& elem: ci.lookup(i))
+                std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
 
         // tmp.optimise_tags();
 
         // const auto& ci{ tmp.get_capture_info() };
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
-        {
-            const auto [beg, end]{ ci.lookup(i) };
-            for (auto it{ beg }; it != end; ++it)
-                std::println("{}: {}+{}, {}+{}", i, it->first.tag_number, it->first.offset, it->second.tag_number, it->second.offset);
-        }
+            for (const auto& elem: ci.lookup(i))
+                std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
 
         rx::detail::tagged_nfa<char> tnfa{ tmp };
         printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
@@ -198,13 +192,78 @@ namespace
                 std::println("'{}': No Match", sv);
         }
     }
+
+    [[maybe_unused]] void t7(std::string_view pat, const std::vector<std::string_view>& test)
+    {
+        printable<rx::detail::expr_tree<char>> tmp{ pat };
+        tmp.insert_search_prefix();
+        std::println("Pattern: {}", tmp.to_pattern());
+        tmp.optimise_tags();
+
+        rx::detail::tagged_nfa<char> tnfa{ tmp };
+        printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
+        std::println("Pattern ok\n");
+
+        tdfa.print();
+        tdfa.optimise_registers();
+        std::println("Opt ok\n");
+
+        tdfa.print();
+        std::println("\n");
+
+        for (auto sv : test)
+        {
+            auto result{ tdfa.submatches(sv) };
+
+            if (result.has_value())
+                std::println("{:?}: Match: {}", sv, *result);
+            else
+                std::println("{:?}: No Match", sv);
+        }
+    }
+
+    template<rx::detail::string_literal S>
+    [[maybe_unused]] void t8m(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    {
+        for (auto sv : test)
+        {
+            if (auto res = m.match(sv))
+                std::println("{:?}: Match: {::?}", sv, res);
+            else
+                std::println("{:?}: No Match", sv);
+        }
+    }
+
+    template<rx::detail::string_literal S>
+    [[maybe_unused]] void t8w(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    {
+        for (auto sv : test)
+        {
+            if (auto res = m.starts_with(sv))
+                std::println("{:?}: Partial Match: {::?}", sv, res);
+            else
+                std::println("{:?}: No Match", sv);
+        }
+    }
+
+    template<rx::detail::string_literal S>
+    [[maybe_unused]] void t8s(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    {
+        for (auto sv : test)
+        {
+            if (auto res = m.search(sv))
+                std::println("{:?}: Found Match: {::?}", sv, res);
+            else
+                std::println("{:?}: No Match", sv);
+        }
+    }
+    
 }
 
 
 int main()
 {
- 
-    using namespace rx::detail;
+    using namespace rx::literals;
 
     // t1();
 
@@ -228,8 +287,38 @@ int main()
     // t5("(a)+(b)*", {"ab", "abb", "aaabbb" });
     // t5("(a)+b*|c*", { "ab", "aab" });
 
-    t6("(?:()a())*()(?:a|()b)()b*", { "ab" });
+    // t6("(?:()a())*()(?:a|()b)()b*", { "ab" });
 
+    // t7("Wor(ld)+", { "Hello World", "WWWorldld" });
+
+    // t7("(abc)*", {});
+    // t7("(abc)*|(bcd)+", {});
+    // t7("(abc|g.)+", {});
+
+    // t7(".abc", {});
+
+    // t8m("(?:()a())*()(?:a|()b)()b*"_rx, { "a", "b", "ab", "aaa", "aaabb", "abba", "bbaa" });
+    // t8m("(?i)a(aa)b|(aa)ac"_rx, { "aAaB", "aAaC" } );
+    // t8s("Wor(ld)"_rx, { "World World World", "Hello World", "World" });
+    // t8m("a(bc)d"_rx, { "abcd" });
+
+    // t8m("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
+    // t8m("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
+
+    // t8s("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
+    // t8s("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
+    
+    // t8w("(ab+c)+?(ab+c|.*d)"_rx, { "abcabbcacd__" });
+    // t8w("(ab+c)+(ab+c|.*d)"_rx, { "abcabbcacd__" });
+
+    // t8s("(ab+c)+?(ab+c)?"_rx, { "aaabacabcabbcac" });
+    // t8s("(ab+c)+(ab+c)?"_rx, { "aaabacabcabbcac" });
+
+    // auto w3c_email_regex = R"([[:alnum:].+/=?^_-]+@[[:alnum:]](?:[[:alnum:]-]{0,61}[[:alnum:]])?(?:\.[[:alnum:]](?:[[:alnum:]-]{0,61}[[:alnum:]])?)+)"_rx;
+    // auto simple_email_regex = R"([\w\-\.]+@([\w-]+\.)+[\w-]{2,})"_rx;
+    // t8m(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
+    // t8m(simple_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
+    // t8s(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" }); /* RIP compile times */
 
     return 0;
 }

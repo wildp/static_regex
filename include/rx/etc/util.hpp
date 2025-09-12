@@ -4,7 +4,9 @@
 #include <concepts>
 #include <limits>
 #include <meta>
+#include <numeric>
 #include <variant>
+#include <vector>
 
 
 namespace rx::detail 
@@ -80,6 +82,8 @@ namespace rx::detail
     template<typename CharT, std::size_t N>
     struct string_literal
     {
+        using char_type = CharT;
+
         constexpr string_literal(const CharT (&str)[N])
         {
             std::copy_n(str, N, value.begin());
@@ -98,6 +102,13 @@ namespace rx::detail
     struct index_of_impl<V, T, I> {};
 
     inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
+
+    consteval auto make_iota(std::size_t count)
+    {
+        std::vector<std::size_t> result(count, 0);
+        std::ranges::iota(result, 0);
+        return result;
+    }
 }
 
 
