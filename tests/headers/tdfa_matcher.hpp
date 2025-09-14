@@ -23,28 +23,43 @@ namespace rx::testing
 
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr std::optional<tag_result> submatches(I first, I last) const;
+        [[nodiscard]] constexpr std::optional<tag_result> match(I first, I last) const
+        {
+            return match_implementation(first, last, false);
+        }
 
         template<std::ranges::random_access_range R>
         requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
-        [[nodiscard]] constexpr std::optional<tag_result> submatches(R&& r) const
+        [[nodiscard]] constexpr std::optional<tag_result> match(R&& r) const
         {
-            return submatches(std::ranges::begin(r), std::ranges::end(r));
+            return match(std::ranges::begin(r), std::ranges::end(r));
         }
 
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr bool match(I first, I last) const
+        [[nodiscard]] constexpr std::optional<tag_result> partial_match(I first, I last) const
         {
-            return submatches(first, last).has_value();
+            return match_implementation(first, last, true);
         }
 
         template<std::ranges::random_access_range R>
         requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
-        [[nodiscard]] constexpr bool match(R&& r) const
+        [[nodiscard]] constexpr std::optional<tag_result> partial_match(R&& r) const
         {
-            return match(std::ranges::begin(r), std::ranges::end(r));
+            return partial_match(std::ranges::begin(r), std::ranges::end(r));
         }
+
+    private:
+        static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+
+        template<std::random_access_iterator I>
+        requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+        [[nodiscard]] constexpr std::optional<tag_result> match_implementation(I first, I last, bool enable_fallback) const;
+
+        template<std::random_access_iterator I>
+        requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+        constexpr void regops_implementation(I it, std::size_t op_index, std::vector<I>& registers, std::vector<bool>& registers_enabled) const;
+        
     };
     
     /* tagged dfa simulation */
@@ -52,7 +67,7 @@ namespace rx::testing
     template<typename CharT>
     template<std::random_access_iterator I>
     requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-    constexpr auto tdfa_matcher<CharT>::submatches(const I first, const I last) const -> std::optional<tag_result>
+    constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I last, const bool enable_fallback) const -> std::optional<tag_result>
     {
         using namespace rx::detail;
 
@@ -60,70 +75,55 @@ namespace rx::testing
         std::vector<bool> registers_enabled(this->reg_count(), false);
 
         std::size_t next_state{ this->match_start };
+        std::size_t fallback_state{ fallback_disabled };
 
         I it{ first };
+        I fallback_it{ last };
         
-        while (it != last)
+        while (true)
         {
             const auto& state{ this->get_node(next_state) };
-            bool fail{ true };
 
-            for (const auto& t : state.tr)
+            if (enable_fallback and this->fallback_nodes().contains(next_state))
             {
-                if (t.lower <= *it and *it <= t.upper)
+                fallback_state = next_state;
+                fallback_it = it;
+            }
+
+            if (it == last)
+            {
+                if (this->final_nodes().contains(next_state))
                 {
-                    next_state = t.next;
-
-                    for (const auto& op : this->get_regops(t.op_index))
-                    {
-                        if (auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
-                        {
-                            if (set->val) registers.at(op.dst) = it;
-                            registers_enabled.at(op.dst) = set->val;
-                        }
-                        else if (auto* copy{ std::get_if<tdfa::regop::copy>(&op.op) }; copy != nullptr)
-                        {
-                            registers.at(op.dst) = registers.at(copy->src);
-                            registers_enabled.at(op.dst) = registers_enabled.at(copy->src);
-                        }
-                        else
-                        {
-                            throw std::runtime_error("Unknown error");
-                        }
-                    }
-
-                    ++it;
-
-                    fail = false;
-                    break;
+                    regops_implementation(it, this->final_nodes().at(next_state), registers, registers_enabled);
+                    break;  /* outer */
                 }
-            }
-
-            if (fail)
-                return {}; /* no transition with symbol */
-        }
-
-        const auto& fsi{ this->final_nodes() };
-
-        if (not fsi.contains(next_state))
-            return {}; /* state is not an accepting state */
-
-        for (const auto& op : this->get_regops(fsi.at(next_state)))
-        {
-            if (auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
-            {
-                if (set->val) registers.at(op.dst) = it;
-                registers_enabled.at(op.dst) = set->val;
-            }
-            else if (auto* copy{ std::get_if<tdfa::regop::copy>(&op.op) }; copy != nullptr)
-            {
-                registers.at(op.dst) = registers.at(copy->src);
-                registers_enabled.at(op.dst) = registers_enabled.at(copy->src);
             }
             else
             {
-                throw std::runtime_error("Unknown error");
+                bool success{ false };
+
+                for (const auto& t : state.tr)
+                {
+                    if (t.lower <= *it and *it <= t.upper)
+                    {
+                        next_state = t.next;
+                        regops_implementation(it, t.op_index, registers, registers_enabled);
+                        ++it;
+                        success = true;
+                        break; /* inner */
+                    }
+                }
+
+                if (success)
+                    continue; /* outer */
             }
+
+            if (not enable_fallback or fallback_state == fallback_disabled)
+                return {}; /* skip converting tag registers to captures */
+            
+            it = fallback_it;
+            regops_implementation(it, this->fallback_nodes().at(fallback_state), registers, registers_enabled);
+            break; /* outer */
         }
         
         /* convert from tag registers to captures */
@@ -141,9 +141,9 @@ namespace rx::testing
 
         auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<I, I> {
             return { std::next((p.first.tag_number >= 0) ? registers.at(final_reg.at(p.first.tag_number))
-                                : ((p.first.tag_number == start_of_input_tag) ? first : last), p.first.offset),
+                                : ((p.first.tag_number == start_of_input_tag) ? first : it), p.first.offset),
                      std::next((p.second.tag_number >= 0) ? registers.at(final_reg.at(p.second.tag_number))
-                                : ((p.second.tag_number == start_of_input_tag) ? first : last), p.second.offset) };
+                                : ((p.second.tag_number == start_of_input_tag) ? first : it), p.second.offset) };
         };
 
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
@@ -167,4 +167,29 @@ namespace rx::testing
 
         return res;
     }
+
+    template<typename CharT>
+    template<std::random_access_iterator I>
+    requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+    constexpr void tdfa_matcher<CharT>::regops_implementation(I it, std::size_t op_index, std::vector<I>& registers, std::vector<bool>& registers_enabled) const
+    {
+        for (const auto& op : this->get_regops(op_index))
+        {
+            if (auto* set{ std::get_if<detail::tdfa::regop::set>(&op.op) }; set != nullptr)
+            {
+                if (set->val) registers.at(op.dst) = it;
+                registers_enabled.at(op.dst) = set->val;
+            }
+            else if (auto* copy{ std::get_if<detail::tdfa::regop::copy>(&op.op) }; copy != nullptr)
+            {
+                registers.at(op.dst) = registers.at(copy->src);
+                registers_enabled.at(op.dst) = registers_enabled.at(copy->src);
+            }
+            else
+            {
+                throw std::runtime_error("Unknown error");
+            }
+        }
+    }
+
 }

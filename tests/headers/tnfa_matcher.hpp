@@ -21,12 +21,7 @@ namespace rx::testing
         using tag_result = std::vector<std::size_t>;
         using detail::tagged_nfa<CharT>::tagged_nfa;
 
-        [[nodiscard]] constexpr std::optional<tag_result> submatches(std::basic_string_view<CharT> input) const;
-
-        [[nodiscard]] constexpr bool match(std::basic_string_view<CharT> input) const
-        {
-            return submatches(input).has_value();
-        }
+        [[nodiscard]] constexpr std::optional<tag_result> match(std::basic_string_view<CharT> input) const;
 
     private:
         using tag_vector = detail::cdarray<std::size_t>;
@@ -116,7 +111,7 @@ namespace rx::testing
     }
 
     template<typename CharT>
-    constexpr auto tnfa_matcher<CharT>::submatches(std::basic_string_view<CharT> input) const -> std::optional<tag_result>
+    constexpr auto tnfa_matcher<CharT>::match(std::basic_string_view<CharT> input) const -> std::optional<tag_result>
     {
         using namespace rx::detail;
 

@@ -86,7 +86,7 @@ namespace
 
         for (auto sv : test)
         {
-            auto result{ tnfa.submatches(sv) };
+            auto result{ tnfa.match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -104,7 +104,7 @@ namespace
 
         for (auto sv : test)
         {
-            auto result{ tree.submatches(sv) };
+            auto result{ tree.match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -123,7 +123,7 @@ namespace
 
         for (auto sv : test)
         {
-            auto result{ tdfa.submatches(sv) };
+            auto result{ tdfa.match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -158,7 +158,7 @@ namespace
 
         for (auto sv : test)
         {
-            auto result{ tdfa.submatches(sv) };
+            auto result{ tdfa.match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -184,7 +184,7 @@ namespace
 
         for (auto sv : test)
         {
-            auto result{ tdfa.submatches(sv) };
+            auto result{ tdfa.match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -213,7 +213,7 @@ namespace
 
         for (auto sv : test)
         {
-            auto result{ tdfa.submatches(sv) };
+            auto result{ tdfa.match(sv) };
 
             if (result.has_value())
                 std::println("{:?}: Match: {}", sv, *result);
@@ -319,6 +319,9 @@ int main()
     // t8m(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
     // t8m(simple_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
     // t8s(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" }); /* RIP compile times */
+
+    // t3("(a)+a?", { "aa" });
+    t4("(a)+a?", { "aa" });
 
     return 0;
 }

@@ -23,25 +23,11 @@ namespace rx::testing
 
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr std::optional<tag_result> submatches(I first, I last) const;
+        [[nodiscard]] constexpr std::optional<tag_result> match(I first, I last) const;
 
         template<std::ranges::random_access_range R>
         requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
-        [[nodiscard]] constexpr std::optional<tag_result> submatches(R&& r) const
-        {
-            return submatches(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<std::random_access_iterator I>
-        requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr bool match(I first, I last) const
-        {
-            return submatches(first, last).has_value();
-        }
-
-        template<std::ranges::random_access_range R>
-        requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
-        [[nodiscard]] constexpr bool match(R&& r) const
+        [[nodiscard]] constexpr std::optional<tag_result> match(R&& r) const
         {
             return match(std::ranges::begin(r), std::ranges::end(r));
         }
@@ -99,7 +85,7 @@ namespace rx::testing
     template<typename CharT>
     template<std::random_access_iterator I>
     requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-    [[nodiscard]] constexpr auto tree_matcher<CharT>::submatches(const I first, const I last) const -> std::optional<tag_result>
+    [[nodiscard]] constexpr auto tree_matcher<CharT>::match(const I first, const I last) const -> std::optional<tag_result>
     {
         using expr_tree_t = tree_matcher<CharT>;
         using state_t = matcher_state<I>;

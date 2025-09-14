@@ -4,128 +4,169 @@
 namespace
 {
     template<typename CharT>
-    consteval bool tdfa_match(const CharT* pattern, const CharT* str)
+    consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         rx::detail::expr_tree<CharT> ast{ pattern };
         rx::detail::tagged_nfa<CharT> tnfa{ ast };
         rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
-
-        return tdfa.match(std::string_view{ str });
+        auto match_result{ tdfa.match(std::string_view{ str }) };
+        
+        if (captures.empty())
+            return match_result.has_value();
+        else
+            return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
     }
 
     template<typename CharT>
-    consteval bool tdfa_capture(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures)
+    consteval bool partial_match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         rx::detail::expr_tree<CharT> ast{ pattern };
         rx::detail::tagged_nfa<CharT> tnfa{ ast };
         rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
+        auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 
-        auto match_result{ tdfa.submatches(std::string_view{ str }) };
+        if (captures.empty())
+            return match_result.has_value();
+        else
+            return std::ranges::equal(match_result.value(), captures);
+    }
 
-        if (not match_result.has_value())
-            return false;
+    template<typename CharT>
+    consteval bool search(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
+    {
+        rx::detail::expr_tree<CharT> ast{ pattern };
+        ast.insert_search_prefix();
+        rx::detail::tagged_nfa<CharT> tnfa{ ast };
+        rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
+        auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 
-        return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
+        if (captures.empty())
+            return match_result.has_value();
+        else
+            return std::ranges::equal(match_result.value(), captures);
     }
 }
 
 using rx::detail::no_tag;
 
 /* basic tests */
-static_assert(tdfa_match("", ""));
-static_assert(not tdfa_match("", "a"));
-static_assert(not tdfa_match("a", ""));
-static_assert(tdfa_match("a", "a"));
-static_assert(not tdfa_match("a", "b"));
+static_assert(match("", ""));
+static_assert(not match("", "a"));
+static_assert(not match("a", ""));
+static_assert(match("a", "a"));
+static_assert(not match("a", "b"));
 
 /* grouping tests */
-static_assert(not tdfa_match("a|b", ""));
-static_assert(tdfa_match("a|b", "a"));
-static_assert(tdfa_match("a|b", "b"));
-static_assert(not tdfa_match("a|b", "c"));
-static_assert(tdfa_match("a|b|c", "c"));
-static_assert(tdfa_match("a|b|c", "b"));
-static_assert(tdfa_match("a|b|c", "a"));
-static_assert(not tdfa_match("aa", ""));
-static_assert(not tdfa_match("aa", "a"));
-static_assert(tdfa_match("aa", "aa"));
-static_assert(not tdfa_match("aa", "aaa"));
-static_assert(not tdfa_match("ab", ""));
-static_assert(not tdfa_match("ab", "a"));
-static_assert(not tdfa_match("ab", "b"));
-static_assert(tdfa_match("ab", "ab"));
-static_assert(not tdfa_match("ab", "ba"));
-static_assert(not tdfa_match("ab", "abb"));
-static_assert(not tdfa_match("ab", "aab"));
-static_assert(not tdfa_match("ab", "bb"));
+static_assert(not match("a|b", ""));
+static_assert(match("a|b", "a"));
+static_assert(match("a|b", "b"));
+static_assert(not match("a|b", "c"));
+static_assert(match("a|b|c", "c"));
+static_assert(match("a|b|c", "b"));
+static_assert(match("a|b|c", "a"));
+static_assert(not match("aa", ""));
+static_assert(not match("aa", "a"));
+static_assert(match("aa", "aa"));
+static_assert(not match("aa", "aaa"));
+static_assert(not match("ab", ""));
+static_assert(not match("ab", "a"));
+static_assert(not match("ab", "b"));
+static_assert(match("ab", "ab"));
+static_assert(not match("ab", "ba"));
+static_assert(not match("ab", "abb"));
+static_assert(not match("ab", "aab"));
+static_assert(not match("ab", "bb"));
 
 /* character class tests */
-static_assert(tdfa_match("[a-c]", "a"));
-static_assert(tdfa_match("[a-c]", "b"));
-static_assert(tdfa_match("[a-c]", "c"));
-static_assert(not tdfa_match("[a-c]", "d"));
+static_assert(match("[a-c]", "a"));
+static_assert(match("[a-c]", "b"));
+static_assert(match("[a-c]", "c"));
+static_assert(not match("[a-c]", "d"));
 
 /* repeater tests */
-static_assert(tdfa_match("a*", ""));
-static_assert(tdfa_match("a*", "a"));
-static_assert(tdfa_match("a*", "aa"));
-static_assert(tdfa_match("a*", "aaaaa"));
-static_assert(not tdfa_match("a+", ""));
-static_assert(tdfa_match("a+", "a"));
-static_assert(tdfa_match("a+", "aa"));
-static_assert(tdfa_match("a+", "aaaaa"));
-static_assert(tdfa_match("a?", ""));
-static_assert(tdfa_match("a?", "a"));
-static_assert(not tdfa_match("a?", "aa"));
-static_assert(not tdfa_match("a?", "aaaaa"));
-static_assert(not tdfa_match("a{1}", ""));
-static_assert(tdfa_match("a{1}", "a"));
-static_assert(not tdfa_match("a{1}", "aa"));
-static_assert(not tdfa_match("a{2,5}", "a"));
-static_assert(tdfa_match("a{2,5}", "aa"));
-static_assert(tdfa_match("a{2,5}", "aaa"));
-static_assert(tdfa_match("a{2,5}", "aaaa"));
-static_assert(tdfa_match("a{2,5}", "aaaaa"));
-static_assert(not tdfa_match("a{2,5}", "aaaaaaa"));
-static_assert(not tdfa_match("a{2,}", "a"));
-static_assert(tdfa_match("a{2,}", "aa"));
-static_assert(tdfa_match("a{2,}", "aaa"));
-static_assert(tdfa_match("a{2,}", "aaaa"));
-static_assert(tdfa_match("a{2,}", "aaaaa"));
-static_assert(not tdfa_match("a{3},", "aa"));
-static_assert(tdfa_match("a{3}", "aaa"));
-static_assert(not tdfa_match("a{3}", "aaaa"));
+static_assert(match("a*", ""));
+static_assert(match("a*", "a"));
+static_assert(match("a*", "aa"));
+static_assert(match("a*", "aaaaa"));
+static_assert(not match("a+", ""));
+static_assert(match("a+", "a"));
+static_assert(match("a+", "aa"));
+static_assert(match("a+", "aaaaa"));
+static_assert(match("a?", ""));
+static_assert(match("a?", "a"));
+static_assert(not match("a?", "aa"));
+static_assert(not match("a?", "aaaaa"));
+static_assert(not match("a{1}", ""));
+static_assert(match("a{1}", "a"));
+static_assert(not match("a{1}", "aa"));
+static_assert(not match("a{2,5}", "a"));
+static_assert(match("a{2,5}", "aa"));
+static_assert(match("a{2,5}", "aaa"));
+static_assert(match("a{2,5}", "aaaa"));
+static_assert(match("a{2,5}", "aaaaa"));
+static_assert(not match("a{2,5}", "aaaaaaa"));
+static_assert(not match("a{2,}", "a"));
+static_assert(match("a{2,}", "aa"));
+static_assert(match("a{2,}", "aaa"));
+static_assert(match("a{2,}", "aaaa"));
+static_assert(match("a{2,}", "aaaaa"));
+static_assert(not match("a{3},", "aa"));
+static_assert(match("a{3}", "aaa"));
+static_assert(not match("a{3}", "aaaa"));
 
 /* laziness tests */
-static_assert(tdfa_capture("(a)?a*", "", { no_tag, no_tag }));
-static_assert(tdfa_capture("(a)?a*", "a", { 0, 1 }));
-static_assert(tdfa_capture("(a)?a*", "aa", { 0, 1 }));
-static_assert(tdfa_capture("(a)??a*", "aa", { no_tag, no_tag }));
+static_assert(match("(a)?a*", "", { no_tag, no_tag }));
+static_assert(match("(a)?a*", "a", { 0, 1 }));
+static_assert(match("(a)?a*", "aa", { 0, 1 }));
+static_assert(match("(a)??a*", "aa", { no_tag, no_tag }));
+static_assert(match("(a)+?a?", "aa", { 0, 1 }));
+// static_assert(match("(a)+a?", "aa", { 1, 2 })); /* INFINITELY LOOPS??? */
 
 /* capture location tests */
-static_assert(tdfa_capture("(a)", "a", { 0, 1 }));
-static_assert(tdfa_capture("a(a)", "aa", { 1, 2 }));
-static_assert(tdfa_capture("a(a)a", "aaa", { 1, 2 }));
-static_assert(tdfa_capture("(a)*", "a", { 0, 1 }));
-static_assert(tdfa_capture("(a)*", "aa", { 1, 2 }));
-static_assert(tdfa_capture("(?:(a)|(d))c", "ac", { 0, 1, no_tag, no_tag }));
-static_assert(tdfa_capture("(?:(a)|(d))c", "dc", { no_tag, no_tag, 0, 1 }));
-static_assert(tdfa_capture("(a)+(b)*", "ab", { 0, 1, 1, 2 }));
-static_assert(tdfa_capture("(a)+(b)*", "aab", { 1, 2, 2, 3 }));
-static_assert(tdfa_capture("(aa)+a*", "aaaaa", { 2, 4 }));
-static_assert(tdfa_capture("(aa)+?a*", "aaaaa", { 0, 2 }));
-static_assert(tdfa_capture("(a((a)))(a)c", "aaac", { 0, 2, 1, 2, 1, 2, 2, 3 }));
-static_assert(tdfa_capture("a(aa)b|(aa)ac", "aaab", { 1, 3, no_tag, no_tag }));
-static_assert(tdfa_capture("a(aa)b|(aa)ac", "aaac", { no_tag, no_tag, 0, 2 }));
+static_assert(match("(a)", "a", { 0, 1 }));
+static_assert(match("a(a)", "aa", { 1, 2 }));
+static_assert(match("a(a)a", "aaa", { 1, 2 }));
+static_assert(match("(a)*", "a", { 0, 1 }));
+static_assert(match("(a)*", "aa", { 1, 2 }));
+static_assert(match("(?:(a)|(d))c", "ac", { 0, 1, no_tag, no_tag }));
+static_assert(match("(?:(a)|(d))c", "dc", { no_tag, no_tag, 0, 1 }));
+static_assert(match("(a)+(b)*", "ab", { 0, 1, 1, 2 }));
+static_assert(match("(a)+(b)*", "aab", { 1, 2, 2, 3 }));
+static_assert(match("(aa)+a*", "aaaaa", { 2, 4 }));
+static_assert(match("(aa)+?a*", "aaaaa", { 0, 2 }));
+static_assert(match("(a((a)))(a)c", "aaac", { 0, 2, 1, 2, 1, 2, 2, 3 }));
+static_assert(match("a(aa)b|(aa)ac", "aaab", { 1, 3, no_tag, no_tag }));
+static_assert(match("a(aa)b|(aa)ac", "aaac", { no_tag, no_tag, 0, 2 }));
 
 /* wildcard tests */
-static_assert(not tdfa_match(".", ""));
-static_assert(tdfa_match(".", "0"));
-static_assert(tdfa_match(".", "@"));
-static_assert(tdfa_match(".", "$"));
-static_assert(tdfa_match(".", "z"));
-static_assert(tdfa_match(".", "A"));
-static_assert(tdfa_match(".", "."));
-static_assert(not tdfa_match(".", "\n"));
-static_assert(tdfa_match("(?s).", "\n"));
+static_assert(not match(".", ""));
+static_assert(match(".", "0"));
+static_assert(match(".", "@"));
+static_assert(match(".", "$"));
+static_assert(match(".", "z"));
+static_assert(match(".", "A"));
+static_assert(match(".", "."));
+static_assert(not match(".", "\n"));
+static_assert(match("(?s).", "\n"));
 // TODO: add test cases for non ascii chars
+
+
+/* fallback tests */
+static_assert(partial_match("abc", "abcdef", { 0, 3 }));
+static_assert(partial_match("abcdef|abc", "abc", { 0, 3 }));
+static_assert(partial_match("abcdef|abc", "abcdef", { 0, 6 }));
+static_assert(partial_match("abc|abcdef", "abcdef", { 0, 6 }));
+// static_assert(partial_match("abcdef|abc", "abcde", { 0, 3 }));
+
+/* additional capture location tests */
+// static_assert(partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
+// static_assert(not partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 9, 3, 7, 7, 9 }));
+// static_assert(partial_match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 0, 9, 3, 7, 7, 9 }));
+// static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10}));
+// static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
+
+
+/* search tests */
+
+
+
