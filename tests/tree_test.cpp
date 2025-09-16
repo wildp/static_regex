@@ -261,6 +261,7 @@ static_assert(alt_to_cc("a|g|[ce]", "[aceg]"));
 static_assert(alt_to_cc("a|f|[c-e]", "[ac-f]"));
 static_assert(alt_to_cc(" |[[:graph:]]", "[ -~]"));
 static_assert(alt_to_cc("[[:alpha:]]|[[:digit:]]", "[0-9A-Za-z]"));
+static_assert(alt_to_cc("(a|bcdef|g|ab|c|d|e|efg|fg)*", "(a|bcdef|g|ab|[c-e]|efg|fg)*"));
 
 /* other test cases */
 static_assert(parse("(?# comment )", ""));

@@ -793,7 +793,7 @@ namespace rx::detail::parser
                     }
                     else if (std::holds_alternative<char_str>(lhs))
                     {
-                        if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
+                        if (auto to_insert{ std::get<char_str>(lhs).get_if_single() })
                         {
                             /* insert char into char class */
                             target.insert(*to_insert);
