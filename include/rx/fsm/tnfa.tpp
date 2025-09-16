@@ -246,8 +246,8 @@ namespace rx::detail
                             auto q2{ node_create() };
 
                             stack.emplace_back(q0, q1, rep.idx);
-                            epsilon(q1, qf, lazy);
-                            epsilon(q1, q2, not lazy);
+                            epsilon(q1, qf, not lazy);
+                            epsilon(q1, q2, lazy);
             
                             max -= 1;
                             q0 = q2;

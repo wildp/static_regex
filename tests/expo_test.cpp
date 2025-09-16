@@ -108,6 +108,8 @@ static_assert(match("(a)?a*", "aa", { 0, 1 }));
 static_assert(match("(a)??a*", "aa", { no_tag, no_tag }));
 static_assert(match("(a)+?a?", "aa", { 0, 1 }));
 static_assert(match("(a)+a?", "aa", { 1, 2 }));
+static_assert(match("(a){2,3}?a?", "aaa", { 1, 2 }));
+static_assert(match("(a){2,3}a?", "aaa", { 2, 3 }));
 
 /* capture location tests */
 static_assert(match("(a)", "a", { 0, 1 }));
