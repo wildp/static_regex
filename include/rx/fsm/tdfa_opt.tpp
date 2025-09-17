@@ -14,7 +14,7 @@ namespace rx::detail::tdfa
 
         for (auto it{ beg }; it != end; ++it)
         {
-            if (auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+            if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
                 ++indeg.at(copy->src);
         }
 
@@ -30,7 +30,7 @@ namespace rx::detail::tdfa
             {
                 if (indeg.at(it->dst) == 0)
                 {
-                    if (auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                    if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
                         --indeg.at(copy->src);
 
                     o_new.emplace_back(*it);
@@ -48,7 +48,7 @@ namespace rx::detail::tdfa
                 for (const auto& oc : o_copy)
                 {
                     /* ignore copying to self */
-                    if (auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                    if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
                     {
                         cycle_detected = true;
                         break;
@@ -170,10 +170,10 @@ namespace rx::detail::tdfa
         [[nodiscard]] static constexpr remap_t compact_registers(const tdfa_t& dfa);
         [[nodiscard]] static constexpr remap_t allocate_registers(const tdfa_t& dfa, const square_matrix& overlapping_lifetimes);
         [[nodiscard]] constexpr liveness_matrix liveness(const tdfa_t& dfa) const;
-        [[nodiscard]] constexpr square_matrix interference(const tdfa_t& dfa, const liveness_matrix& live) const;
+        [[nodiscard]] constexpr square_matrix interference(const tdfa_t& dfa, const liveness_matrix& liveness) const;
 
         static constexpr void rename_registers(tdfa_t& dfa, const remap_t& remap);
-        static constexpr void deadcode_elim(tdfa_t& dfa, const liveness_matrix& live);
+        static constexpr void deadcode_elim(tdfa_t& dfa, const liveness_matrix& liveness);
         static constexpr void normalise(tdfa_t& dfa);
 
         constexpr void make_cfg(const tdfa_t& dfa);

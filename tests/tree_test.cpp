@@ -54,7 +54,7 @@ namespace
     template<typename CharT>
     consteval bool test(const CharT* str)
     {
-        rx::detail::expr_tree<CharT> ast{ str };
+        const rx::detail::expr_tree<CharT> ast{ str };
         return true;
     }
 }

@@ -34,7 +34,7 @@ namespace rx
         /* observers */
 
         [[nodiscard]] constexpr bool matched() const noexcept { return matched_; }
-        [[nodiscard]] constexpr operator bool() const noexcept { return this->matched(); }
+        [[nodiscard]] explicit constexpr operator bool() const noexcept { return this->matched(); }
         [[nodiscard]] constexpr bool empty() const noexcept { return this->matched() ? begin_ == end_ : true; };
         [[nodiscard]] constexpr std::size_t size() const { return this->matched() ? std::ranges::distance(begin_, end_) : 0; };
         [[nodiscard]] constexpr std::size_t length() const { return this->size(); };
@@ -173,6 +173,6 @@ struct std::tuple_element<N, rx::submatch<I>>
 /* formatting support for submatch */
 
 template<std::bidirectional_iterator I>
-constexpr std::range_format std::format_kind<rx::submatch<I>> = std::range_format::string;
+constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
 
 static_assert(std::formattable<rx::submatch<const char*>, char>);

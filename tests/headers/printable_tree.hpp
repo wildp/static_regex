@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include <rx/etc/util.hpp>
 #include <rx/ast/tree.hpp>
+#include <rx/etc/util.hpp>
 
 
 namespace rx::testing

@@ -8,6 +8,7 @@
 #include <ranges>
 #include <utility>
 
+#include <rx/etc/error.hpp>
 
 namespace rx::detail
 {
@@ -35,7 +36,7 @@ namespace rx::detail
             /* note: in tree_expr tags start at 0, whereas here they start at 1 */
             for (const int tag : ntags | std::views::take(ntags.size() - 1))
             {
-                auto qi{ node_create() };
+                const auto qi{ node_create() };
                 epsilon(q0, qi, 0, -(tag + 1));
                 q0 = qi;
             }

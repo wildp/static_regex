@@ -1,23 +1,22 @@
 #pragma once
 
 #include <meta>
-#include <vector>
-#include <ranges>
 #include <numeric>
+#include <ranges>
 #include <utility>
+#include <vector>
 
-#include <rx/etc/util.hpp>
 #include <rx/ast/tree.hpp>
-#include <rx/fsm/tnfa.hpp>
+#include <rx/etc/util.hpp>
 #include <rx/fsm/tdfa.hpp>
+#include <rx/fsm/tnfa.hpp>
 #include <rx/gen/nttpc.hpp>
 
 namespace rx::detail
 {
     struct final_capture_info
     {
-    public:
-        consteval final_capture_info(const capture_info& ci)
+        explicit consteval final_capture_info(const capture_info& ci)
         {
             using namespace std::placeholders;
 
@@ -66,6 +65,7 @@ namespace rx::detail
             });
         }
 
+        /* data members (public so that final_capture_info is structural) */
         static_span<const capture_info::tag_pair_t> captures;   /* use invalid tag pairs to point towards overflow being used */
         static_span<const capture_info::tag_pair_t> overflow;
     };
@@ -81,14 +81,13 @@ namespace rx::detail
     template<typename CharT>
     struct tdfa_info
     {
-    public:
         using char_type = CharT;
 
     private:
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)
         {
             return static_span<const tdfa::transition<char_type>>{ std::define_static_array(n.tr) }; 
-        };
+        }
 
         static consteval auto make_register_operations(const tdfa::regops_t& o) -> static_span<const register_operation>
         {
@@ -102,10 +101,10 @@ namespace rx::detail
                         std::unreachable();
                 }
             )); 
-        };
+        }
         
     public:
-        consteval tdfa_info(const tagged_dfa<char_type>& dfa) : 
+        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa) : 
             nodes{ std::define_static_array(dfa.nodes_ | std::views::transform(make_node_transitions)) },
             regops{ std::define_static_array(dfa.regops_ | std::views::transform(make_register_operations)) },
             final_nodes{ std::define_static_array(dfa.final_nodes().keys()) },
@@ -119,6 +118,7 @@ namespace rx::detail
         {
         }
 
+        /* data members (public so that tdfa_info is structural) */
         static_span<const static_span<const tdfa::transition<char_type>>> nodes;
         static_span<const static_span<const register_operation>> regops;
         static_span<const std::size_t> final_nodes;
@@ -134,10 +134,8 @@ namespace rx::detail
 
 
     template<typename CharT, std::size_t N>
-    consteval tdfa_info<CharT> compile_pattern(detail::string_literal<CharT, N> pattern, bool is_search = false)
+    consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, bool is_search = false)
     {
-        using namespace detail;
-
         using char_type = CharT;
         using string_view_t = std::basic_string_view<char_type>;
 
@@ -155,6 +153,6 @@ namespace rx::detail
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
 
-        return dfa;
+        return tdfa_info{ dfa };
     }
 }

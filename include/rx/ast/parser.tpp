@@ -5,8 +5,8 @@
 #include <limits>
 #include <ranges>
 
-#include <rx/etc/error.hpp>
 #include <rx/ast/capstack.hpp>
+#include <rx/etc/error.hpp>
 
 
 namespace rx::detail::parser
@@ -22,15 +22,15 @@ namespace rx::detail::parser
         constexpr ll1(ast_t& ast, sv_type sv);
         
     private:
-        using assertion     = typename ast_t::assertion;
-        using alt           = typename ast_t::alt;
-        using concat        = typename ast_t::concat;
-        using tag           = typename ast_t::tag;
-        using backref       = typename ast_t::backref;
-        using repeat        = typename ast_t::repeat;
-        using char_str      = typename ast_t::char_str;
-        using char_class    = typename ast_t::char_class;
-        using type          = typename ast_t::type;
+        using assertion     = ast_t::assertion;
+        using alt           = ast_t::alt;
+        using concat        = ast_t::concat;
+        using tag           = ast_t::tag;
+        using backref       = ast_t::backref;
+        using repeat        = ast_t::repeat;
+        using char_str      = ast_t::char_str;
+        using char_class    = ast_t::char_class;
+        using type          = ast_t::type;
 
         [[nodiscard]] constexpr std::size_t sa_make_empty();
         [[nodiscard]] constexpr std::size_t sa_make_dot();
@@ -51,7 +51,6 @@ namespace rx::detail::parser
         [[nodiscard]] constexpr std::size_t sa_cap_pop(std::size_t child_idx);
         constexpr void sa_cap_push();
         constexpr void sa_cap_parse_flag();
-        constexpr void sa_cap_parse_flag_done();
         constexpr void sa_begin_alt();
 
         constexpr parser_flags& flags() { return ref_.get().flags_; }
@@ -1073,7 +1072,7 @@ namespace rx::detail::parser
             {
                 /* empty capturing group; only insert one tag */
 
-                tag_number_t tag_num{ tag_count()++ };
+                const tag_number_t tag_num{ tag_count()++ };
                 get_capture_info().insert(*cap_number, tag_num, tag_num);
 
                 if (tag_num < 0)
@@ -1085,8 +1084,8 @@ namespace rx::detail::parser
             else if (std::holds_alternative<concat>(ast))
             {
                 /* insert tags on either end of existing concat */
-                tag_number_t lhs_tag{ tag_count()++ };
-                tag_number_t rhs_tag{ tag_count()++ };
+                const tag_number_t lhs_tag{ tag_count()++ };
+                const tag_number_t rhs_tag{ tag_count()++ };
                 get_capture_info().insert(*cap_number, lhs_tag, rhs_tag);
 
                 if (lhs_tag < 0 or rhs_tag < 0)
@@ -1104,8 +1103,8 @@ namespace rx::detail::parser
             else
             {
                 /* create new concat and put tags on either side */
-                tag_number_t lhs_tag{ tag_count()++ };
-                tag_number_t rhs_tag{ tag_count()++ };
+                const tag_number_t lhs_tag{ tag_count()++ };
+                const tag_number_t rhs_tag{ tag_count()++ };
                 get_capture_info().insert(*cap_number, lhs_tag, rhs_tag);
 
                 if (lhs_tag < 0 or rhs_tag < 0)
@@ -1239,7 +1238,7 @@ namespace rx::detail
     /* constructor for tree */
 
     template<typename CharT>
-    constexpr expr_tree<CharT>::expr_tree(const sv_type sv, parser_flags flags) :
+    constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags) :
             flags_{ flags } 
     {
         parser::ll1<char_type> ll1_parser(*this, sv);

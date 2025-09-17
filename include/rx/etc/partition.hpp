@@ -314,8 +314,6 @@ namespace rx::detail
                 vec.erase(duplicate_begin, duplicate_it);
         }
 
-        // TODO: implement the part below
-
         for (std::size_t i{ 0 }; i + 1 < vec.size();)
         {
             auto& [current_lower, current_upper]{ vec.at(i).range };

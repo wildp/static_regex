@@ -61,8 +61,8 @@ namespace rx::detail
     public:
         using value_type             = T;
         using allocator_type         = Allocator;
-        using pointer                = typename std::allocator_traits<Allocator>::pointer;
-        using const_pointer          = typename std::allocator_traits<Allocator>::const_pointer;
+        using pointer                = std::allocator_traits<Allocator>::pointer;
+        using const_pointer          = std::allocator_traits<Allocator>::const_pointer;
         using reference              = value_type&;
         using const_reference        = const value_type&;
         using size_type              = std::size_t;
@@ -302,7 +302,7 @@ namespace rx::detail
 
         constexpr void delete_if_needed()
         {
-            /* only call this from the destructor and move assignement operator */
+            /* only call this from the destructor and move assignment operator */
             if (use_count_ptr_ != nullptr)
             {
                 if (*use_count_ptr_ <= 1)

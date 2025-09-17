@@ -3,8 +3,6 @@
 #include <variant>
 #include <vector>
 
-#include <rx/etc/error.hpp>
-#include <rx/etc/error.hpp>
 #include <rx/ast/tree.hpp>
 
 
@@ -57,7 +55,7 @@ namespace rx::detail
     class tagged_nfa
     {
     public:
-        constexpr tagged_nfa(const expr_tree<CharT>& ast);
+        explicit constexpr tagged_nfa(const expr_tree<CharT>& ast);
 
         friend class tagged_dfa<CharT>;
         // friend class multipass_tagged_dfa<CharT>;

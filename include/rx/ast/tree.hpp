@@ -4,9 +4,9 @@
 #include <variant>
 #include <vector>
 
-#include <rx/etc/util.hpp>
-#include <rx/etc/captures.hpp>
 #include <rx/ast/tok.hpp>
+#include <rx/etc/captures.hpp>
+#include <rx/etc/util.hpp>
 
 
 namespace rx::detail

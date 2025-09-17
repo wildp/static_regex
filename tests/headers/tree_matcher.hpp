@@ -7,9 +7,9 @@
 #include <ranges>
 #include <vector>
 
+#include <rx/ast/tree.hpp>
 #include <rx/etc/cdarray.hpp>
 #include <rx/etc/error.hpp>
-#include <rx/ast/tree.hpp>
 
 
 namespace rx::testing

@@ -212,7 +212,7 @@ namespace rx::detail
 
     template<typename CharT>
     requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::insert(named_character_class ncc)
+    constexpr void char_class_impl<CharT>::insert(const named_character_class ncc)
     {
         switch (ncc)
         {

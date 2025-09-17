@@ -8,7 +8,7 @@
 #include <type_traits>
 
 #include <rx/api/submatch.hpp>
-#include <rx/etc/captures.hpp>
+// #include <rx/etc/captures.hpp>
 #include <rx/etc/util.hpp>
 #include <rx/gen/compile.hpp>
 #include <rx/gen/result.hpp>
@@ -20,7 +20,6 @@ namespace rx::detail
     template<tdfa_info DFA, bool FallbackEnabled = true>
     struct p1306_matcher
     {
-    public:
         using char_type = decltype(DFA)::char_type;
 
         template<typename I>
@@ -184,7 +183,7 @@ namespace rx::detail
     public:
         template<std::bidirectional_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, char_type>)
-        [[nodiscard]] inline static constexpr auto operator()(const I first, const I last)
+        [[nodiscard]] static constexpr auto operator()(const I first, const I last)
         {
             result<I> res{ first };
 

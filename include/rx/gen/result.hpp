@@ -2,14 +2,14 @@
 
 #include <cstddef>
 #include <iterator>
-#include <type_traits>
-#include <tuple>
 #include <stdexcept>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 
+#include <rx/api/submatch.hpp>
 #include <rx/gen/compile.hpp>
 #include <rx/gen/nttpc.hpp>
-#include <rx/api/submatch.hpp>
-#include <utility>
 
 
 namespace rx::detail
@@ -22,7 +22,7 @@ namespace rx::detail
     class compile_time_match_result_base
     {
     public:
-        [[nodiscard]] inline static constexpr submatch<I> make_submatch(I first, I last)
+        [[nodiscard]] static constexpr submatch<I> make_submatch(I first, I last)
         {
             return { first, last };
         }
@@ -32,7 +32,7 @@ namespace rx::detail
 namespace rx
 {
     template<std::bidirectional_iterator I, detail::final_capture_info C, detail::static_span<const detail::tdfa::reg_t> FinalRegisters, std::size_t RegCount>
-    class compile_time_match_result : private detail::compile_time_match_result_base<I>
+    class compile_time_match_result : detail::compile_time_match_result_base<I>
     {
         using base = detail::compile_time_match_result_base<I>;
 
@@ -40,15 +40,15 @@ namespace rx
         using size_type = std::size_t;
         using char_type = std::remove_cv_t<std::iter_value_t<I>>;
         using submatch_type = submatch<I>;
-        inline static constexpr size_type submatch_count{ C.capture_count() };
+        static constexpr size_type submatch_count{ C.capture_count() };
 
         /* iterator implementation */
 
         class proxy_iterator_impl
         {
             using it = proxy_iterator_impl;
-            using parent_type = compile_time_match_result<I, C, FinalRegisters, RegCount>;
-            friend class compile_time_match_result<I, C, FinalRegisters, RegCount>;
+            using parent_type = compile_time_match_result;
+            friend class compile_time_match_result;
 
         public:
             using difference_type = std::ptrdiff_t;
@@ -89,7 +89,7 @@ namespace rx
         /* observers */
 
         [[nodiscard]] constexpr bool has_value() const { return static_cast<bool>(match_end_); }
-        [[nodiscard]] constexpr operator bool() const { return this->has_value(); }
+        [[nodiscard]] constexpr explicit operator bool() const { return this->has_value(); }
         [[nodiscard]] constexpr size_type size() const { return (this->has_value()) ? submatch_count : 0; }
 
         /* array-like access */
@@ -162,8 +162,8 @@ namespace rx
     
     private:
         using iterator_type = I;
-        inline static constexpr bool iterator_is_pointer{ std::is_pointer_v<iterator_type> };
-        inline static constexpr bool has_match_start{ C.has_match_start() };
+        static constexpr bool iterator_is_pointer{ std::is_pointer_v<iterator_type> };
+        static constexpr bool has_match_start{ C.has_match_start() };
         using registers_type = std::conditional_t<RegCount == 0, std::monostate, std::array<iterator_type, RegCount>>;
         using enabled_type = std::conditional_t<RegCount == 0 or iterator_is_pointer, std::monostate, std::array<bool, RegCount>>;
         using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;

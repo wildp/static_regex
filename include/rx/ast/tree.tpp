@@ -1,16 +1,17 @@
 #pragma once
 
-#include "rx/etc/captures.hpp"
-#include "rx/etc/error.hpp"
-#include <limits>
-#include <numeric>
 #include <rx/ast/tree.hpp>
 
 #include <algorithm>
 #include <functional>
 #include <iterator>
+#include <limits>
+#include <numeric>
 #include <utility>
 #include <variant>
+
+#include <rx/etc/captures.hpp>
+#include <rx/etc/error.hpp>
 
 
 namespace rx::detail
@@ -54,7 +55,7 @@ namespace rx::detail
                     {
                         auto& vec{ tag_vec.at(idx) };
 
-                        for (std::size_t i : cat.idxs)
+                        for (const std::size_t i : cat.idxs)
                             std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
 
                         std::ranges::sort(vec);
@@ -79,7 +80,7 @@ namespace rx::detail
                     {
                         auto& vec{ tag_vec.at(idx) };
 
-                        for (std::size_t i : atl.idxs)
+                        for (const std::size_t i : atl.idxs)
                             std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
 
                         std::ranges::sort(vec);

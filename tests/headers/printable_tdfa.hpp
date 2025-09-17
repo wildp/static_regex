@@ -1,9 +1,9 @@
 #pragma once
 
-#include <rx/fsm/tdfa.hpp>
-
-#include <print>
 #include <format>
+#include <print>
+
+#include <rx/fsm/tdfa.hpp>
 
 
 namespace rx::testing

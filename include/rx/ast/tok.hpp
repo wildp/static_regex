@@ -2,15 +2,15 @@
 
 #include <algorithm>
 #include <limits>
-#include <optional>
 #include <numeric>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <variant>
 
-#include <rx/etc/util.hpp>
-#include <rx/etc/error.hpp>
 #include <rx/ast/charclass.hpp>
+#include <rx/etc/error.hpp>
+#include <rx/etc/util.hpp>
 
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
@@ -58,7 +58,7 @@ namespace rx::detail
             impl_type data;
 
             template<typename... Args>
-            constexpr char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
+            constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
         };
 
         template<typename CharT>
@@ -127,7 +127,7 @@ namespace rx::detail
 
         // TODO: rangify API?
 
-        constexpr lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}; 
+        constexpr explicit lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {} 
         constexpr token_t nexttok();
 
         friend class parser::ll1<CharT>;

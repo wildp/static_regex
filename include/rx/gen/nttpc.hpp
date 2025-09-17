@@ -45,7 +45,7 @@ namespace rx::detail
 
         /* size observers */
         [[nodiscard]] constexpr size_type size() const noexcept { return size_; }
-        [[nodiscard]] constexpr size_type size_bytes() const noexcept { size() * sizeof(element_type); }
+        [[nodiscard]] constexpr size_type size_bytes() const noexcept { return size() * sizeof(element_type); }
         [[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
 
         /* element access */

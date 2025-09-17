@@ -6,7 +6,7 @@
 #include <variant>
 #include <vector>
 
-#include "rx/etc/captures.hpp"
+#include <rx/etc/captures.hpp>
 #include <rx/etc/cdarray.hpp>
 #include <rx/etc/util.hpp>
 #include <rx/fsm/tdfa.hpp>
