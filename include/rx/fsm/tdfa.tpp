@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <functional>
 #include <iterator>
-#include <limits>
 #include <numeric>
 #include <ranges>
 #include <utility>
@@ -123,7 +122,7 @@ namespace rx::detail::tdfa
         using tnfa_t = tagged_nfa<char_type>;
         using tdfa_t = tagged_dfa<char_type>;
 
-        constexpr explicit factory(const tnfa_t& input, tdfa_t& result, std::size_t tag_count, bool match_longest = false);
+        constexpr explicit factory(const tnfa_t& input, tdfa_t& result, std::size_t tag_count);
 
     private:
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
@@ -144,7 +143,7 @@ namespace rx::detail::tdfa
         const tnfa_t* tnfa_ptr_;
         state_info_t state_info_;
         reg_t tag_count_;
-        bool match_longest_; // TODO: replace later with flags?
+        fsm_flags flags_;
     };
 
     template<typename CharT>
@@ -191,7 +190,7 @@ namespace rx::detail::tdfa
             }
         }
 
-        if (match_longest_)
+        if (flags_.longest_match)
         {
             /* this version is needed for full matches, but below is needed for laziness in partial matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
@@ -569,8 +568,8 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count, bool match_longest) :
-        tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, match_longest_{ match_longest }
+    constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count) :
+        tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
     {
         result.register_count_ = tag_count_ * 2;
         reg_vec initial_reg(tag_count_);
@@ -610,16 +609,17 @@ namespace rx::detail::tdfa
             }
         }
 
-        fallback_regops(result);
+        if (flags_.enable_fallback)
+            fallback_regops(result);
     }
 }
 
 namespace rx::detail
 {
     template<typename CharT>
-    constexpr tagged_dfa<CharT>::tagged_dfa(const tnfa_t& tnfa, bool match_longest) : 
-        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }
+    constexpr tagged_dfa<CharT>::tagged_dfa(const tnfa_t& tnfa) : 
+        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.flags_ }
     {
-        tdfa::factory<char_type>{ tnfa, *this, tag_count_, match_longest };
+        tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
     }
 }

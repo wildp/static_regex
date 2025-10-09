@@ -17,9 +17,11 @@ namespace rx::detail
 {
     /* p1306 matcher implementation */
 
-    template<tdfa_info DFA, bool FallbackEnabled = true>
+    template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher
     {
+        static constexpr auto DFA{ compile_pattern(Pattern, Flags) };
+
         using char_type = decltype(DFA)::char_type;
 
         template<typename I>
@@ -78,7 +80,7 @@ namespace rx::detail
         template<std::size_t DFAState, typename I>
         static constexpr void state(I it, result<I>& res, const I last, std::size_t fallback_state, I fallback_it)
         { 
-            if constexpr (FallbackEnabled and std::ranges::binary_search(DFA.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and std::ranges::binary_search(DFA.fallback_nodes, DFAState))
             {
                 fallback_state = DFAState;
                 fallback_it = it;
@@ -117,7 +119,7 @@ namespace rx::detail
                 }
             }
 
-            if constexpr (FallbackEnabled)
+            if constexpr (Flags.enable_fallback)
                 return fallback(res, fallback_state, fallback_it);
         }
 
@@ -128,7 +130,7 @@ namespace rx::detail
             {
                 if (state == dfa_state)
                 {
-                    if constexpr (FallbackEnabled and std::ranges::binary_search(DFA.fallback_nodes, dfa_state))
+                    if constexpr (Flags.enable_fallback and std::ranges::binary_search(DFA.fallback_nodes, dfa_state))
                     {
                         fallback_state = dfa_state;
                         fallback_it = it;
@@ -171,7 +173,7 @@ namespace rx::detail
                         }
                     }
 
-                    if constexpr (FallbackEnabled)
+                    if constexpr (Flags.enable_fallback)
                         fallback(res, fallback_state, fallback_it);
 
                     return false;

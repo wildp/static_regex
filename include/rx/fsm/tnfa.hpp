@@ -4,9 +4,8 @@
 #include <vector>
 
 #include <rx/ast/tree.hpp>
+#include <rx/fsm/flags.hpp>
 
-
-// TODO: Decouple tags from capture numbers and provide mapping
 
 namespace rx::detail
 {
@@ -55,7 +54,7 @@ namespace rx::detail
     class tagged_nfa
     {
     public:
-        explicit constexpr tagged_nfa(const expr_tree<CharT>& ast);
+        explicit constexpr tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags);
 
         friend class tagged_dfa<CharT>;
         // friend class multipass_tagged_dfa<CharT>;
@@ -90,7 +89,7 @@ namespace rx::detail
         std::vector<tnfa_node<CharT>> nodes_{ 3 };
         capture_info capture_info_;
         std::size_t tag_count_;
-        bool is_search_;
+        fsm_flags flags_;
     };
 }
 

@@ -2,6 +2,14 @@
 
 #include <rx/fsm/tdfa.hpp>
 
+#include <algorithm>
+#include <functional>
+#include <iterator>
+#include <ranges>
+#include <utility>
+#include <variant>
+
+
 // TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
 
 namespace rx::detail::tdfa

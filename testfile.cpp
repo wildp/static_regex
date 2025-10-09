@@ -82,7 +82,7 @@ namespace
         //         std::println("{}: {}+{}, {}+{}", i, e.first.tag_number, e.first.offset, e.second.tag_number, e.second.offset);
         // }
 
-        rx::testing::tnfa_matcher<char> tnfa{ tmp };
+        rx::testing::tnfa_matcher<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
 
         for (auto sv : test)
         {
@@ -118,7 +118,7 @@ namespace
         printable<rx::detail::expr_tree<char>> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
         
-        rx::testing::tnfa_matcher<char> tnfa{ tmp };
+        rx::testing::tnfa_matcher<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
         rx::testing::tdfa_matcher<char> tdfa{ tnfa };
 
         for (auto sv : test)
@@ -149,7 +149,7 @@ namespace
             for (const auto& elem: ci.lookup(i))
                 std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
 
-        rx::detail::tagged_nfa<char> tnfa{ tmp };
+        rx::detail::tagged_nfa<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
         printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
         std::println("Pattern ok\n");
 
@@ -172,7 +172,7 @@ namespace
         printable<rx::detail::expr_tree<char>> tmp{ pat };
         std::println("Pattern: {}", tmp.to_pattern());
         tmp.optimise_tags();
-        rx::detail::tagged_nfa<char> tnfa{ tmp };
+        rx::detail::tagged_nfa<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
         printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
         std::println("Pattern ok\n");
 
@@ -200,7 +200,7 @@ namespace
         std::println("Pattern: {}", tmp.to_pattern());
         tmp.optimise_tags();
 
-        rx::detail::tagged_nfa<char> tnfa{ tmp };
+        rx::detail::tagged_nfa<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
         printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
         std::println("Pattern ok\n");
 

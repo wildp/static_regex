@@ -7,7 +7,7 @@ namespace
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         const rx::detail::expr_tree<CharT> ast{ pattern };
-        const rx::testing::tnfa_matcher<CharT> tnfa{ ast };
+        const rx::testing::tnfa_matcher<CharT> tnfa{ ast, rx::detail::default_fsm_flags::full_match };
         auto match_result{ tnfa.match(str) };
 
         if (captures.empty())
@@ -21,7 +21,7 @@ namespace
     {
         rx::detail::expr_tree<CharT> ast{ pattern };
         ast.insert_search_prefix();
-        const rx::testing::tnfa_matcher<CharT> tnfa{ ast };
+        const rx::testing::tnfa_matcher<CharT> tnfa{ ast, rx::detail::default_fsm_flags::full_match };
         auto match_result{ tnfa.match(str) };
 
         if (not match_result.has_value())

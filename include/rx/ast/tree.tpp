@@ -345,9 +345,6 @@ namespace rx::detail
     template<typename CharT>
     constexpr void expr_tree<CharT>::insert_search_prefix()
     {        
-        /* set search flag for use in tdfa register optimisation */
-        is_search_ = true;
-
         /* make true wildcard */
         const std::size_t wildcard_idx{ expressions_.size() };
         using uct = char_class::underlying_char_type;

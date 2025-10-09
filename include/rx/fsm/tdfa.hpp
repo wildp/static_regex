@@ -7,6 +7,7 @@
 #include <variant>
 
 #include <rx/etc/captures.hpp>
+#include <rx/fsm/flags.hpp>
 #include <rx/fsm/tnfa.hpp>
 
 
@@ -84,7 +85,7 @@ namespace rx::detail
         using char_type = CharT;
         using tnfa_t = tagged_nfa<char_type>;
 
-        explicit constexpr tagged_dfa(const tnfa_t& tnfa, bool match_longest = true);
+        explicit constexpr tagged_dfa(const tnfa_t& tnfa);
         constexpr void optimise_registers();
         constexpr void to_structural_type();
 
@@ -119,6 +120,7 @@ namespace rx::detail
         capture_info        capture_info_;
         std::size_t         tag_count_;
         tdfa::reg_t         register_count_{ 0 };
+        fsm_flags           flags_;
     };
 }
 

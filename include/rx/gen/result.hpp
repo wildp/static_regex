@@ -10,11 +10,12 @@
 #include <rx/api/submatch.hpp>
 #include <rx/gen/compile.hpp>
 #include <rx/gen/nttpc.hpp>
+#include <rx/fsm/flags.hpp>
 
 
 namespace rx::detail
 {
-    template<tdfa_info DFA, bool FallbackEnabled>
+    template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher;
 
 
@@ -89,7 +90,7 @@ namespace rx
         /* observers */
 
         [[nodiscard]] constexpr bool has_value() const { return static_cast<bool>(match_end_); }
-        [[nodiscard]] constexpr explicit operator bool() const { return this->has_value(); }
+        [[nodiscard]] explicit constexpr operator bool() const { return this->has_value(); }
         [[nodiscard]] constexpr size_type size() const { return (this->has_value()) ? submatch_count : 0; }
 
         /* array-like access */
@@ -158,7 +159,7 @@ namespace rx
             return {};
         }
 
-        template<detail::tdfa_info DFA, bool FallbackEnabled> friend struct detail::p1306_matcher;
+        template<detail::string_literal Pattern, detail::fsm_flags Flags> friend struct detail::p1306_matcher;
     
     private:
         using iterator_type = I;

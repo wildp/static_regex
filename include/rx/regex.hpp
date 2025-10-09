@@ -6,7 +6,6 @@
 #include <string_view>
 
 #include <rx/etc/util.hpp>
-#include <rx/gen/compile.hpp>
 #include <rx/gen/p1306.hpp>
 
 
@@ -23,7 +22,7 @@ namespace rx
         [[nodiscard]] constexpr auto match(const I first, const I last) const
         {
             using namespace detail;
-            p1306_matcher<compile_pattern(Pattern, default_fsm_flags::full_match), false> m{};
+            p1306_matcher<Pattern, default_fsm_flags::full_match> m{};
             return m(first, last);
         }
 
@@ -46,7 +45,7 @@ namespace rx
         [[nodiscard]] constexpr auto starts_with(const I first, const I last) const
         {
             using namespace detail;
-            p1306_matcher<compile_pattern(Pattern, default_fsm_flags::partial_match)> m{};
+            p1306_matcher<Pattern, default_fsm_flags::partial_match> m{};
             return m(first, last);
         }
 
@@ -69,7 +68,7 @@ namespace rx
         [[nodiscard]] constexpr auto search(const I first, const I last) const
         {
             using namespace detail;
-            p1306_matcher<compile_pattern(Pattern, default_fsm_flags::search)> m{};
+            p1306_matcher<Pattern, default_fsm_flags::search> m{};
             return m(first, last);
         }
 

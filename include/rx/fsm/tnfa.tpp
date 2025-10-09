@@ -70,8 +70,8 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast) : 
-        capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, is_search_{ ast.is_search() }
+    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags) : 
+        capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
     {
         std::vector<std::vector<int>> tag_vec{};
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);

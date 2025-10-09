@@ -7,7 +7,7 @@ namespace
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         const rx::detail::expr_tree<CharT> ast{ pattern };
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast };
+        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::full_match };
         const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
         auto match_result{ tdfa.match(std::string_view{ str }) };
         
@@ -21,8 +21,8 @@ namespace
     consteval bool partial_match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         const rx::detail::expr_tree<CharT> ast{ pattern };
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa, false };
+        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::partial_match };
+        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
         auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 
         if (captures.empty())
@@ -36,8 +36,8 @@ namespace
     {
         rx::detail::expr_tree<CharT> ast{ pattern };
         ast.insert_search_prefix();
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa, false };
+        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::search };
+        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
         auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 
         if (captures.empty())

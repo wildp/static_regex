@@ -148,10 +148,10 @@ namespace rx::detail
         ast.optimise_tags();
 
         /* convert to tnfa */
-        tagged_nfa nfa{ ast }; 
+        tagged_nfa nfa{ ast, f }; 
 
         /* convert to tdfa */
-        tagged_dfa dfa{ nfa, f.longest_match };
+        tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
 
         return tdfa_info{ dfa };
