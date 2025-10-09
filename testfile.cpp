@@ -142,7 +142,7 @@ namespace
             for (const auto& elem: ci.lookup(i))
                 std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
 
-        // tmp.optimise_tags();
+        tmp.optimise_tags();
 
         // const auto& ci{ tmp.get_capture_info() };
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
@@ -320,8 +320,25 @@ int main()
     // t8m(simple_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
     // t8s(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" }); /* RIP compile times */
 
+    // t4("[ac]est|best", { "best", "cest" });
+
     // t3("(a)+a?", { "aa" });
-    t4("(a)+a?", { "aa" });
+    // t4("(ab)+?(?:ab)?", { "abab" });
+    // t4("(a)+a?", { "aa" });
+
+    // t3("(ab+c)+?(ab+c|.*d)", { "abcabbcacd" });
+    // t4("(?s)(ab+c)+?(ab+c|.*d)", { "abcabbcacd" });
+
+    // t2("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
+    // t3("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
+    // t4("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
+    // t6("(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(a|bcdef|g|ab|c|d|e|efg|fg)*)?)?", { "abcdefg", "bcdefg" });
+
+    // t8w("(abc)+?a"_rx, { "abcabc", "abcabca" });
+    // t8w("<!--.*?-->"_rx, { "<!-- Hello -->", "<!-- Hello --> -->" });
+
+    // t4("a{2,5}?", {});
+    t4("a{2,5}?", { "a", "aa", "aaa", "aaaa", "aaaaa" });
 
     return 0;
 }

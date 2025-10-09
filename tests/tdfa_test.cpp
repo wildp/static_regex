@@ -22,7 +22,7 @@ namespace
     {
         const rx::detail::expr_tree<CharT> ast{ pattern };
         const rx::detail::tagged_nfa<CharT> tnfa{ ast };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
+        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa, false };
         auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 
         if (captures.empty())
@@ -37,7 +37,7 @@ namespace
         rx::detail::expr_tree<CharT> ast{ pattern };
         ast.insert_search_prefix();
         const rx::detail::tagged_nfa<CharT> tnfa{ ast };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
+        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa, false };
         auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 
         if (captures.empty())
@@ -120,7 +120,16 @@ static_assert(match("(a)?a*", "a", { 0, 1 }));
 static_assert(match("(a)?a*", "aa", { 0, 1 }));
 static_assert(match("(a)??a*", "aa", { no_tag, no_tag }));
 static_assert(match("(a)+?a?", "aa", { 0, 1 }));
-// static_assert(match("(a)+a?", "aa", { 1, 2 })); /* INFINITELY LOOPS??? */
+static_assert(match("(a)+a?", "aa", { 1, 2 }));
+static_assert(match("(a){2,3}?a?", "aaa", { 1, 2 }));
+static_assert(match("(a){2,3}a?", "aaa", { 2, 3 }));
+// static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
+// static_assert(match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 3, 7, 7, 10 }));
+
+/* submatch disambiguation tests */
+// static_assert(match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 6, 7 }));     /* [perl]: a bcdef g */
+// static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 4, 7 })); /* [posix]: ab c d efg */
+// static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 5, 7 })); /* [incorrect]: ab c d e fg */
 
 /* capture location tests */
 static_assert(match("(a)", "a", { 0, 1 }));
@@ -155,15 +164,21 @@ static_assert(match("(?s).", "\n"));
 static_assert(partial_match("abc", "abcdef", { 0, 3 }));
 static_assert(partial_match("abcdef|abc", "abc", { 0, 3 }));
 static_assert(partial_match("abcdef|abc", "abcdef", { 0, 6 }));
-static_assert(partial_match("abc|abcdef", "abcdef", { 0, 6 }));
-// static_assert(partial_match("abcdef|abc", "abcde", { 0, 3 }));
+static_assert(partial_match("abc|abcdef", "abcdef", { 0, 3 }));
+static_assert(partial_match("abcdef|abc", "abcde", { 0, 3 }));
+
+/* lazy partial matching tests */
+static_assert(partial_match("(abc)+", "abcabc", { 0, 6, 3, 6 }));
+static_assert(partial_match("(abc)+?", "abcabc", { 0, 3, 0, 3 }));
+static_assert(partial_match("(abc)+?a", "abcabc", { 0, 4, 0, 3 }));
+static_assert(partial_match("(abc)+?a", "abcabca", { 0, 4, 0, 3 }));
 
 /* additional capture location tests */
+// static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
 // static_assert(partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
-// static_assert(not partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 9, 3, 7, 7, 9 }));
-// static_assert(partial_match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 0, 9, 3, 7, 7, 9 }));
+// static_assert(partial_match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 0, 10, 3, 7, 7, 10 }));
 // static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10}));
-// static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
+// static_assert(search("([ad]b+c)+([ad])", "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
 
 
 /* search tests */

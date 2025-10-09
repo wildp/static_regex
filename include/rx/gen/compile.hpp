@@ -8,6 +8,7 @@
 
 #include <rx/ast/tree.hpp>
 #include <rx/etc/util.hpp>
+#include <rx/fsm/flags.hpp>
 #include <rx/fsm/tdfa.hpp>
 #include <rx/fsm/tnfa.hpp>
 #include <rx/gen/nttpc.hpp>
@@ -134,7 +135,7 @@ namespace rx::detail
 
 
     template<typename CharT, std::size_t N>
-    consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, bool is_search = false)
+    consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, fsm_flags f)
     {
         using char_type = CharT;
         using string_view_t = std::basic_string_view<char_type>;
@@ -143,14 +144,14 @@ namespace rx::detail
         
         /* parse pattern string into tree */
         expr_tree ast{ pat };
-        if (is_search) ast.insert_search_prefix();
+        if (f.is_search) ast.insert_search_prefix();
         ast.optimise_tags();
 
         /* convert to tnfa */
         tagged_nfa nfa{ ast }; 
 
         /* convert to tdfa */
-        tagged_dfa dfa{ nfa };
+        tagged_dfa dfa{ nfa, f.longest_match };
         dfa.optimise_registers();
 
         return tdfa_info{ dfa };

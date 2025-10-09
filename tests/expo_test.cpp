@@ -110,6 +110,13 @@ static_assert(match("(a)+?a?", "aa", { 0, 1 }));
 static_assert(match("(a)+a?", "aa", { 1, 2 }));
 static_assert(match("(a){2,3}?a?", "aaa", { 1, 2 }));
 static_assert(match("(a){2,3}a?", "aaa", { 2, 3 }));
+static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
+static_assert(match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 3, 7, 7, 10 }));
+
+/* submatch disambiguation tests */
+static_assert(match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 6, 7 }));     /* [perl]: a bcdef g */
+static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 4, 7 })); /* [posix]: ab c d efg */
+static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 5, 7 })); /* [incorrect]: ab c d e fg */
 
 /* capture location tests */
 static_assert(match("(a)", "a", { 0, 1 }));

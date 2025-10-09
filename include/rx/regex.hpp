@@ -22,7 +22,8 @@ namespace rx
         requires std::convertible_to<std::iter_value_t<I>, char_type>
         [[nodiscard]] constexpr auto match(const I first, const I last) const
         {
-            detail::p1306_matcher<detail::compile_pattern(Pattern), false> m{};
+            using namespace detail;
+            p1306_matcher<compile_pattern(Pattern, default_fsm_flags::full_match), false> m{};
             return m(first, last);
         }
 
@@ -44,7 +45,8 @@ namespace rx
         requires std::convertible_to<std::iter_value_t<I>, char_type>
         [[nodiscard]] constexpr auto starts_with(const I first, const I last) const
         {
-            detail::p1306_matcher<detail::compile_pattern(Pattern)> m{};
+            using namespace detail;
+            p1306_matcher<compile_pattern(Pattern, default_fsm_flags::partial_match)> m{};
             return m(first, last);
         }
 
@@ -66,7 +68,8 @@ namespace rx
         requires std::convertible_to<std::iter_value_t<I>, char_type>
         [[nodiscard]] constexpr auto search(const I first, const I last) const
         {
-            detail::p1306_matcher<detail::compile_pattern(Pattern, true)> m{};
+            using namespace detail;
+            p1306_matcher<compile_pattern(Pattern, default_fsm_flags::search)> m{};
             return m(first, last);
         }
 
