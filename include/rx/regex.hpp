@@ -5,7 +5,7 @@
 #include <ranges>
 #include <string_view>
 
-#include <rx/etc/util.hpp>
+#include <rx/etc/string_literal.hpp>
 #include <rx/gen/p1306.hpp>
 
 

@@ -69,11 +69,11 @@ namespace rx::detail
         constexpr void range_check(size_type n) const
         {
             if (n >= this->size())
-                throw std::out_of_range("structural_span::range_check: n >= this->size()");
+                throw std::out_of_range("static_span::range_check: n >= this->size()");
         }
 
     public:
-        /* data members (public so that structural_span is structural) */
+        /* data members (public so that static_span is structural) */
         pointer data_{ nullptr };
         size_type size_{ 0 };
     };

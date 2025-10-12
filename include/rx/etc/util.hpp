@@ -79,18 +79,6 @@ namespace rx::detail
     template<typename CharT>
     concept char_is_multibyte = char_is_utf8<CharT> or char_is_utf16<CharT>;
 
-    template<typename CharT, std::size_t N>
-    struct string_literal
-    {
-        using char_type = CharT;
-
-        constexpr string_literal(const CharT (&str)[N])
-        {
-            std::copy_n(str, N, value.begin());
-        }
-
-        std::array<CharT, N> value;
-    };
 
     template<typename V, typename T, std::size_t I = 0>
     struct index_of_impl : std::conditional_t<std::same_as<T, std::variant_alternative_t<I, V>>,

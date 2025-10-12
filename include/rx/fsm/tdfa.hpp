@@ -125,4 +125,5 @@ namespace rx::detail
 }
 
 #include <rx/fsm/tdfa.tpp>
-#include <rx/fsm/tdfa_opt.tpp>
+#include <rx/fsm/regoptimise.tpp>
+#include <rx/fsm/minimise.tpp>

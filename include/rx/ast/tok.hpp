@@ -8,8 +8,8 @@
 #include <type_traits>
 #include <variant>
 
+#include <rx/api/regex_error.hpp>
 #include <rx/ast/charclass.hpp>
-#include <rx/etc/error.hpp>
 #include <rx/etc/util.hpp>
 
 

@@ -5,8 +5,8 @@
 #include <limits>
 #include <ranges>
 
+#include <rx/api/regex_error.hpp>
 #include <rx/ast/capstack.hpp>
-#include <rx/etc/error.hpp>
 
 
 namespace rx::detail::parser

@@ -10,8 +10,8 @@
 #include <utility>
 #include <variant>
 
+#include <rx/api/regex_error.hpp>
 #include <rx/etc/captures.hpp>
-#include <rx/etc/error.hpp>
 
 
 namespace rx::detail

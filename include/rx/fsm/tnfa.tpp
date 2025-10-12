@@ -8,7 +8,7 @@
 #include <ranges>
 #include <utility>
 
-#include <rx/etc/error.hpp>
+#include <rx/api/regex_error.hpp>
 
 namespace rx::detail
 {

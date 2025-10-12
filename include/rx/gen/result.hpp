@@ -8,8 +8,8 @@
 #include <utility>
 
 #include <rx/api/submatch.hpp>
+#include <rx/etc/string_literal.hpp>
 #include <rx/gen/compile.hpp>
-#include <rx/gen/nttpc.hpp>
 #include <rx/fsm/flags.hpp>
 
 

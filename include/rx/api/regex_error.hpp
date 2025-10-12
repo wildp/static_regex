@@ -3,6 +3,8 @@
 #include <stdexcept>
 
 
+// TODO: replace with single regex_error?
+
 namespace rx
 {
     class pattern_error : public std::runtime_error
