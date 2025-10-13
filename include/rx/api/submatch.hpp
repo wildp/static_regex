@@ -22,12 +22,14 @@ namespace rx
     {
     public:
         using value_type                = std::iter_value_t<I>;
-        using iterator                  = I;
-        using reverse_iterator          = std::reverse_iterator<iterator>;
 #if __cpp_lib_ranges_as_const > 202311L
-        using const_iterator            = std::const_iterator<iterator>;
-        using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
+        using const_iterator            = std::const_iterator<I>;
+#else
+        using const_iterator            = I; /* semantically incorrect workaround */
 #endif
+        using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
+        using iterator                  = const_iterator;
+        using reverse_iterator          = const_reverse_iterator;
 
         constexpr submatch() = default;
 
@@ -35,22 +37,20 @@ namespace rx
 
         [[nodiscard]] constexpr bool matched() const noexcept { return matched_; }
         [[nodiscard]] explicit constexpr operator bool() const noexcept { return this->matched(); }
-        [[nodiscard]] constexpr bool empty() const noexcept { return this->matched() ? begin_ == end_ : true; };
-        [[nodiscard]] constexpr std::size_t size() const { return this->matched() ? std::ranges::distance(begin_, end_) : 0; };
+        [[nodiscard]] constexpr bool empty() const noexcept { return this->matched() ? first_ == last_ : true; };
+        [[nodiscard]] constexpr std::size_t size() const { return this->matched() ? std::ranges::distance(first_, last_) : 0; };
         [[nodiscard]] constexpr std::size_t length() const { return this->size(); };
 
         /* iterators */
 
-        [[nodiscard]] constexpr iterator begin() const noexcept { return begin_; }
-        [[nodiscard]] constexpr iterator end() const noexcept { return end_; }
-        [[nodiscard]] constexpr reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(this->end()); }
-        [[nodiscard]] constexpr reverse_iterator rend() const noexcept { return std::make_reverse_iterator(this->begin()); }
-#if __cpp_lib_ranges_as_const > 202311L
-        [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return std::make_const_iterator(begin_); }
-        [[nodiscard]] constexpr const_iterator cend() const noexcept { return std::make_const_iterator(end_); }
-        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept { return std::make_reverse_iterator(this->cend()); }
-        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept { return std::make_reverse_iterator(this->cbegin()); }
-#endif
+        [[nodiscard]] constexpr const_iterator begin() const noexcept { return first_; }
+        [[nodiscard]] constexpr const_iterator end() const noexcept { return last_; }
+        [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return this->begin(); }
+        [[nodiscard]] constexpr const_iterator cend() const noexcept { return this->end(); }
+        [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(this->cend()); }
+        [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept { return std::make_reverse_iterator(this->cbegin()); }
+        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept { return this->rend(); }
+        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept { return this->rbegin(); }
 
         /* structured binding support */
 
@@ -63,9 +63,9 @@ namespace rx
 
         /* conversion */
 
-        [[nodiscard]] constexpr std::basic_string<value_type> str() const { if (this->matched()) return { begin_, end_ }; return {}; }
+        [[nodiscard]] constexpr std::basic_string<value_type> str() const { if (this->matched()) return { first_, last_ }; return {}; }
         [[nodiscard]] constexpr operator std::basic_string<value_type>() const { return this->str(); }
-        [[nodiscard]] constexpr std::basic_string_view<value_type> view() const { if (this->matched())  return { begin_, end_ }; return {}; }
+        [[nodiscard]] constexpr std::basic_string_view<value_type> view() const { if (this->matched())  return { first_, last_ }; return {}; }
         [[nodiscard]] constexpr operator std::basic_string_view<value_type>() const { return this->view(); }
 
         /* operators */
@@ -75,25 +75,25 @@ namespace rx
             return (lhs.matched() and rhs.matched()) ? std::ranges::equal(lhs, rhs) : lhs.matched() == rhs.matched();
         }
 
-        template<class Traits, class Alloc>
+        template<typename Traits, typename Alloc>
         [[nodiscard]] friend constexpr bool operator==(const submatch& lhs, const std::basic_string<value_type, Traits, Alloc>& rhs)
         {
             return lhs.matched() ? std::ranges::equal(lhs, rhs) : false;
         }
 
-        template<class Traits, class Alloc>
+        template<typename Traits, typename Alloc>
         [[nodiscard]] friend constexpr bool operator==(const std::basic_string<value_type, Traits, Alloc>& lhs, const submatch& rhs)
         {
             return rhs.matched() ? std::ranges::equal(lhs, rhs) : false;
         }
 
-        template<class Traits>
+        template<typename Traits>
         [[nodiscard]] friend constexpr bool operator==(const submatch& lhs, const std::basic_string_view<value_type, Traits>& rhs)
         {
             return lhs.matched() ? std::ranges::equal(lhs, rhs) : false;
         }
 
-        template<class Traits>
+        template<typename Traits>
         [[nodiscard]] friend constexpr bool operator==(const std::basic_string_view<value_type, Traits>& lhs, const submatch& rhs)
         {
             return rhs.matched() ? std::ranges::equal(lhs, rhs) : false;
@@ -105,53 +105,53 @@ namespace rx
                                                      : lhs.matched() <=> rhs.matched();
         }
 
-        template<class Traits, class Alloc>
+        template<typename Traits, typename Alloc>
         [[nodiscard]] friend constexpr auto operator<=>(const submatch& lhs, const std::basic_string<value_type, Traits, Alloc>& rhs)
         {
             return lhs.matched() ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end()) : std::strong_ordering::less;
         }
 
-        template<class Traits, class Alloc>
+        template<typename Traits, typename Alloc>
         [[nodiscard]] friend constexpr auto operator<=>(const std::basic_string<value_type, Traits, Alloc>& lhs, const submatch& rhs)
         {
             return rhs.matched() ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end()) : std::strong_ordering::greater;
         }
 
-        template<class Traits>
+        template<typename Traits>
         [[nodiscard]] friend constexpr auto operator<=>(const submatch& lhs, const std::basic_string_view<value_type, Traits>& rhs)
         {
             return lhs.matched() ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end()) : std::strong_ordering::less;
         }
 
-        template<class Traits>
+        template<typename Traits>
         [[nodiscard]] friend constexpr auto operator<=>(const std::basic_string_view<value_type, Traits>& lhs, const submatch& rhs)
         {
             return rhs.matched() ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end()) : std::strong_ordering::greater;
         }
 
-        template<class CharT, class Traits>
-        [[nodiscard]] friend std::basic_ostream<CharT, Traits> operator<<(std::basic_ostream<CharT,Traits>& os, const submatch& m )
+        template<typename CharT, typename Traits>
+        [[nodiscard]] friend std::basic_ostream<CharT, Traits> operator<<(std::basic_ostream<CharT,Traits>& os, const submatch& m)
         {
             return os << m.view();
         }
 
         /* misc */
 
-        void swap(submatch& other) noexcept(std::is_nothrow_swappable_v<I>)
+        void swap(submatch& other) noexcept(std::is_nothrow_swappable_v<iterator>)
         {
-            std::swap(begin_, other.begin_);
-            std::swap(end_, other.end_);
+            std::swap(first_, other.first_);
+            std::swap(last_, other.last_);
             std::swap(matched_, other.matched_);
         }
 
     private:
-        constexpr submatch(iterator begin, iterator end) :
-            begin_{ begin }, end_{ end }, matched_{ true } {}
+        constexpr submatch(iterator first, iterator last) :
+            first_{ first }, last_{ last }, matched_{ true } {}
 
         friend class detail::compile_time_match_result_base<I>;
 
-        iterator begin_;
-        iterator end_;
+        const_iterator first_;
+        const_iterator last_;
         bool matched_{ false };
     };
 }

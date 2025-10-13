@@ -65,7 +65,7 @@ namespace
     {
         using namespace rx::literals;
         auto matcher = "Hello World"_rx;
-        std::println("{}", matcher.match("Hello World").has_value());
+        std::println("{}", matcher.match("Hello World"));
     }
 
     [[maybe_unused]] void t2(std::string_view pat, const std::vector<std::string_view>& test)
@@ -302,8 +302,8 @@ int main()
     // t8s("Wor(ld)"_rx, { "World World World", "Hello World", "World" });
     // t8m("a(bc)d"_rx, { "abcd" });
 
-    // t8m("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
-    // t8m("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
+    t8m("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
+    t8m("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
 
     // t8s("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
     // t8s("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
@@ -338,7 +338,7 @@ int main()
     // t8w("<!--.*?-->"_rx, { "<!-- Hello -->", "<!-- Hello --> -->" });
 
     // t4("a{2,5}?", {});
-    t4("a{2,5}?", { "a", "aa", "aaa", "aaaa", "aaaaa" });
+    // t4("a{2,5}?", { "a", "aa", "aaa", "aaaa", "aaaaa" });
 
     return 0;
 }

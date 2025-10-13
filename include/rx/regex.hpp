@@ -30,7 +30,7 @@ namespace rx
         requires std::convertible_to<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] constexpr auto match(R&& r) const
         {
-            return match(std::ranges::begin(r), std::ranges::end(r));
+            return match(std::ranges::cbegin(r), std::ranges::cend(r));
         }
 
         template<typename CharT>
@@ -53,7 +53,7 @@ namespace rx
         requires std::convertible_to<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] constexpr auto starts_with(R&& r) const
         {
-            return starts_with(std::ranges::begin(r), std::ranges::end(r));
+            return starts_with(std::ranges::cbegin(r), std::ranges::cend(r));
         }
 
         template<typename CharT>
@@ -76,7 +76,7 @@ namespace rx
         requires std::convertible_to<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] constexpr auto search(R&& r) const
         {
-            return search(std::ranges::begin(r), std::ranges::end(r));
+            return search(std::ranges::cbegin(r), std::ranges::cend(r));
         }
 
         template<typename CharT>

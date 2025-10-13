@@ -38,22 +38,23 @@ namespace rx
         using base = detail::compile_time_match_result_base<I>;
 
     public:
-        using size_type = std::size_t;
-        using char_type = std::remove_cv_t<std::iter_value_t<I>>;
-        using submatch_type = submatch<I>;
+        using size_type         = std::size_t;
+        using char_type         = std::remove_cv_t<std::iter_value_t<I>>;
+        using submatch_type     = const submatch<I>;
         static constexpr size_type submatch_count{ C.capture_count() };
 
         /* iterator implementation */
 
         class proxy_iterator_impl
         {
-            using it = proxy_iterator_impl;
-            using parent_type = compile_time_match_result;
             friend class compile_time_match_result;
+            
+            using it                = proxy_iterator_impl;
+            using parent_type       = compile_time_match_result;
 
         public:
-            using difference_type = std::ptrdiff_t;
-            using value_type = submatch_type;
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = submatch_type;
 
             constexpr proxy_iterator_impl() = default;
             
@@ -83,14 +84,14 @@ namespace rx
 
         static_assert(std::random_access_iterator<proxy_iterator_impl>);
 
-        // TODO: add const_iterator and reverse_const_iterator support
-        using iterator = proxy_iterator_impl;
-        using reverse_iterator = std::reverse_iterator<iterator>;
+        using const_iterator            = proxy_iterator_impl;
+        using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
+        using iterator                  = const_iterator;
+        using reverse_iterator          = const_reverse_iterator;
         
         /* observers */
 
-        [[nodiscard]] constexpr bool has_value() const { return static_cast<bool>(match_end_); }
-        [[nodiscard]] explicit constexpr operator bool() const { return this->has_value(); }
+        [[nodiscard]] explicit(false) constexpr operator bool() const { return this->has_value(); }
         [[nodiscard]] constexpr size_type size() const { return (this->has_value()) ? submatch_count : 0; }
 
         /* array-like access */
@@ -111,12 +112,14 @@ namespace rx
 
         /* iterator support */
 
-        [[nodiscard]] constexpr iterator begin() const { return (this->has_value()) ? iterator{ this, 0 } : this->end(); }
-        [[nodiscard]] constexpr iterator end() const { return { this, this->size() }; } 
-        [[nodiscard]] constexpr reverse_iterator rbegin() const { return std::make_reverse_iterator(this->end()); }
-        [[nodiscard]] constexpr reverse_iterator rend() const { return std::make_reverse_iterator(this->begin()); } 
-
-        // TODO: add cbegin et al
+        [[nodiscard]] constexpr const_iterator begin() const { return (this->has_value()) ? const_iterator{ this, 0 } : this->end(); }
+        [[nodiscard]] constexpr const_iterator end() const { return { this, this->size() }; }
+        [[nodiscard]] constexpr const_iterator cbegin() const { return this->begin(); }
+        [[nodiscard]] constexpr const_iterator cend() const { return this->end(); } 
+        [[nodiscard]] constexpr const_reverse_iterator rbegin() const { return std::make_reverse_iterator(this->end()); }
+        [[nodiscard]] constexpr const_reverse_iterator rend() const { return std::make_reverse_iterator(this->begin()); }
+        [[nodiscard]] constexpr const_reverse_iterator crbegin() const { return this->rbegin(); }
+        [[nodiscard]] constexpr const_reverse_iterator crend() const { return this->rend(); } 
 
         /* tuple support */
 
@@ -219,6 +222,11 @@ namespace rx
         {
             if (n >= this->size())
                 throw std::out_of_range("compile_time_match_result::range_check: n >= this->size()");
+        }
+
+        [[nodiscard]] constexpr bool has_value() const
+        {
+            return static_cast<bool>(match_end_);
         }
 
         [[no_unique_address]] registers_type reg_;
