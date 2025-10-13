@@ -3,7 +3,6 @@
 #include <concepts>
 #include <cstddef>
 #include <ranges>
-#include <string_view>
 
 #include <rx/etc/string_literal.hpp>
 #include <rx/gen/p1306.hpp>
@@ -37,7 +36,9 @@ namespace rx
         requires std::convertible_to<CharT, char_type>
         [[nodiscard]] constexpr auto match(const CharT* cstr) const
         {
-            return match(std::basic_string_view<char_type>{ cstr });
+            using namespace detail;
+            p1306_matcher<Pattern, default_fsm_flags::full_match> m{};
+            return m(cstr);
         }
 
         template<std::bidirectional_iterator I>
@@ -60,7 +61,9 @@ namespace rx
         requires std::convertible_to<CharT, char_type>
         [[nodiscard]] constexpr auto starts_with(const CharT* cstr) const
         {
-            return starts_with(std::basic_string_view<char_type>{ cstr });
+            using namespace detail;
+            p1306_matcher<Pattern, default_fsm_flags::partial_match> m{};
+            return m(cstr);
         }
 
         template<std::bidirectional_iterator I>
@@ -83,7 +86,9 @@ namespace rx
         requires std::convertible_to<CharT, char_type>
         [[nodiscard]] constexpr auto search(const CharT* cstr) const
         {
-            return search(std::basic_string_view<char_type>{ cstr });
+            using namespace detail;
+            p1306_matcher<Pattern, default_fsm_flags::search> m{};
+            return m(cstr);
         }
     };
 

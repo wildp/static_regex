@@ -5,12 +5,15 @@
 #include <iterator>
 #include <limits>
 #include <meta>
+#include <string>
 #include <type_traits>
+#include <utility>
 
 #include <rx/api/submatch.hpp>
 #include <rx/etc/string_literal.hpp>
 #include <rx/gen/compile.hpp>
 #include <rx/gen/result.hpp>
+
 
 namespace rx::detail
 {
@@ -99,21 +102,10 @@ namespace rx::detail
             {
                 template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(DFAState))
                 {
-                    if constexpr (tr.upper == tr.lower)
+                    if (tr.lower <= *it and *it <= tr.upper)
                     {
-                        if (tr.lower == *it)
-                        {
-                            register_operations<tr.op_index>(it, res);
-                            [[clang::musttail]] return state<tr.next>(it + 1, res, last, fallback_state, fallback_it);
-                        }   
-                    }
-                    else
-                    {
-                        if (tr.lower <= *it and *it <= tr.upper)
-                        {
-                            register_operations<tr.op_index>(it, res);
-                            [[clang::musttail]] return state<tr.next>(it + 1, res, last, fallback_state, fallback_it);
-                        }
+                        register_operations<tr.op_index>(it, res);
+                        [[clang::musttail]] return state<tr.next>(it + 1, res, last, fallback_state, fallback_it);
                     }
                 }
             }
@@ -122,8 +114,43 @@ namespace rx::detail
                 return fallback(res, fallback_state, fallback_it);
         }
 
+        template<std::size_t DFAState, typename CharT>
+        static constexpr void state(const CharT* ptr, result<const CharT*>& res, std::size_t fallback_state, const CharT* fallback_ptr)
+        { 
+            if constexpr (Flags.enable_fallback and std::ranges::binary_search(DFA.fallback_nodes, DFAState))
+            {
+                fallback_state = DFAState;
+                fallback_ptr = ptr;
+            }
+
+            if (*ptr == '\0')
+            {
+                if constexpr (constexpr auto key{ std::ranges::lower_bound(DFA.final_nodes, DFAState) };
+                              key != DFA.final_nodes.end() and *key == DFAState)
+                {
+                    register_operations<DFA.final_node_regops[key - DFA.final_nodes.begin()]>(ptr, res);
+                    res.match_end_ = ptr;
+                    return;
+                }
+            }
+            else
+            {
+                template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(DFAState))
+                {
+                    if (tr.lower <= *ptr and *ptr <= tr.upper)
+                    {
+                        register_operations<tr.op_index>(ptr, res);
+                        [[clang::musttail]] return state<tr.next>(ptr + 1, res, fallback_state, fallback_ptr);
+                    }
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                return fallback(res, fallback_state, fallback_ptr);
+        }
+
         template<typename I>
-        static constexpr bool next_state(I it, result<I>& res, std::size_t state, const I last, std::size_t fallback_state, I fallback_it)
+        static constexpr bool next_state(I& it, result<I>& res, std::size_t& state, const I last, std::size_t& fallback_state, I& fallback_it)
         {
             template for (constexpr std::size_t dfa_state : std::define_static_array(make_iota(DFA.nodes.size())))
             {
@@ -149,25 +176,12 @@ namespace rx::detail
                     {
                         template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(dfa_state))
                         {
-                            if constexpr (tr.upper == tr.lower)
+                            if (tr.lower <= *it and *it <= tr.upper)
                             {
-                                if (tr.lower == *it)
-                                {
-                                    register_operations<tr.op_index>(it, res);
-                                    ++it;
-                                    state = tr.next;
-                                    return true;
-                                }
-                            }
-                            else
-                            {
-                                if (tr.lower <= *it and *it <= tr.upper)
-                                {
-                                    register_operations<tr.op_index>(it, res);
-                                    ++it;
-                                    state = tr.next;
-                                    return true;
-                                }
+                                register_operations<tr.op_index>(it, res);
+                                 ++it;
+                                state = tr.next;
+                                return true;
                             }
                         }
                     }
@@ -178,28 +192,55 @@ namespace rx::detail
                     return false;
                 }
             }
-            return false;
+            std::unreachable();
         }
 
     public:
         template<std::bidirectional_iterator I>
-        requires (std::convertible_to<std::iter_value_t<I>, char_type>)
+        requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+                  and not (std::contiguous_iterator<I> and not std::is_pointer_v<I>
+                           and requires (I i) { std::char_traits<std::iter_value_t<I>>{}; } ))
         [[nodiscard]] static constexpr auto operator()(const I first, const I last)
         {
             result<I> res{ first };
+            state<DFA.match_start>(first, res, last, fallback_disabled, first);
+            return res;
+        }
 
-            // if not consteval
-            {
-                state<DFA.match_start>(first, res, last, fallback_disabled, first);
-            }
-            // else
-            // {
-            //     /* TODO: use this implementation if necessary */
-            //     I it{ first };
-            //     std::size_t s{ DFA.match_start };
-            //     while (next_state(it, res, s, last, fallback_disabled, first));
-            // }
+        template<std::contiguous_iterator I>
+        requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+                  and not std::is_pointer_v<I>
+                  and requires (I i) { std::char_traits<std::iter_value_t<I>>{}; } )
+        [[nodiscard]] static constexpr auto operator()(const I first, const I last)
+        {
+            /* convert contiguous ranges to std::string_view for improved performance */
+            using sv_type = std::basic_string_view<std::iter_value_t<I>>;
+            const sv_type sv{ first, last };
+            return operator()(sv.begin(), sv.end());
+            // TODO: consider converting result<sv_type::const_iterator> to result<I> (?)
+        }
 
+        template<typename CharT>
+        requires (std::is_nothrow_convertible_v<CharT, char_type>)  
+        [[nodiscard]] static constexpr auto operator()(const CharT* cstr)
+        {
+            result<const CharT*> res{ cstr };
+            state<DFA.match_start>(cstr, res, fallback_disabled, cstr);
+            return res;
+        }
+
+        template<std::bidirectional_iterator I>
+        requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>)
+        [[nodiscard]] static constexpr auto operator[](const I first, const I last)
+        {
+            /* TODO: use this backup implementation only if necessary */
+
+            result<I> res{ first };
+            I it{ first };
+            I fallback_it{ first };
+            std::size_t state{ DFA.match_start };
+            std::size_t fallback_state{ fallback_disabled };
+            while (next_state(it, res, state, last, fallback_state, fallback_it));
             return res;
         }
     };
