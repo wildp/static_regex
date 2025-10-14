@@ -19,7 +19,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     class opt;
 
-        using reg_t = std::uint_least32_t;
+    using reg_t = std::uint_least32_t;
 
     struct regop
     {
@@ -28,6 +28,7 @@ namespace rx::detail::tdfa
             bool val; /* use false for nil and true for current */
 
             friend constexpr bool operator==(set, set) noexcept = default;
+            friend constexpr std::strong_ordering operator<=>(set, set) noexcept = default;
         };
 
         struct copy
@@ -35,6 +36,7 @@ namespace rx::detail::tdfa
             reg_t src;
 
             friend constexpr bool operator==(copy, copy) noexcept = default;
+            friend constexpr std::strong_ordering operator<=>(copy, copy) noexcept = default;
         };
 
         using op_t = std::variant<set, copy>;
@@ -47,7 +49,8 @@ namespace rx::detail::tdfa
         constexpr regop(reg_t destination, op_t operation) :
             op{ operation }, dst{ destination } {}
 
-        friend constexpr bool operator==(regop lhs, regop rhs) = default;
+        friend constexpr bool operator==(regop, regop) = default;
+        friend constexpr std::strong_ordering operator<=>(regop, regop) noexcept = default;
     };
 
     using regops_t = std::vector<regop>;
