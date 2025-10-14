@@ -36,7 +36,7 @@ namespace
     {
         rx::detail::expr_tree<CharT> ast{ pattern };
         ast.insert_search_prefix();
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::search };
+        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::search_single };
         const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
         auto match_result{ tdfa.partial_match(std::string_view{ str }) };
 

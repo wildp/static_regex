@@ -71,7 +71,7 @@ namespace rx
         [[nodiscard]] constexpr auto search(const I first, const I last) const
         {
             using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search> m{};
+            p1306_matcher<Pattern, default_fsm_flags::search_single> m{};
             return m(first, last);
         }
 
@@ -87,7 +87,7 @@ namespace rx
         [[nodiscard]] constexpr auto search(const CharT* cstr) const
         {
             using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search> m{};
+            p1306_matcher<Pattern, default_fsm_flags::search_single> m{};
             return m(cstr);
         }
     };
