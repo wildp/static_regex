@@ -2,91 +2,40 @@
 #include <meta>
 
 #include <rx/regex.hpp>
+
 #include "tests/headers/printable_tree.hpp"
 #include "tests/headers/printable_tdfa.hpp"
 #include "tests/headers/tdfa_matcher.hpp"
 #include "tests/headers/tnfa_matcher.hpp"
 #include "tests/headers/tree_matcher.hpp"
 
-// template<typename CharT>
-// struct std::formatter<rx::detail::char_class_impl<CharT>> {
-//     constexpr auto parse(std::format_parse_context& ctx) {
-//         return ctx.begin();
-//     }
-
-//     auto format(const rx::detail::char_class_impl<CharT>& obj, std::format_context& ctx) const {
-//         return std::format_to(ctx.out(), "[cc]");
-//     }
-// };
-
-
-// template<typename T>
-// std::string print_struct(const T& value)
-// {
-//     std::string result{ "{" };
-
-//     template for (constexpr auto mem : std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked())))
-//     {
-//         if constexpr (std::is_enum_v<typename [:std::meta::type_of(mem):]>)
-//         {
-//             result += std::format(" .{}={},", std::define_static_string(std::meta::display_string_of(mem)), rx::detail::enum_to_string(value.[:mem:]));
-//         }
-//         else
-//         {
-//             result += std::format(" .{}={},", std::define_static_string(std::meta::display_string_of(mem)), value.[:mem:]);
-//         }
-//     }
-
-//     // if constexpr (std::define_static_array(std::meta::nonstatic_data_members_of(^^T, ctx)).size() > 0)
-//     //     result.pop_back();
-//     result += " }";
-//     return result;
-// }
-
-// template<typename... Ts>
-// std::string variant_contents(const std::variant<Ts...>& value)
-// {
-//     template for (constexpr auto e : { (^^Ts)... })
-//     {
-//         if (std::holds_alternative<typename [:e:]>(value))
-//         {
-//             return std::format("{}: {}", std::define_static_string(std::meta::display_string_of(e)), print_struct(std::get<typename [:e:]>(value)));
-//         }
-//     }
-
-//     return "<error>";
-// }
 
 namespace
 {
     using namespace rx::testing;
+    namespace dff = rx::detail::default_fsm_flags;
 
-    [[maybe_unused]] void t1()
+    struct tester_info
     {
-        using namespace rx::literals;
-        auto matcher = "Hello World"_rx;
-        std::println("{}", matcher.match("Hello World"));
-    }
+        int stage{ 0 };[[maybe_unused]] 
+        rx::detail::parser_flags parse{};
+        rx::detail::fsm_flags fsm{ dff::full_match };
+        bool dbgok : 1 { false };
+        bool dbghc : 1 { false };
+        bool otags : 1 { false };
+        bool ptree : 1 { true };
+        bool ptags : 1 { false };
+        bool ptdfa : 1 { false };
+        bool pdfao : 1 { false };
+        bool pdfam : 1 { false };
+    };
 
-    [[maybe_unused]] void t2(std::string_view pat, const std::vector<std::string_view>& test)
+    template<typename M>
+    [[maybe_unused]] void print_match_results(const M& m, const std::vector<std::string_view>& tests)
     {
-        printable<rx::detail::expr_tree<char>> tmp{ pat };
-        std::println("Pattern: {}", tmp.to_pattern());
-
-        // const auto& ci{ tmp.get_capture_info() };
-        // const auto cc{ ci.capture_count() };
-        // for (std::size_t i{ 0 }; i < cc; ++i)
-        // {
-        //     auto [beg, end]{ ci.lookup(i) };
-        //     for (const auto& e : std::vector(beg, end))
-        //         std::println("{}: {}+{}, {}+{}", i, e.first.tag_number, e.first.offset, e.second.tag_number, e.second.offset);
-        // }
-
-        rx::testing::tnfa_matcher<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
-
-        for (auto sv : test)
+        for (auto sv : tests)
         {
-            auto result{ tnfa.match(sv) };
+            auto result{ m.match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -95,135 +44,107 @@ namespace
         }
     }
 
-    [[maybe_unused]] void t3(std::string_view pat, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void print_capture_info(const rx::detail::capture_info& ci)
     {
-        rx::detail::parser_flags f{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true };
-        printable<tree_matcher<char>> tree{ pat, f };
-
-        std::println("Pattern: {}", tree.to_pattern());
-
-        for (auto sv : test)
-        {
-            auto result{ tree.match(sv) };
-
-            if (result.has_value())
-                std::println("'{}': Match: {}", sv, *result);
-            else
-                std::println("'{}': No Match", sv);
-        }
-    }
-
-    [[maybe_unused]] void t4(std::string_view pat, const std::vector<std::string_view>& test)
-    {
-        printable<rx::detail::expr_tree<char>> tmp{ pat };
-        std::println("Pattern: {}", tmp.to_pattern());
-        
-        rx::testing::tnfa_matcher<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
-        rx::testing::tdfa_matcher<char> tdfa{ tnfa };
-
-        for (auto sv : test)
-        {
-            auto result{ tdfa.match(sv) };
-
-            if (result.has_value())
-                std::println("'{}': Match: {}", sv, *result);
-            else
-                std::println("'{}': No Match", sv);
-        }
-    }
-
-    [[maybe_unused]] void t5(std::string_view pat, const std::vector<std::string_view>& test)
-    {
-        printable<rx::detail::expr_tree<char>> tmp{ pat };
-        std::println("Pattern: {}", tmp.to_pattern());
-
-        const auto& ci{ tmp.get_capture_info() };
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
             for (const auto& elem: ci.lookup(i))
                 std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
-
-        tmp.optimise_tags();
-
-        // const auto& ci{ tmp.get_capture_info() };
-        for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
-            for (const auto& elem: ci.lookup(i))
-                std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
-
-        rx::detail::tagged_nfa<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
-        printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
-        std::println("Pattern ok\n");
-
-        tdfa.print();
-        std::println("\n");
-
-        for (auto sv : test)
-        {
-            auto result{ tdfa.match(sv) };
-
-            if (result.has_value())
-                std::println("'{}': Match: {}", sv, *result);
-            else
-                std::println("'{}': No Match", sv);
-        }
     }
 
-    [[maybe_unused]] void t6(std::string_view pat, const std::vector<std::string_view>& test)
+
+    template<tester_info Flags = {}>
+    struct tester
     {
-        printable<rx::detail::expr_tree<char>> tmp{ pat };
-        std::println("Pattern: {}", tmp.to_pattern());
-        tmp.optimise_tags();
-        rx::detail::tagged_nfa<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
-        printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
-        std::println("Pattern ok\n");
+        using test_type = void;
 
-        tdfa.optimise_registers();
-        std::println("Opt ok\n");
+        using tree_base = std::conditional_t<(Flags.stage == 0), tree_matcher<char>, rx::detail::expr_tree<char>>;
+        using tnfa_base = std::conditional_t<(Flags.stage == 1), tnfa_matcher<char>, rx::detail::tagged_nfa<char>>;
+        using tdfa_base = std::conditional_t<(Flags.stage >= 2), tdfa_matcher<char>, rx::detail::tagged_dfa<char>>;
+        using tree_type = std::conditional_t<(Flags.ptree), printable<tree_base>, tree_base>;
+        using tnfa_type = tnfa_base;
+        using tdfa_type = std::conditional_t<(Flags.ptdfa or Flags.pdfao or Flags.pdfam), printable<tdfa_base>, tdfa_base>;
 
-        tdfa.print();
-        std::println("\n");
-
-        for (auto sv : test)
+        void operator()(std::string_view pat, const std::vector<std::string_view>& test) const
         {
-            auto result{ tdfa.match(sv) };
+            namespace rdt = rx::detail::tdfa;
 
-            if (result.has_value())
-                std::println("'{}': Match: {}", sv, *result);
+            tree_type tree{ pat, Flags.parse };
+            
+            if constexpr (Flags.fsm.is_search) tree.insert_search_prefix();
+
+            if constexpr (Flags.ptree) std::println("Pattern: {}", tree.to_pattern());
+
+            if constexpr (Flags.ptags) print_capture_info(tree.get_capture_info());
+
+            if constexpr (Flags.otags)
+            {
+                tree.optimise_tags();
+                if constexpr (Flags.ptags) print_capture_info(tree.get_capture_info());
+            }
+
+            if constexpr (Flags.stage >= 1)
+            {
+                tnfa_type tnfa{ tree, Flags.fsm };
+
+                if constexpr (Flags.stage >= 2)
+                {
+                    tdfa_type tdfa{ tnfa };
+
+                    if constexpr (Flags.dbgok) std::println("Pattern ok\n"); 
+                    if constexpr (Flags.ptdfa) { tdfa.print(); std::println("\n"); } 
+
+                    if constexpr (Flags.stage >= 3)
+                    {
+                        tdfa.optimise_registers();
+
+                        if constexpr (Flags.dbgok) std::println("Opt ok\n");
+                        if constexpr (Flags.pdfao) { tdfa.print(); std::println("\n"); } 
+
+                        if constexpr (Flags.stage == 4)
+                        {
+                            rdt::min<char>::compact_regop_blocks(tdfa);
+
+                            if constexpr (Flags.dbgok) std::println("Regcompact ok\n");
+                            if constexpr (Flags.pdfam) { tdfa.print(); std::println("\n"); }
+
+                            if constexpr (Flags.dbghc) { std::println("{}", rdt::min<char>::dry_run(tdfa)); }
+                        }
+                        else if constexpr (Flags.stage >= 5)
+                        {
+                            tdfa.minimise_states();
+                            
+                            if constexpr (Flags.dbgok) std::println("Min ok\n");
+                            if constexpr (Flags.pdfam) { tdfa.print(); std::println("\n"); }
+                        }
+                    }
+
+                    print_match_results(tdfa, test);
+                }
+                else
+                {
+                    print_match_results(tnfa, test);
+                }
+            }
             else
-                std::println("'{}': No Match", sv);
+            {
+                print_match_results(tree, test);
+            }
         }
-    }
+    };
 
-    [[maybe_unused]] void t7(std::string_view pat, const std::vector<std::string_view>& test)
-    {
-        printable<rx::detail::expr_tree<char>> tmp{ pat };
-        tmp.insert_search_prefix();
-        std::println("Pattern: {}", tmp.to_pattern());
-        tmp.optimise_tags();
-
-        rx::detail::tagged_nfa<char> tnfa{ tmp, rx::detail::default_fsm_flags::full_match };
-        printable<rx::testing::tdfa_matcher<char>> tdfa{ tnfa };
-        std::println("Pattern ok\n");
-
-        tdfa.print();
-        tdfa.optimise_registers();
-        std::println("Opt ok\n");
-
-        tdfa.print();
-        std::println("\n");
-
-        for (auto sv : test)
-        {
-            auto result{ tdfa.match(sv) };
-
-            if (result.has_value())
-                std::println("{:?}: Match: {}", sv, *result);
-            else
-                std::println("{:?}: No Match", sv);
-        }
-    }
+    [[maybe_unused]] constexpr auto t0 = tester<{ .stage=1 }>{};
+    [[maybe_unused]] constexpr auto t1 = tester<{ .stage=0, .parse{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true } }>{};
+    [[maybe_unused]] constexpr auto t2 = tester<{ .stage=2 }>{};
+    [[maybe_unused]] constexpr auto t3 = tester<{ .stage=2, .dbgok=true, .otags=true, .ptags=true, .ptdfa=true }>{};
+    [[maybe_unused]] constexpr auto t4 = tester<{ .stage=3, .dbgok=true, .otags=true, .pdfao=true }>{};
+    [[maybe_unused]] constexpr auto t5 = tester<{ .stage=3, .fsm=dff::search_single, .dbgok=true, .otags=true, .ptdfa=true, .pdfao=true }>{};
+    [[maybe_unused]] constexpr auto t6 = tester<{ .stage=4, .fsm=dff::partial_match, .dbgok=true, .otags=true, .ptdfa=true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto t7 = tester<{ .stage=4, .dbghc=true, .otags = true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto t8 = tester<{ .stage=5, .dbgok=true, .otags = true, .pdfao=true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto t9 = tester<{ .stage=5, .fsm=dff::partial_match, .dbgok =true, .otags=true, .pdfao=true, .pdfam=true }>{};
 
     template<rx::detail::string_literal S>
-    [[maybe_unused]] void t8m(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void match(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {
@@ -235,7 +156,7 @@ namespace
     }
 
     template<rx::detail::string_literal S>
-    [[maybe_unused]] void t8w(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void starts_with(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {
@@ -247,7 +168,7 @@ namespace
     }
 
     template<rx::detail::string_literal S>
-    [[maybe_unused]] void t8s(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void search(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {
@@ -256,8 +177,7 @@ namespace
             else
                 std::println("{:?}: No Match", sv);
         }
-    }
-    
+    }   
 }
 
 
@@ -265,80 +185,83 @@ int main()
 {
     using namespace rx::literals;
 
-    // t1();
+    // t0("()", { "", "a" });
+    // t0("(a)", { "", "a" });
+    // t0("a(aa)b|(aa)ac", { "aaab", "aaac" });
 
-    // t2("()", { "", "a" });
-    // t2("(a)", { "", "a" });
-    // t2("a(aa)b|(aa)ac", { "aaab", "aaac" });
+    // t1("a(aa)b|(aa)ac", { "aaab", "aaac" });
+    // t1("(a*b)+", { "aaababaaaab" });
+    // t1("a(bb|b)b", { "abb", "abbb" });
+    // t1("(?|(a)|(b)(c))(d)\\3", { "abb", "abbb" });
 
     // t3("a(aa)b|(aa)ac", { "aaab", "aaac" });
-    // t3("(a*b)+", { "aaababaaaab" });
-    // t3("a(bb|b)b", { "abb", "abbb" });
-    // t3("(?|(a)|(b)(c))(d)\\3", { "abb", "abbb" });
+    // t3("(a)*(a|b)b*", {});
+    // t3("(a)*(b)*", {});
+    // t3("(a|b)*b", {});
+    // t3("(a)*", { "", "a", "aa" });
+    // t3("(ab)*", {});
+    // t3("(a)", { "a" });
 
-    // t5("a(aa)b|(aa)ac", { "aaab", "aaac" });
-    // t5("(a)*(a|b)b*", {});
-    // t5("(a)*(b)*", {});
-    // t5("(a|b)*b", {});
-    // t5("(a)*", { "", "a", "aa" });
-    // t5("(ab)*", {});
-    // t5("(a)", { "a" });
+    // t3("(a)+(b)*", {"ab", "abb", "aaabbb" });
+    // t3("(a)+b*|c*", { "ab", "aab" });
 
-    // t5("(a)+(b)*", {"ab", "abb", "aaabbb" });
-    // t5("(a)+b*|c*", { "ab", "aab" });
+    // t4("(?:()a())*()(?:a|()b)()b*", { "ab" });
 
-    // t6("(?:()a())*()(?:a|()b)()b*", { "ab" });
+    // t5("Wor(ld)+", { "Hello World", "WWWorldld" });
 
-    // t7("Wor(ld)+", { "Hello World", "WWWorldld" });
+    // t5("(abc)*", {});
+    // t5("(abc)*|(bcd)+", {});
+    // t5("(abc|g.)+", {});
 
-    // t7("(abc)*", {});
-    // t7("(abc)*|(bcd)+", {});
-    // t7("(abc|g.)+", {});
+    // t5(".abc", {});
 
-    // t7(".abc", {});
+    // match("(?:()a())*()(?:a|()b)()b*"_rx, { "a", "b", "ab", "aaa", "aaabb", "abba", "bbaa" });
+    // match("(?i)a(aa)b|(aa)ac"_rx, { "aAaB", "aAaC" } );
+    // search("Wor(ld)"_rx, { "World World World", "Hello World", "World" });
+    // match("a(bc)d"_rx, { "abcd" });
 
-    // t8m("(?:()a())*()(?:a|()b)()b*"_rx, { "a", "b", "ab", "aaa", "aaabb", "abba", "bbaa" });
-    // t8m("(?i)a(aa)b|(aa)ac"_rx, { "aAaB", "aAaC" } );
-    // t8s("Wor(ld)"_rx, { "World World World", "Hello World", "World" });
-    // t8m("a(bc)d"_rx, { "abcd" });
+    // match("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
+    // match("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
 
-    t8m("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
-    t8m("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
-
-    // t8s("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
-    // t8s("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
+    // search("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
+    // search("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
     
-    // t8w("(ab+c)+?(ab+c|.*d)"_rx, { "abcabbcacd__" });
-    // t8w("(ab+c)+(ab+c|.*d)"_rx, { "abcabbcacd__" });
+    // starts_with("(ab+c)+?(ab+c|.*d)"_rx, { "abcabbcacd__" });
+    // starts_with("(ab+c)+(ab+c|.*d)"_rx, { "abcabbcacd__" });
 
-    // t8s("(ab+c)+?(ab+c)?"_rx, { "aaabacabcabbcac" });
-    // t8s("(ab+c)+(ab+c)?"_rx, { "aaabacabcabbcac" });
+    // search("(ab+c)+?(ab+c)?"_rx, { "aaabacabcabbcac" });
+    // search("(ab+c)+(ab+c)?"_rx, { "aaabacabcabbcac" });
 
     // auto w3c_email_regex = R"([[:alnum:].+/=?^_-]+@[[:alnum:]](?:[[:alnum:]-]{0,61}[[:alnum:]])?(?:\.[[:alnum:]](?:[[:alnum:]-]{0,61}[[:alnum:]])?)+)"_rx;
     // auto simple_email_regex = R"([\w\-\.]+@([\w-]+\.)+[\w-]{2,})"_rx;
-    // t8m(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
-    // t8m(simple_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
-    // t8s(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" }); /* RIP compile times */
+    // match(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
+    // match(simple_email_regex, { "Hello@example.com", "test@example@example", "@example.example" });
+    // search(w3c_email_regex, { "Hello@example.com", "test@example@example", "@example.example" }); /* RIP compile times */
 
-    // t4("[ac]est|best", { "best", "cest" });
+    // t2("[ac]est|best", { "best", "cest" });
 
-    // t3("(a)+a?", { "aa" });
-    // t4("(ab)+?(?:ab)?", { "abab" });
-    // t4("(a)+a?", { "aa" });
+    // t1("(a)+a?", { "aa" });
+    // t2("(ab)+?(?:ab)?", { "abab" });
+    // t2("(a)+a?", { "aa" });
 
-    // t3("(ab+c)+?(ab+c|.*d)", { "abcabbcacd" });
-    // t4("(?s)(ab+c)+?(ab+c|.*d)", { "abcabbcacd" });
+    // t1("(ab+c)+?(ab+c|.*d)", { "abcabbcacd" });
+    // t2("(?s)(ab+c)+?(ab+c|.*d)", { "abcabbcacd" });
 
+    // t0("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
+    // t1("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
     // t2("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
-    // t3("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
-    // t4("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
-    // t6("(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(a|bcdef|g|ab|c|d|e|efg|fg)*)?)?", { "abcdefg", "bcdefg" });
+    // t4("(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(a|bcdef|g|ab|c|d|e|efg|fg)*)?)?", { "abcdefg", "bcdefg" });
 
-    // t8w("(abc)+?a"_rx, { "abcabc", "abcabca" });
-    // t8w("<!--.*?-->"_rx, { "<!-- Hello -->", "<!-- Hello --> -->" });
+    // starts_with("(abc)+?a"_rx, { "abcabc", "abcabca" });
+    // starts_with("<!--.*?-->"_rx, { "<!-- Hello -->", "<!-- Hello --> -->" });
 
-    // t4("a{2,5}?", {});
-    // t4("a{2,5}?", { "a", "aa", "aaa", "aaaa", "aaaaa" });
+    // t2("a{2,5}?", {});
+    // t2("a{2,5}?", { "a", "aa", "aaa", "aaaa", "aaaaa" });
+
+    // t5("abB|AB", { "aaabB", "bbbbbABBB" });
+
+    // t7("abB|AB", {});
+    // t8("abB|AB", {});
 
     return 0;
 }
