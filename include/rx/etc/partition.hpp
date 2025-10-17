@@ -182,6 +182,7 @@ namespace rx::detail
         std::vector<U>  data;
 
         constexpr explicit partition_entry(T lower, T upper) : range{ lower, upper } {}
+        friend constexpr bool operator==(const partition_entry&, const partition_entry&) = default;
     };
 
     template<std::integral T, typename U>
