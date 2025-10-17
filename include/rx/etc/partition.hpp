@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -9,6 +10,7 @@
 // TODO: implement partitioning with contents?
 // TODO: make paritioning even more generic
 // TODO: rewrite to only erase once at end of function
+// TODO: fix correctness of partition_v2
 
 namespace rx::detail
 {
@@ -182,6 +184,7 @@ namespace rx::detail
         std::vector<U>  data;
 
         constexpr explicit partition_entry(T lower, T upper) : range{ lower, upper } {}
+        constexpr explicit partition_entry(T lower, T upper, U initial) requires (std::is_fundamental_v<U>) : range{ lower, upper }, data{ initial } {}
         friend constexpr bool operator==(const partition_entry&, const partition_entry&) = default;
     };
 

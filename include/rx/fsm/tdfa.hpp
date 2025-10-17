@@ -19,6 +19,9 @@ namespace rx::detail::tdfa
     template<typename CharT>
     class opt;
 
+    template<typename CharT>
+    class min;
+
     using reg_t = std::uint_least32_t;
 
     struct regop
@@ -67,7 +70,7 @@ namespace rx::detail::tdfa
     struct transition
     {
         std::size_t next;
-        std::size_t op_index; /* use intmax for no ops */
+        std::size_t op_index; /* use no_transition_regops for no ops */
         CharT lower;
         CharT upper;
     };
@@ -90,10 +93,11 @@ namespace rx::detail
 
         explicit constexpr tagged_dfa(const tnfa_t& tnfa);
         constexpr void optimise_registers();
-        constexpr void to_structural_type();
+        constexpr void minimise_states();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;
+        friend class tdfa::min<char_type>;
 
         template<typename CharT2>
         friend struct tdfa_info;

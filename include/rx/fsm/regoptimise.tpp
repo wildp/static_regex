@@ -171,7 +171,6 @@ namespace rx::detail::tdfa
 
         constexpr opt(std::size_t i = 2) noexcept : iterations_{ i } {};
         constexpr void operator()(tdfa_t& dfa);
-        static constexpr void compact_regop_blocks(tdfa_t& dfa);
 
     private:
         using remap_t = std::vector<reg_t>;
@@ -762,38 +761,6 @@ namespace rx::detail::tdfa
             normalise(dfa);
         }
     }
-
-    template<typename CharT>
-    constexpr void opt<CharT>::compact_regop_blocks(tdfa_t& dfa)
-    {
-        std::vector<std::size_t> regop_block_map(dfa.regops_.size());
-        std::flat_map<regops_t, std::size_t> regop_map;
-        typename tdfa_t::regop_data_t new_regops;
-
-        for (std::size_t i{ 0 }; i < dfa.regops_.size(); ++i)
-        {
-            auto [it, inserted]{ regop_map.try_emplace(dfa.regops_[i], new_regops.size()) };
-            
-            if (inserted)
-                new_regops.emplace_back(dfa.regops_[i]);
-
-            regop_block_map[i] = it->second;
-        }
-
-        /* remap regop block indicies in dfa */
-
-        for (auto& node: dfa.nodes_)
-            for (auto& tr: node.tr)
-                tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : no_transition_regops;
-
-        for (auto it{ dfa.final_nodes_.begin() }, last{ dfa.final_nodes_.end() }; it != last; ++it)
-            it->second = (it->second < regop_block_map.size()) ? regop_block_map[it->second] : no_transition_regops;
-
-        for (auto it{ dfa.fallback_nodes_.begin() }, last{ dfa.fallback_nodes_.end() }; it != last; ++it)
-            it->second = (it->second < regop_block_map.size()) ? regop_block_map[it->second] : no_transition_regops;
-
-        dfa.regops_ = std::move(new_regops);
-    }
 }
 
 namespace rx::detail
@@ -802,6 +769,5 @@ namespace rx::detail
     constexpr void tagged_dfa<CharT>::optimise_registers() 
     {
         std::invoke(tdfa::opt<char_type>{}, *this);
-        tdfa::opt<char_type>::compact_regop_blocks(*this);
     }
 }

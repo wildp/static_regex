@@ -154,6 +154,7 @@ namespace rx::detail
         /* convert to tdfa */
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
+        dfa.minimise_states();
 
         return tdfa_info{ dfa };
     }
