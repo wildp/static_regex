@@ -77,7 +77,7 @@ namespace rx::detail
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
 
         std::vector<stack_elem> stack;
-        stack.emplace_back(match_start, end, ast.root_idx());
+        stack.emplace_back(start_node_, final_node_, ast.root_idx());
 
         while (not stack.empty())
         {
@@ -317,16 +317,6 @@ namespace rx::detail
 
             }
         }
-        
-
-        // TODO: maybe add this in the ast instead of at this stage? 
-
-        /* join search_start to match_start with ".*?t", where t is the start_tag */
-
-        // auto q_tmp{ node_create() };
-        // make_wildcard(substr_start, q_tmp);
-        // epsilon(q_tmp, match_start, 0, tag_count_++);
-        // epsilon(q_tmp, substr_start, 1);
     }
 
 }

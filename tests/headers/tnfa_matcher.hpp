@@ -72,7 +72,7 @@ namespace rx::testing
         }
 
         std::erase_if(new_closure, [this](const closure_entry& e) -> bool {
-            if (e.first == this->end)
+            if (this->node_is_final(e.first))
                 return false;
             return 0 != std::ranges::count_if(this->get_node(e.first).tr,
                                               [](const auto& t) { return not std::holds_alternative<n_tr<CharT>>(t); });
@@ -116,7 +116,7 @@ namespace rx::testing
         using namespace rx::detail;
 
         tag_vector m0(this->tag_count(), no_tag);
-        closure_t c{{ this->match_start, std::move(m0) }};
+        closure_t c{{ this->start_node(), std::move(m0) }};
 
         for (std::size_t k{ 0 }; k < input.size(); ++k)
         {
@@ -128,7 +128,7 @@ namespace rx::testing
         }
 
         c = e_closure(std::move(c), input.size());
-        auto result{ std::ranges::find(c, this->end, &closure_entry::first) };
+        auto result{ std::ranges::find_if(c, [&](std::size_t arg){ return this->node_is_final(arg); }, &closure_entry::first) };
 
         if (result == c.end())
             return {};

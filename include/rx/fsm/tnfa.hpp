@@ -9,12 +9,6 @@
 
 namespace rx::detail
 {
-    template<typename CharT>
-    class tagged_dfa;
-
-    // template<typename CharT>
-    // class multipass_tagged_dfa;
-
     /* tnfa transitions */
 
     template<typename CharT>
@@ -56,9 +50,6 @@ namespace rx::detail
     public:
         explicit constexpr tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags);
 
-        friend class tagged_dfa<CharT>;
-        // friend class multipass_tagged_dfa<CharT>;
-
     private:
         using ast_t = expr_tree<CharT>;
 
@@ -76,19 +67,22 @@ namespace rx::detail
         };
     
     public:
-        static constexpr std::size_t match_start{ 0 };
-        static constexpr std::size_t substr_start{ 1 };
-        static constexpr std::size_t end{ 2 };
-
+        [[nodiscard]] constexpr auto get_flags() const noexcept { return flags_; }
         [[nodiscard]] constexpr const tnfa_node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-        [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
-        [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
-        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
+        [[nodiscard]] constexpr std::size_t node_count() const noexcept { return nodes_.size(); }
+        [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
+        [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
+        [[nodiscard]] constexpr bool node_is_final(std::size_t i) const { return i == final_node_ or i == strict_final_node_; }
+        [[nodiscard]] constexpr std::size_t start_node() const noexcept { return start_node_; }
 
     private:
-        std::vector<tnfa_node<CharT>> nodes_{ 3 };
+        std::vector<tnfa_node<CharT>> nodes_{ 2 };
         capture_info capture_info_;
         std::size_t tag_count_;
+        std::size_t start_node_{ 0 };
+        std::size_t final_node_{ 1 };
+        std::optional<std::size_t> continue_node_;
+        std::optional<std::size_t> strict_final_node_;
         fsm_flags flags_;
     };
 }

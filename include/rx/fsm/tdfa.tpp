@@ -194,7 +194,7 @@ namespace rx::detail::tdfa
         {
             /* this version is needed for full matches, but below is needed for laziness in partial matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
-                if (ce.tnfa_state == tnfa_ptr_->end)
+                if (tnfa_ptr_->node_is_final(ce.tnfa_state))
                     return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
                                                   [](const auto& t) { return not std::holds_alternative<n_tr<CharT>>(t); });
@@ -207,7 +207,7 @@ namespace rx::detail::tdfa
             std::erase_if(new_closure, [this, &end_found](const closure_entry& ce) -> bool {
                 if (end_found)
                     return true;
-                if (ce.tnfa_state == tnfa_ptr_->end)
+                if (tnfa_ptr_->node_is_final(ce.tnfa_state))
                 {
                     end_found = true;
                     return false;
@@ -235,7 +235,7 @@ namespace rx::detail::tdfa
 
         /* make final regops if initial state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto it{ std::ranges::find(current_cfg, tnfa_t::end, &configuration::tnfa_state) };
+        const auto it{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_final(arg); }, &configuration::tnfa_state) };
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
@@ -274,7 +274,7 @@ namespace rx::detail::tdfa
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto it{ std::ranges::find(current_cfg, tnfa_t::end, &configuration::tnfa_state) };
+        const auto it{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_final(arg); }, &configuration::tnfa_state) };
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
@@ -580,7 +580,7 @@ namespace rx::detail::tdfa
 
         closure_t c;
         // c.emplace_back(is_search ? tnfa_t::substr_start : tnfa_t::match_start, std::move(initial_reg));
-        c.emplace_back(tnfa_t::match_start, std::move(initial_reg));
+        c.emplace_back(input.start_node(), std::move(initial_reg));
         c = e_closure(std::move(c));
         add_initial_state(result, c, precedence_t{ /* c */ });
 
@@ -618,7 +618,7 @@ namespace rx::detail
 {
     template<typename CharT>
     constexpr tagged_dfa<CharT>::tagged_dfa(const tnfa_t& tnfa) : 
-        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.flags_ }
+        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
     {
         tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
     }
