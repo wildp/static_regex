@@ -21,6 +21,17 @@ namespace rx::detail
      * Note: clang reaches the consteval step limit with >512 repetitions */
     inline constexpr std::int_least16_t counted_repetition_limit{ 1000 };
 
+    enum class assert_type : int_least8_t // TODO: consider moving to another header?
+    {
+        text_start,
+        text_end,
+        line_start,
+        line_end,
+        // text_end_or_newline_before,
+        // word_boundary,
+        // not_word_boundary,
+    };
+
     namespace parser
     {
         template<typename CharT>
@@ -46,6 +57,11 @@ namespace rx::detail
         {
             std::int_least16_t min;
             std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */ 
+        };
+
+        struct assertion
+        {
+            assert_type type;
         };
 
         template<typename CharT>
@@ -123,7 +139,7 @@ namespace rx::detail
                                      tok::lparen, tok::rparen, tok::vert,
                                      tok::star, tok::plus, tok::quest, tok::repeat_n_m,
                                      tok::char_str<CharT>, tok::char_class<CharT>,
-                                     tok::backref>;
+                                     tok::backref, tok::assertion>;
 
         // TODO: rangify API?
 
@@ -188,7 +204,7 @@ namespace rx::detail
                     /* standard escape sequences */
 
                 case 'a': return char_str{ '\a' };
-                case 'b': return char_str{ '\b' };
+                // case 'b': return char_str{ '\b' }; /* use \010 instead */¬
                 case 'f': return char_str{ '\f' };
                 case 't': return char_str{ '\t' };
                 case 'n': return char_str{ '\n' };
@@ -223,9 +239,18 @@ namespace rx::detail
                 case '7': return parse_bref_or_octal(escaped);
 
                 case '8':
-                case '9': return tok::backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
+                case '9': return backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
 
                 case 'g': return parse_bref();
+
+                    /* assertions */
+
+                case 'A': return assertion{ assert_type::text_start };
+                case 'b': throw parser_error("Word boundary lookaround (\\b) is not implemented");
+                case 'B': throw parser_error("Non-word boundary lookaround (\\B) is not implemented");
+                case 'G': throw parser_error("Assertion (\\G) is not implemented");
+                case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
+                case 'z': return assertion{ assert_type::text_end };
 
                     /* literal string */
 

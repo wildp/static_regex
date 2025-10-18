@@ -19,14 +19,6 @@ namespace rx::detail
 
     /* types */
 
-    enum class assert_type : int_least8_t
-    {
-        text_start,
-        text_end,
-        line_start,
-        line_end
-    };
-
     enum class repeater_mode : int_least8_t
     {
         greedy = 0,
@@ -53,11 +45,6 @@ namespace rx::detail
         using char_type = CharT;
         using sv_type = std::basic_string_view<char_type>;
 
-        struct assertion
-        {
-            assert_type type;
-        };
-
         struct alt
         {
             std::vector<std::size_t> idxs;
@@ -83,6 +70,7 @@ namespace rx::detail
             repeater_mode mode;     /* default = greedy */
         };
 
+        using assertion = tok::assertion;
         using char_str = tok::char_str<char_type>;
         using char_class = tok::char_class<char_type>;
 

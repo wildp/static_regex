@@ -36,6 +36,7 @@ namespace rx::detail::parser
         [[nodiscard]] constexpr std::size_t sa_make_dot();
         [[nodiscard]] constexpr std::size_t sa_make_hat();
         [[nodiscard]] constexpr std::size_t sa_make_dollar();
+        [[nodiscard]] constexpr std::size_t sa_make_assert(assertion&& as);
         [[nodiscard]] constexpr std::size_t sa_make_char_lit(char_str&& lit);
         [[nodiscard]] constexpr std::size_t sa_make_char_class(char_class&& cc);
         [[nodiscard]] constexpr std::size_t sa_make_alt(std::size_t lhs_idx, std::size_t rhs_idx);
@@ -99,6 +100,7 @@ namespace rx::detail::parser
         make_dot,
         make_hat,
         make_dollar,
+        make_assert,
 
         make_char_lit,
         make_char_class,
@@ -269,9 +271,10 @@ namespace rx::detail::parser
                     switch (token.index())
                     {
                     case tok_index<end_of_input>:
-                    case tok_index<hat>:
                     case tok_index<dot>:
+                    case tok_index<hat>:
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<vert>:
                     case tok_index<char_str>:
@@ -287,9 +290,10 @@ namespace rx::detail::parser
                     switch (token.index())
                     {
                     case tok_index<end_of_input>:
-                    case tok_index<hat>:
                     case tok_index<dot>:
+                    case tok_index<hat>:
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<rparen>:
                     case tok_index<vert>:
@@ -324,9 +328,10 @@ namespace rx::detail::parser
                     case tok_index<vert>:
                         stack.push({ /* epsilon */ sa::make_empty });
                         break;
-                    case tok_index<hat>:
                     case tok_index<dot>:
+                    case tok_index<hat>:
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<char_str>:
                     case tok_index<char_class>:
@@ -345,9 +350,10 @@ namespace rx::detail::parser
                     case tok_index<vert>:
                         /* epsilon */
                         break;
-                    case tok_index<hat>:
                     case tok_index<dot>:
+                    case tok_index<hat>:    
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<char_str>:
                     case tok_index<char_class>:
@@ -361,9 +367,10 @@ namespace rx::detail::parser
                 case nt::G:
                     switch (token.index())
                     {
-                    case tok_index<hat>:
                     case tok_index<dot>:
+                    case tok_index<hat>:
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<char_str>:
                     case tok_index<char_class>:
@@ -381,6 +388,7 @@ namespace rx::detail::parser
                     case tok_index<dot>:
                     case tok_index<hat>:
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<rparen>:
                     case tok_index<vert>:
@@ -410,6 +418,7 @@ namespace rx::detail::parser
                     case tok_index<dot>:
                     case tok_index<hat>:
                     case tok_index<dollar>:
+                    case tok_index<assertion>:
                     case tok_index<lparen>:
                     case tok_index<rparen>:
                     case tok_index<vert>:
@@ -440,6 +449,9 @@ namespace rx::detail::parser
                     case tok_index<dollar>:
                         stack.push({ dollar{}, sa::make_dollar });
                         break;
+                    case tok_index<assertion>:
+                        stack.push({ assertion{}, sa::make_assert });
+                        break;
                     case tok_index<lparen>:
                         stack.push({ sa::cap_push, lparen{}, nt::P, rparen{}, sa::cap_pop });
                         break;
@@ -459,6 +471,7 @@ namespace rx::detail::parser
                 case nt::P:
                     switch (token.index())
                     {
+                    case tok_index<assertion>:
                     case tok_index<dot>:
                     case tok_index<hat>:
                     case tok_index<dollar>:
@@ -497,7 +510,7 @@ namespace rx::detail::parser
                     break;
                 case sa::make_hat:
                     {
-                        std::ignore = semstack.pop(); /* pop tok::hot */                        
+                        std::ignore = semstack.pop(); /* pop tok::hat */                        
                         semstack.push(sa_make_hat());
                     }
                     break;
@@ -505,6 +518,12 @@ namespace rx::detail::parser
                     {
                         std::ignore = semstack.pop(); /* pop tok::dollar */
                         semstack.push(sa_make_dollar());
+                    }
+                    break;
+                case sa::make_assert:
+                    {
+                        assertion as{ std::get<assertion>(std::get<terminal>(semstack.pop())) }; /* pop tok::assertion */
+                        semstack.push(sa_make_assert(std::move(as)));
                     }
                     break;
                 case sa::make_char_lit:
@@ -678,7 +697,14 @@ namespace rx::detail::parser
         else
             return new_expression<assertion>(assert_type::text_end);
     }
-    
+
+    template<typename CharT>
+    constexpr std::size_t ll1<CharT>::sa_make_assert(assertion&& as)
+    {   
+        /* todo: perform checks on implementability here */
+        return new_expression<assertion>(std::move(as));
+    }
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_char_lit(char_str&& lit)
     {
