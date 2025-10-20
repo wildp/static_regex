@@ -162,7 +162,7 @@ namespace rx
             return {};
         }
 
-        template<detail::string_literal Pattern, detail::fsm_flags Flags> friend struct detail::p1306_matcher;
+        template<string_literal Pattern, detail::fsm_flags Flags> friend struct detail::p1306_matcher;
     
     private:
         using iterator_type = I;
