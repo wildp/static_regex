@@ -146,45 +146,47 @@ namespace rx::detail::tdfa
                     for (std::size_t p{ 0 }; p < partitions.size(); ++p)
                     {
                         bitset_t intersection(bitset_size, false);
-                        bitset_t relative_complement(bitset_size, false);
+                        bitset_t rel_complement(bitset_size, false);
                         
                         for (std::size_t i{ 0 }; i < bitset_size; ++i)
                         {
                             intersection[i] = partitions[p][i] and transitions_from[i];
-                            relative_complement[i] = partitions[p][i] and not transitions_from[i];
+                            rel_complement[i] = partitions[p][i] and not transitions_from[i];
                         }
 
                         const auto i_count{ std::ranges::count(intersection, true) };
-                        const auto c_count{ std::ranges::count(relative_complement, true) };
+                        const auto c_count{ std::ranges::count(rel_complement, true) };
+
+                        using gt = std::ranges::greater;
 
                         if (i_count > 0 and c_count > 0)
                         {
                             if (std::ranges::contains(work, partitions[p]))
                             {
-                                if (const auto it{ std::ranges::lower_bound(work, intersection, std::ranges::greater{}) }; *it != intersection)
+                                if (const auto it{ std::ranges::lower_bound(work, intersection, gt{}) }; it == work.end() or *it != intersection)
                                     work.emplace(it, intersection);
 
-                                if (const auto it{ std::ranges::lower_bound(work, relative_complement, std::ranges::greater{}) }; *it != relative_complement)
-                                    work.emplace(it, relative_complement);
+                                if (const auto it{ std::ranges::lower_bound(work, rel_complement, gt{}) }; it == work.end() or *it != rel_complement)
+                                    work.emplace(it, rel_complement);
                             }
                             else if (i_count <= c_count)
                             {
-                                if (const auto it{ std::ranges::lower_bound(work, intersection, std::ranges::greater{}) }; *it != intersection)
+                                if (const auto it{ std::ranges::lower_bound(work, intersection, gt{}) }; it == work.end() or *it != intersection)
                                     work.emplace(it, intersection);
                             }
                             else
                             {
-                                if (const auto it{ std::ranges::lower_bound(work, relative_complement, std::ranges::greater{}) }; *it != relative_complement)
-                                    work.emplace(it, relative_complement);
+                                if (const auto it{ std::ranges::lower_bound(work, rel_complement, gt{}) }; it == work.end() or *it != rel_complement)
+                                    work.emplace(it, rel_complement);
                             }
 
                             partitions.erase(partitions.begin() + static_cast<std::ptrdiff_t>(p));
 
-                            if (const auto it{ std::ranges::lower_bound(partitions, intersection, std::ranges::greater{}) }; *it != intersection)
-                                    partitions.emplace(it, std::move(intersection));
+                            if (const auto it{ std::ranges::lower_bound(partitions, intersection, gt{}) }; it == partitions.end() or *it != intersection)
+                                partitions.emplace(it, std::move(intersection));
 
-                            if (const auto it{ std::ranges::lower_bound(partitions, relative_complement, std::ranges::greater{}) }; *it != relative_complement)
-                                    partitions.emplace(it, std::move(relative_complement));
+                            if (const auto it{ std::ranges::lower_bound(partitions, rel_complement, gt{}) }; it == partitions.end() or *it != rel_complement)
+                                partitions.emplace(it, std::move(rel_complement));
                         }
                     }
                 }
