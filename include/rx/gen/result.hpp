@@ -166,25 +166,14 @@ namespace rx
     
     private:
         using iterator_type = I;
-        static constexpr bool iterator_is_pointer{ std::is_pointer_v<iterator_type> };
         static constexpr bool has_match_start{ C.has_match_start() };
         using registers_type = std::conditional_t<RegCount == 0, std::monostate, std::array<iterator_type, RegCount>>;
-        using enabled_type = std::conditional_t<RegCount == 0 or iterator_is_pointer, std::monostate, std::array<bool, RegCount>>;
         using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
-        using match_end_type = std::conditional_t<iterator_is_pointer, iterator_type, std::optional<iterator_type>>;
 
         explicit constexpr compile_time_match_result(iterator_type start)
-        requires (iterator_is_pointer) : match_end_{ nullptr }
         {
             if constexpr (has_match_start) match_start_ = start;
-            if constexpr (RegCount > 0) reg_.fill(nullptr);
-        }
-
-        explicit constexpr compile_time_match_result(iterator_type start)
-        requires (not iterator_is_pointer) : match_end_{}
-        {
-            if constexpr (has_match_start) match_start_ = start;
-            if constexpr (RegCount > 0) enabled_.fill(false);
+            if constexpr (RegCount > 0) reg_.fill(iterator_type{});
         }
 
         template<detail::tag_number_t N>
@@ -192,30 +181,19 @@ namespace rx
         {
             if constexpr (N == detail::start_of_input_tag or N == detail::end_of_input_tag)
                 return true;
-            else if constexpr (iterator_is_pointer)
-                return reg_[FinalRegisters[N]] != nullptr;
             else
-                return enabled_[FinalRegisters[N]];
+                return reg_[FinalRegisters[N]] != iterator_type{};
         }
 
         template<detail::tag_number_t N>
         [[nodiscard]] constexpr iterator_type get_tag() const
         {
             if constexpr (N == detail::start_of_input_tag)
-            {
                 return match_start_;
-            }
             else if constexpr (N == detail::end_of_input_tag)
-            {
-                if constexpr (iterator_is_pointer)
-                    return match_end_;
-                else
-                    return *match_end_;
-            }
+                return match_end_;
             else
-            {
                 return reg_[FinalRegisters[N]];
-            }
         }
 
         constexpr void range_check(size_type n) const
@@ -226,13 +204,12 @@ namespace rx
 
         [[nodiscard]] constexpr bool has_value() const
         {
-            return static_cast<bool>(match_end_);
+            return match_end_ != iterator_type{};
         }
 
         [[no_unique_address]] registers_type reg_;
-        [[no_unique_address]] enabled_type enabled_;
         [[no_unique_address]] match_start_type match_start_;
-        match_end_type match_end_;
+        iterator_type match_end_{};
     };
 }
 
