@@ -17,6 +17,16 @@ namespace rx::detail
 {
     /* p1306 matcher implementation */
 
+    template<tdfa::transition Tr, typename CharT>
+    [[clang::always_inline]] inline constexpr bool tr_possible(CharT c)
+    {
+        if constexpr (Tr.lower == Tr.upper)
+            return (c == Tr.lower);
+        else
+            return (Tr.lower <= c and c <= Tr.upper);
+    }
+
+
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher
     {
@@ -87,7 +97,7 @@ namespace rx::detail
             {
                 template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(DFAState))
                 {
-                    if (tr.lower <= *it and *it <= tr.upper)
+                    if (tr_possible<tr>(*it))
                     {
                         register_operations<tr.op_index>(it, res);
                         [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
@@ -122,7 +132,7 @@ namespace rx::detail
             {
                 template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(DFAState))
                 {
-                    if (tr.lower <= *ptr and *ptr <= tr.upper)
+                    if (tr_possible<tr>(*ptr))
                     {
                         register_operations<tr.op_index>(ptr, res);
                         [[clang::musttail]] return state<tr.next>(ptr + 1, res, fallback_state, fallback_ptr);
