@@ -17,25 +17,14 @@ namespace rx::detail
 {
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher;
-
-
-    template<std::bidirectional_iterator I>
-    class compile_time_match_result_base
-    {
-    public:
-        [[nodiscard]] static constexpr submatch<I> make_submatch(I first, I last)
-        {
-            return { first, last };
-        }
-    };
 }
 
 namespace rx
 {
     template<std::bidirectional_iterator I, detail::final_capture_info C, detail::static_span<const detail::tdfa::reg_t> FinalRegisters, std::size_t RegCount>
-    class compile_time_match_result : detail::compile_time_match_result_base<I>
+    class compile_time_match_result
     {
-        using base = detail::compile_time_match_result_base<I>;
+        using factory           = detail::submatch_factory<Iter>;
 
     public:
         using size_type         = std::size_t;
@@ -145,7 +134,7 @@ namespace rx
                 {
                     if (this->tag_enabled<current.first.tag_number>())
                     {
-                        return base::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                        return factory::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
                                                    std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
                     }
                 }
@@ -153,7 +142,7 @@ namespace rx
                 {
                     if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
                     {
-                        return base::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                        return factory::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
                                                    std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
                     }
                 }
