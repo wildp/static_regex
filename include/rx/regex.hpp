@@ -12,7 +12,7 @@ namespace rx
 {
     template<string_literal Pattern>
     requires std::same_as<char, typename decltype(Pattern)::char_type> /* temporary: remove later */
-    struct compile_time_regex
+    struct static_regex
     {
         using char_type = decltype(Pattern)::char_type;
 
@@ -97,7 +97,7 @@ namespace rx
         template<string_literal P>
         consteval auto operator ""_rx()
         {
-            return compile_time_regex<P>();
+            return static_regex<P>();
         }
     }
 }

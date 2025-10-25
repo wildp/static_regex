@@ -144,7 +144,7 @@ namespace
     [[maybe_unused]] constexpr auto t9 = tester<{ .stage=5, .fsm=dff::partial_match, .dbgok =true, .otags=true, .pdfao=true, .pdfam=true }>{};
 
     template<rx::string_literal S>
-    [[maybe_unused]] void match(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void match(rx::static_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {
@@ -156,7 +156,7 @@ namespace
     }
 
     template<rx::string_literal S>
-    [[maybe_unused]] void starts_with(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void starts_with(rx::static_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {
@@ -168,7 +168,7 @@ namespace
     }
 
     template<rx::string_literal S>
-    [[maybe_unused]] void search(rx::compile_time_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void search(rx::static_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {

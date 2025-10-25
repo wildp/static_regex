@@ -21,66 +21,27 @@ namespace rx::detail
 
 namespace rx
 {
-    template<std::bidirectional_iterator I, detail::final_capture_info C, detail::static_span<const detail::tdfa::reg_t> FinalRegisters, std::size_t RegCount>
-    class compile_time_match_result
+    template<std::bidirectional_iterator Iter, detail::final_capture_info C, detail::static_span<const detail::tdfa::reg_t> FinalRegisters, std::size_t RegCount>
+    class static_regex_match_result
     {
         using factory           = detail::submatch_factory<Iter>;
 
+        class proxy_submatch_iterator;
+
     public:
-        using size_type         = std::size_t;
-        using char_type         = std::remove_cv_t<std::iter_value_t<I>>;
-        using submatch_type     = const submatch<I>;
-        static constexpr size_type submatch_count{ C.capture_count() };
-
-        /* iterator implementation */
-
-        class proxy_iterator_impl
-        {
-            friend class compile_time_match_result;
-            
-            using it                = proxy_iterator_impl;
-            using parent_type       = compile_time_match_result;
-
-        public:
-            using difference_type   = std::ptrdiff_t;
-            using value_type        = submatch_type;
-
-            constexpr proxy_iterator_impl() = default;
-            
-            constexpr value_type operator*() const { return (*ptr_)[pos_]; }
-            constexpr value_type operator[](difference_type n) const { return (*ptr_)[pos_ + n]; }
-
-            constexpr it& operator++() { ++pos_; return *this; }
-            constexpr it operator++(int) { auto tmp{ *this }; ++(*this); return tmp; }
-            constexpr it& operator--() { --pos_; return *this; }
-            constexpr it operator--(int) { auto tmp{ *this }; --(*this); return tmp; }
-            constexpr it& operator+=(difference_type n) { pos_ += n; return *this; }
-            constexpr it& operator-=(difference_type n) { pos_ -= n; return *this; }
-
-            constexpr friend bool operator==(const it&, const it&) = default;
-            constexpr friend auto operator<=>(const it&, const it&) = default;
-            constexpr friend it operator+(const it& lhs , difference_type rhs) { return {  lhs.ptr_, lhs.pos_ + rhs }; }
-            constexpr friend it operator+(difference_type lhs , const it& rhs) { return {  rhs.ptr_, lhs + rhs.pos_ }; }
-            constexpr friend it operator-(const it& lhs, difference_type rhs) { return {  lhs.ptr_, lhs.pos_ - rhs };  }
-            constexpr friend difference_type operator-(const it& lhs, const it& rhs) { return rhs.pos_ - lhs.pos_; }
-
-        private:
-            constexpr proxy_iterator_impl(const parent_type* ptr, std::size_t pos) : ptr_{ ptr }, pos_{ pos } {}
-
-            const parent_type* ptr_{ nullptr };
-            std::size_t pos_{ 0 };
-        };
-
-        static_assert(std::random_access_iterator<proxy_iterator_impl>);
-
-        using const_iterator            = proxy_iterator_impl;
+        using size_type                 = std::size_t;
+        using char_type                 = std::remove_cv_t<std::iter_value_t<Iter>>;
+        using submatch_type             = const submatch<Iter>;
+        using const_iterator            = proxy_submatch_iterator;
         using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
         using iterator                  = const_iterator;
         using reverse_iterator          = const_reverse_iterator;
+
+        static constexpr size_type submatch_count{ C.capture_count() };
         
         /* observers */
 
-        [[nodiscard]] explicit(false) constexpr operator bool() const { return this->has_value(); }
+        [[nodiscard]] constexpr explicit(false) operator bool() const { return this->has_value(); }
         [[nodiscard]] constexpr size_type size() const { return (this->has_value()) ? submatch_count : 0; }
 
         /* array-like access */
@@ -135,7 +96,7 @@ namespace rx
                     if (this->tag_enabled<current.first.tag_number>())
                     {
                         return factory::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                                                   std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
+                                                      std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
                     }
                 }
                 else
@@ -143,7 +104,7 @@ namespace rx
                     if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
                     {
                         return factory::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                                                   std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
+                                                      std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
                     }
                 }
             }
@@ -154,12 +115,54 @@ namespace rx
         template<string_literal Pattern, detail::fsm_flags Flags> friend struct detail::p1306_matcher;
     
     private:
-        using iterator_type = I;
-        static constexpr bool has_match_start{ C.has_match_start() };
-        using registers_type = std::conditional_t<RegCount == 0, std::monostate, std::array<iterator_type, RegCount>>;
-        using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
+         /* iterator implementation */
 
-        explicit constexpr compile_time_match_result(iterator_type start)
+        class proxy_submatch_iterator
+        {
+            friend class static_regex_match_result;
+            
+            using it                = proxy_submatch_iterator;
+            using parent_type       = static_regex_match_result;
+
+        public:
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = submatch_type;
+
+            constexpr proxy_submatch_iterator() = default;
+            
+            constexpr value_type operator*() const { return (*ptr_)[pos_]; }
+            constexpr value_type operator[](difference_type n) const { return (*ptr_)[pos_ + n]; }
+
+            constexpr it& operator++() { ++pos_; return *this; }
+            constexpr it operator++(int) { auto tmp{ *this }; ++(*this); return tmp; }
+            constexpr it& operator--() { --pos_; return *this; }
+            constexpr it operator--(int) { auto tmp{ *this }; --(*this); return tmp; }
+            constexpr it& operator+=(difference_type n) { pos_ += n; return *this; }
+            constexpr it& operator-=(difference_type n) { pos_ -= n; return *this; }
+
+            constexpr friend bool operator==(const it&, const it&) = default;
+            constexpr friend auto operator<=>(const it&, const it&) = default;
+            constexpr friend it operator+(const it& lhs , difference_type rhs) { return {  lhs.ptr_, lhs.pos_ + rhs }; }
+            constexpr friend it operator+(difference_type lhs , const it& rhs) { return {  rhs.ptr_, lhs + rhs.pos_ }; }
+            constexpr friend it operator-(const it& lhs, difference_type rhs) { return {  lhs.ptr_, lhs.pos_ - rhs };  }
+            constexpr friend difference_type operator-(const it& lhs, const it& rhs) { return rhs.pos_ - lhs.pos_; }
+
+        private:
+            constexpr proxy_submatch_iterator(const parent_type* ptr, std::size_t pos) : ptr_{ ptr }, pos_{ pos } {}
+
+            const parent_type* ptr_{ nullptr };
+            std::size_t pos_{ 0 };
+        };
+        
+        static_assert(std::random_access_iterator<proxy_submatch_iterator>);
+
+
+        /* implementation helpers */
+
+        using iterator_type = Iter;
+        static constexpr bool has_match_start{ C.has_match_start() };
+
+        explicit constexpr static_regex_match_result(iterator_type start)
         {
             if constexpr (has_match_start) match_start_ = start;
             if constexpr (RegCount > 0) reg_.fill(iterator_type{});
@@ -196,6 +199,12 @@ namespace rx
             return match_end_ != iterator_type{};
         }
 
+        
+        /* data members */
+
+        using registers_type = std::conditional_t<RegCount == 0, std::monostate, std::array<iterator_type, RegCount>>;
+        using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
+
         [[no_unique_address]] registers_type reg_;
         [[no_unique_address]] match_start_type match_start_;
         iterator_type match_end_{};
@@ -205,21 +214,21 @@ namespace rx
 
 /* structured binding support for compile_time_match_result */
 
-template<std::bidirectional_iterator I,
+template<std::bidirectional_iterator Iter,
         rx::detail::final_capture_info C,
         rx::detail::static_span<const rx::detail::tdfa::reg_t> FinalRegisters,
         std::size_t RegCount>
-struct std::tuple_size<rx::compile_time_match_result<I, C, FinalRegisters, RegCount>> :
-    integral_constant<std::size_t, rx::compile_time_match_result<I, C, FinalRegisters, RegCount>::submatch_count> {};
+struct std::tuple_size<rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>> :
+    integral_constant<std::size_t, rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>::submatch_count> {};
 
 template<std::size_t N,
-        std::bidirectional_iterator I,
+        std::bidirectional_iterator Iter,
         rx::detail::final_capture_info C,
         rx::detail::static_span<const rx::detail::tdfa::reg_t> FinalRegisters,
         std::size_t RegCount>
-requires (N < rx::compile_time_match_result<I, C, FinalRegisters, RegCount>::submatch_count)
-struct std::tuple_element<N, rx::compile_time_match_result<I, C, FinalRegisters, RegCount>>
+requires (N < rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>::submatch_count)
+struct std::tuple_element<N, rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>>
 {
-    using type = rx::compile_time_match_result<I, C, FinalRegisters, RegCount>::submatch_type;
+    using type = rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>::submatch_type;
 };
 

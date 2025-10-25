@@ -35,7 +35,7 @@ namespace rx::detail
         using char_type = decltype(DFA)::char_type;
 
         template<typename I>
-        using result = compile_time_match_result<I, DFA.captures, DFA.final_registers, DFA.register_count>;
+        using result = static_regex_match_result<I, DFA.captures, DFA.final_registers, DFA.register_count>;
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
