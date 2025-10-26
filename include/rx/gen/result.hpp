@@ -21,10 +21,11 @@ namespace rx::detail
 
 namespace rx
 {
-    template<std::bidirectional_iterator Iter, detail::final_capture_info C, detail::static_span<const detail::tdfa::reg_t> FinalRegisters, std::size_t RegCount>
+    template<std::bidirectional_iterator Iter, string_literal Pattern, detail::fsm_flags Flags>
     class static_regex_match_result
     {
-        using factory           = detail::submatch_factory<Iter>;
+        using factory                   = detail::submatch_factory<Iter>;
+        using dfa_t                     = detail::compiled_dfa<Pattern, Flags>;
 
         class proxy_submatch_iterator;
 
@@ -37,7 +38,7 @@ namespace rx
         using iterator                  = const_iterator;
         using reverse_iterator          = const_reverse_iterator;
 
-        static constexpr size_type submatch_count{ C.capture_count() };
+        static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
         
         /* observers */
 
@@ -79,7 +80,7 @@ namespace rx
         {
             using namespace detail;
 
-            constexpr auto current{ C.captures[N] };
+            constexpr auto current{ dfa_t::value.captures.captures[N] };
 
             if (not this->has_value())
                 return {};
@@ -112,7 +113,7 @@ namespace rx
             return {};
         }
 
-        template<string_literal Pattern, detail::fsm_flags Flags> friend struct detail::p1306_matcher;
+        friend struct detail::p1306_matcher<Pattern, Flags>;
     
     private:
          /* iterator implementation */
@@ -160,12 +161,12 @@ namespace rx
         /* implementation helpers */
 
         using iterator_type = Iter;
-        static constexpr bool has_match_start{ C.has_match_start() };
+        static constexpr bool has_match_start{ dfa_t::value.captures.has_match_start() };
 
         explicit constexpr static_regex_match_result(iterator_type start)
         {
             if constexpr (has_match_start) match_start_ = start;
-            if constexpr (RegCount > 0) reg_.fill(iterator_type{});
+            if constexpr (dfa_t::value.register_count > 0) reg_.fill(iterator_type{});
         }
 
         template<detail::tag_number_t N>
@@ -174,7 +175,7 @@ namespace rx
             if constexpr (N == detail::start_of_input_tag or N == detail::end_of_input_tag)
                 return true;
             else
-                return reg_[FinalRegisters[N]] != iterator_type{};
+                return reg_[dfa_t::value.final_registers[N]] != iterator_type{};
         }
 
         template<detail::tag_number_t N>
@@ -185,7 +186,7 @@ namespace rx
             else if constexpr (N == detail::end_of_input_tag)
                 return match_end_;
             else
-                return reg_[FinalRegisters[N]];
+                return reg_[dfa_t::value.final_registers[N]];
         }
 
         constexpr void range_check(size_type n) const
@@ -200,11 +201,16 @@ namespace rx
         }
 
         
-        /* data members */
+        /* data members and protected trivial accessors */
 
-        using registers_type = std::conditional_t<RegCount == 0, std::monostate, std::array<iterator_type, RegCount>>;
+        using registers_type = std::conditional_t<dfa_t::value.register_count == 0, std::monostate, std::array<iterator_type, dfa_t::value.register_count>>;
         using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
 
+    protected:
+        [[clang::always_inline]] constexpr registers_type& reg() noexcept { return reg_; }
+        [[clang::always_inline]] constexpr iterator_type& match_end() noexcept { return match_end_; }
+
+    private:
         [[no_unique_address]] registers_type reg_;
         [[no_unique_address]] match_start_type match_start_;
         iterator_type match_end_{};
@@ -214,21 +220,14 @@ namespace rx
 
 /* structured binding support for compile_time_match_result */
 
-template<std::bidirectional_iterator Iter,
-        rx::detail::final_capture_info C,
-        rx::detail::static_span<const rx::detail::tdfa::reg_t> FinalRegisters,
-        std::size_t RegCount>
-struct std::tuple_size<rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>> :
-    integral_constant<std::size_t, rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>::submatch_count> {};
+template<std::bidirectional_iterator Iter, rx::string_literal Pattern, rx::detail::fsm_flags Flags>
+struct std::tuple_size<rx::static_regex_match_result<Iter, Pattern, Flags>> :
+    integral_constant<std::size_t, rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_count> {};
 
-template<std::size_t N,
-        std::bidirectional_iterator Iter,
-        rx::detail::final_capture_info C,
-        rx::detail::static_span<const rx::detail::tdfa::reg_t> FinalRegisters,
-        std::size_t RegCount>
-requires (N < rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>::submatch_count)
-struct std::tuple_element<N, rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>>
+template<std::size_t N, std::bidirectional_iterator Iter, rx::string_literal Pattern, rx::detail::fsm_flags Flags>
+requires (N < rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_count)
+struct std::tuple_element<N, rx::static_regex_match_result<Iter, Pattern, Flags>>
 {
-    using type = rx::static_regex_match_result<Iter, C, FinalRegisters, RegCount>::submatch_type;
+    using type = rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_type;
 };
 

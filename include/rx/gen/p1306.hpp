@@ -30,12 +30,17 @@ namespace rx::detail
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher
     {
-        static constexpr auto DFA{ compile_pattern(Pattern, Flags) };
-
-        using char_type = decltype(DFA)::char_type;
+        using dfa_t = detail::compiled_dfa<Pattern, Flags>;
+        using char_type = decltype(Pattern)::char_type;
 
         template<typename I>
-        using result = static_regex_match_result<I, DFA.captures, DFA.final_registers, DFA.register_count>;
+        using result_type = static_regex_match_result<I, Pattern, Flags>;
+
+        template<typename I>
+        struct result : result_type<I>
+        {
+            friend struct p1306_matcher;
+        };
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
@@ -45,14 +50,14 @@ namespace rx::detail
         {
             if constexpr (Blk != tdfa::no_transition_regops)
             {
-                template for (constexpr register_operation op : DFA.regops.at(Blk))
+                template for (constexpr register_operation op : dfa_t::value.regops.at(Blk))
                 {
                     if constexpr (op.is_copy)
-                        res.reg_[op.dst] = res.reg_[op.cpy_src];
+                        res.reg()[op.dst] = res.reg()[op.cpy_src];
                     else if constexpr (op.set_val)
-                        res.reg_[op.dst] = it;
+                        res.reg()[op.dst] = it;
                     else
-                        res.reg_[op.dst] = I{};
+                        res.reg()[op.dst] = I{};
                 }
             }
         }
@@ -63,12 +68,12 @@ namespace rx::detail
             if (fallback_state == fallback_disabled)
                 return;
 
-            template for (constexpr std::size_t i : std::define_static_array(make_iota(DFA.fallback_nodes.size())))
+            template for (constexpr std::size_t i : std::define_static_array(make_iota(dfa_t::value.fallback_nodes.size())))
             {
-                if (fallback_state == DFA.fallback_nodes[i])
+                if (fallback_state == dfa_t::value.fallback_nodes[i])
                 {
-                    register_operations<DFA.fallback_node_regops[i]>(fallback_it, res);
-                    res.match_end_ = fallback_it;
+                    register_operations<dfa_t::value.fallback_node_regops[i]>(fallback_it, res);
+                    res.match_end() = fallback_it;
                     return;
                 }
             }
@@ -77,7 +82,7 @@ namespace rx::detail
         template<std::size_t DFAState, typename I>
         static constexpr void state(I it, result<I>& res, const I last, std::size_t fallback_state, I fallback_it)
         { 
-            if constexpr (Flags.enable_fallback and std::ranges::binary_search(DFA.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
             {
                 fallback_state = DFAState;
                 fallback_it = it;
@@ -85,17 +90,17 @@ namespace rx::detail
 
             if (it == last)
             {
-                if constexpr (constexpr auto key{ std::ranges::lower_bound(DFA.final_nodes, DFAState) };
-                              key != DFA.final_nodes.end() and *key == DFAState)
+                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
+                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
                 {
-                    register_operations<DFA.final_node_regops[key - DFA.final_nodes.begin()]>(it, res);
-                    res.match_end_ = it;
+                    register_operations<dfa_t::value.final_node_regops[key - dfa_t::value.final_nodes.begin()]>(it, res);
+                    res.match_end() = it;
                     return;
                 }
             }
             else
             {
-                template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(DFAState))
+                template for (constexpr tdfa::transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
                 {
                     if (tr_possible<tr>(*it))
                     {
@@ -112,7 +117,7 @@ namespace rx::detail
         template<std::size_t DFAState, typename CharT>
         static constexpr void state(const CharT* ptr, result<const CharT*>& res, std::size_t fallback_state, const CharT* fallback_ptr)
         { 
-            if constexpr (Flags.enable_fallback and std::ranges::binary_search(DFA.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
             {
                 fallback_state = DFAState;
                 fallback_ptr = ptr;
@@ -120,17 +125,17 @@ namespace rx::detail
 
             if (*ptr == '\0')
             {
-                if constexpr (constexpr auto key{ std::ranges::lower_bound(DFA.final_nodes, DFAState) };
-                              key != DFA.final_nodes.end() and *key == DFAState)
+                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
+                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
                 {
-                    register_operations<DFA.final_node_regops[key - DFA.final_nodes.begin()]>(ptr, res);
-                    res.match_end_ = ptr;
+                    register_operations<dfa_t::value.final_node_regops[key - dfa_t::value.final_nodes.begin()]>(ptr, res);
+                    res.match_end() = ptr;
                     return;
                 }
             }
             else
             {
-                template for (constexpr tdfa::transition<char_type> tr : DFA.nodes.at(DFAState))
+                template for (constexpr tdfa::transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
                 {
                     if (tr_possible<tr>(*ptr))
                     {
@@ -149,8 +154,8 @@ namespace rx::detail
         requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>)
         [[nodiscard]] static constexpr auto operator()(const I first, const I last)
         {
-            result<I> res{ first };
-            state<DFA.match_start>(first, res, last, fallback_disabled, first);
+            result_type<I> res{ first };
+            state<dfa_t::value.match_start>(first, static_cast<result<I>&>(res), last, fallback_disabled, first);
             return res;
         }
 
@@ -158,8 +163,8 @@ namespace rx::detail
         requires (std::is_nothrow_convertible_v<CharT, char_type>)  
         [[nodiscard]] static constexpr auto operator()(const CharT* cstr)
         {
-            result<const CharT*> res{ cstr };
-            state<DFA.match_start>(cstr, res, fallback_disabled, cstr);
+            result_type<const CharT*> res{ cstr };
+            state<dfa_t::value.match_start>(cstr, static_cast<result<const CharT*>&>(res), fallback_disabled, cstr);
             return res;
         }
     };

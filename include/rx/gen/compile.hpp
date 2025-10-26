@@ -158,4 +158,10 @@ namespace rx::detail
 
         return tdfa_info{ dfa };
     }
+
+    template<string_literal Pattern, fsm_flags Flags>
+    struct compiled_dfa
+    {
+        static constexpr auto value{ compile_pattern(Pattern, Flags) };
+    };
 }
