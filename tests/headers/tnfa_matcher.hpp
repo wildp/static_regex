@@ -39,6 +39,12 @@ namespace rx::testing
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::e_closure(closure_t&& closure, const std::size_t k) const -> closure_t
     {
+        constexpr auto compose = [](const auto& g, const auto& f) {
+            return [=]<typename T>(T&& arg) { 
+                return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+            };
+        };
+
         using namespace rx::detail;
         using namespace rx::detail::tnfa;
 
@@ -52,23 +58,24 @@ namespace rx::testing
             stack.pop_back();
             const auto& [q, m]{ new_closure.back() };
             
-            std::vector<epsilon_tr> et{ this->get_node(q).tr
-                                        | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t); })
-                                        | std::views::transform([](const auto& t) -> epsilon_tr { return std::get<epsilon_tr>(t); })
-                                        | std::ranges::to<std::vector>() };
+            using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
+            std::vector<epsilon_t> et{ std::from_range,
+                                       this->get_node(q).tr
+                                       | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
+                                       | std::views::transform([](const auto& t) -> epsilon_t { return { t.next, std::get<tnfa::epsilon_tr>(t.type) }; }) };
             
-            std::ranges::sort(et, std::ranges::greater{}, &epsilon_tr::priority);
+            std::ranges::sort(et, std::ranges::greater{}, compose(&epsilon_tr::priority, &epsilon_t::second));
 
-            for (const epsilon_tr& e : et)
+            for (const auto& [next, e] : et)
             {
-                if (not std::ranges::contains(new_closure, e.next, &closure_entry::first))
+                if (not std::ranges::contains(new_closure, next, &closure_entry::first))
                 {
                     auto new_m{ m };
                     if (e.tag > 0)
                         new_m.at(e.tag - 1) = k;
                     else if (e.tag < 0)
                         new_m.at((-e.tag) - 1) = no_tag;
-                    stack.emplace_back(e.next, std::move(new_m));
+                    stack.emplace_back(next, std::move(new_m));
                 }   
             }            
         }
@@ -77,7 +84,7 @@ namespace rx::testing
             if (this->node_is_final(e.first))
                 return false;
             return 0 != std::ranges::count_if(this->get_node(e.first).tr,
-                                              [](const auto& t) { return not std::holds_alternative<transition<CharT>>(t); });
+                                              [](const auto& t) { return not std::holds_alternative<normal_tr<CharT>>(t.type); });
         });
 
         return new_closure;
@@ -93,19 +100,20 @@ namespace rx::testing
 
         for (auto& [q, m] : closure)
         {
-            std::vector<transition<CharT>> ct{ this->get_node(q).tr
-                                               | std::views::filter([](const auto& t) { return std::holds_alternative<transition<CharT>>(t); })
-                                               | std::views::transform([](const auto& t) { return std::get<transition<CharT>>(t); })
-                                               | std::ranges::to<std::vector>() };
+            using normal_t = std::pair<tnfa::state_t, normal_tr<CharT>>;
+            std::vector<normal_t> ct{ std::from_range,
+                                      this->get_node(q).tr
+                                      | std::views::filter([](const auto& t) { return std::holds_alternative<normal_tr<CharT>>(t.type); })
+                                      | std::views::transform([](const auto& t) -> normal_t { return { t.next, std::get<normal_tr<CharT>>(t.type) }; }) };
 
-            for (const transition<CharT>& c : ct)
+            for (const auto& [next, c] : ct)
             {
                 if (c.lower <= a and a <= c.upper)
                 {
                     if (ct.size() == 1)
-                        new_closure.emplace_back(c.next, std::move(m));
+                        new_closure.emplace_back(next, std::move(m));
                     else
-                        new_closure.emplace_back(c.next, m);
+                        new_closure.emplace_back(next, m);
                 }
             }      
         }

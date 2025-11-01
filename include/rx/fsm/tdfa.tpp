@@ -7,6 +7,7 @@
 #include <iterator>
 #include <numeric>
 #include <ranges>
+#include <tuple>
 #include <utility>
 #include <variant>
 
@@ -150,6 +151,12 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
+        constexpr auto compose = [](const auto& g, const auto& f) {
+            return [=]<typename T>(T&& arg) { 
+                return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+            };
+        };
+
         closure_t new_closure;
 
         closure_t stack{ std::move(c) };
@@ -172,21 +179,22 @@ namespace rx::detail::tdfa
             visited.at(ce.tnfa_state) = true;
 
             // TODO: maybe reimplement to be more efficient, using getif?
-            std::vector<tnfa::epsilon_tr> et{ std::from_range,
-                                              tnfa_ptr_->get_node(ce.tnfa_state).tr
-                                              | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t); })
-                                              | std::views::transform([](const auto& t) { return std::get<tnfa::epsilon_tr>(t); }) };
+            using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
+            std::vector<epsilon_t> et{ std::from_range,
+                                       tnfa_ptr_->get_node(ce.tnfa_state).tr
+                                       | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
+                                       | std::views::transform([](const auto& t) -> epsilon_t { return { t.next, std::get<tnfa::epsilon_tr>(t.type) }; }) };
             
-            std::ranges::sort(et, std::ranges::greater{}, &tnfa::epsilon_tr::priority);
+            std::ranges::sort(et, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_t::second));
 
-            for (const tnfa::epsilon_tr& e : et)
+            for (const auto& [next, e] : et)
             {
-                if (not visited.at(e.next))
+                if (not visited.at(next))
                 {
                     auto newer_tag_seq{ ce.new_tag_seq };   
                     if (e.tag != 0)
                         newer_tag_seq.push_back(e.tag);
-                    stack.emplace_back(e.next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
+                    stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
                 }   
             }
         }
@@ -198,7 +206,7 @@ namespace rx::detail::tdfa
                 if (tnfa_ptr_->node_is_final(ce.tnfa_state))
                     return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
-                                                  [](const auto& t) { return not std::holds_alternative<tnfa::transition<CharT>>(t); });
+                                                  [](const auto& t) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(t.type); });
             });
         }
         else
@@ -216,7 +224,7 @@ namespace rx::detail::tdfa
                 if (tnfa_ptr_->node_is_final(ce.tnfa_state))
                     return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
-                                                  [](const auto& t) { return not std::holds_alternative<tnfa::transition<CharT>>(t); });
+                                                  [](const auto& t) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(t.type); });
             });
         }
 
@@ -316,19 +324,19 @@ namespace rx::detail::tdfa
 
         // std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
 
-        using elem_t = std::pair<tnfa::transition<char_type>, std::reference_wrapper<const configuration>>;
+        using elem_t = std::tuple<tnfa::state_t, tnfa::normal_tr<char_type>, std::reference_wrapper<const configuration>>;
         std::vector<elem_t> transitions;
 
         for (const auto& cfg : configs)
         {
             transitions.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).tr
-                                     | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::transition<char_type>>(t); })
-                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { std::get<tnfa::transition<char_type>>(t), std::cref(cfg) }; }));
+                                     | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::normal_tr<char_type>>(t.type); })
+                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { t.next, std::get<tnfa::normal_tr<char_type>>(t.type), std::cref(cfg) }; }));
         }
 
         std::vector<std::pair<char_type, char_type>> symbol_pairs;
 
-        for (const auto& [tr, _] : transitions)
+        for (const auto& [_, tr, _] : transitions)
             symbol_pairs.emplace_back(tr.lower, tr.upper);
 
         partition_v1(symbol_pairs);
@@ -337,11 +345,11 @@ namespace rx::detail::tdfa
         {
             multi_closures.emplace_back(lower, upper);
 
-            for (const auto& [t, cfg] : transitions)
+            for (const auto& [next, t, cfg] : transitions)
             {
                 if (t.lower <= lower and upper <= t.upper)
                 {
-                    multi_closures.back().data.emplace_back(t.next, cfg.get().registers, cfg.get().tag_seq);
+                    multi_closures.back().data.emplace_back(next, cfg.get().registers, cfg.get().tag_seq);
                 }
             }   
         }
