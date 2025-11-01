@@ -12,21 +12,58 @@
 
 namespace rx::detail
 {
+    struct stack_elem
+    {
+        std::size_t q0, qf, idx;
+    };
+
+
     /* modified thompson's algorithm */
 
     template<typename CharT>
     constexpr std::size_t tagged_nfa<CharT>::node_create()
     {
-        auto tmp{ nodes_.size() };
+        const std::size_t tmp{ nodes_.size() };
         nodes_.emplace_back();
         return tmp;
     }
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::epsilon(const std::size_t q0, const std::size_t qf, const int priority, const int tag)
+    constexpr void tagged_nfa<CharT>::make_epsilon(const std::size_t q0, const std::size_t qf, const int priority, const int tag)
     {
-        nodes_.at(q0).tr.emplace_back(std::in_place_type<epsilon_tr>, qf, priority, tag);
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<tnfa::epsilon_tr>, qf, priority, tag);
     }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_transition(const std::size_t q0, const std::size_t qf, CharT c)
+    {
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<tnfa::transition<CharT>>, qf, c, c);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_transition(const std::size_t q0, const std::size_t qf, CharT lower, CharT upper)
+    {
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<tnfa::transition<CharT>>, qf, lower, upper);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_assert(const std::size_t q0, const std::size_t qf, const satr_t::type ty)
+    {
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<satr_t>, qf, ty);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_assert(const std::size_t q0, const std::size_t qf, const aatr_t::type ty, const aatr_t::char_set_t cs)
+    {
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<aatr_t>, qf, cs, ty);
+    }
+    
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::make_assert(const std::size_t q0, const std::size_t qf, const std::size_t p0, const std::size_t pf)
+    {
+        nodes_.at(q0).tr.emplace_back(std::in_place_type<latr_t>, qf, p0, pf);
+    }
+
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_ntags(std::size_t q0, const std::size_t qf, const std::vector<int>& ntags)
@@ -37,15 +74,15 @@ namespace rx::detail
             for (const int tag : ntags | std::views::take(ntags.size() - 1))
             {
                 const auto qi{ node_create() };
-                epsilon(q0, qi, 0, -(tag + 1));
+                make_epsilon(q0, qi, 0, -(tag + 1));
                 q0 = qi;
             }
 
-            epsilon(q0, qf, 0, -(ntags.back() + 1));
+            make_epsilon(q0, qf, 0, -(ntags.back() + 1));
         }
         else 
         {     
-            epsilon(q0, qf);
+            make_epsilon(q0, qf);
         }
     }
 
@@ -65,19 +102,21 @@ namespace rx::detail
         }
         else 
         {
-            nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, std::numeric_limits<CharT>::lowest(), std::numeric_limits<CharT>::max());
+            make_transition(q0, qf, std::numeric_limits<CharT>::lowest(), std::numeric_limits<CharT>::max());
         }
     }
 
     template<typename CharT>
-    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags) : 
-        capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
+    constexpr void tagged_nfa<CharT>::thompson(const expr_tree<CharT>& ast)
     {
         std::vector<std::vector<int>> tag_vec{};
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
 
         std::vector<stack_elem> stack;
         stack.emplace_back(start_node_, final_node_, ast.root_idx());
+
+        if (flags_.is_iterator)
+            continue_nodes_.emplace_back(start_node_);
 
         while (not stack.empty())
         {
@@ -94,15 +133,15 @@ namespace rx::detail
                     for (const auto c : str.data | std::views::take(str.data.size() - 1))
                     {
                         auto qi{ node_create() };
-                        nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qi, c, c);
+                        make_transition(q0, qi, c);
                         q0 = qi;
                     }
                     
-                    nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, str.data.back(), str.data.back());
+                    make_transition(q0, qf, str.data.back());
                 }
                 else
                 {
-                    epsilon(q0, qf);
+                    make_epsilon(q0, qf);
                 }
                 break;
 
@@ -132,7 +171,7 @@ namespace rx::detail
                         const std::vector<char_range>& ref{ (cla.data.is_negated()) ? negated : cla.data.get() };
 
                         for (const auto& [lower, upper] : ref)
-                            nodes_.at(q0).tr.emplace_back(std::in_place_type<n_tr<CharT>>, qf, lower, upper);                    
+                            make_transition(q0, qf, lower, upper);             
                     }
                 }
                 break;
@@ -151,7 +190,7 @@ namespace rx::detail
                 }
                 else
                 {
-                    epsilon(q0, qf);
+                    make_epsilon(q0, qf);
                 }
                 break;
 
@@ -164,7 +203,7 @@ namespace rx::detail
                         for (std::size_t i{ 0 }; i < alt.idxs.size(); ++i)
                         {
                             auto qi{ node_create() };
-                            epsilon(q0, qi, i);
+                            make_epsilon(q0, qi, i);
                             stack.emplace_back(qi, qf, alt.idxs.at(i));
                         }
                     }
@@ -184,8 +223,8 @@ namespace rx::detail
                                 auto p1{ node_create() };
                                 auto q2{ node_create() };
                 
-                                epsilon(q0, q1, 0);
-                                epsilon(q0, p1, 1);
+                                make_epsilon(q0, q1, 0);
+                                make_epsilon(q0, p1, 1);
                                 
                                 stack.emplace_back(q1, p2, alt.idxs.at(i));
                                 make_ntags(p1, q2, tag_vec.at(alt.idxs.at(i)));
@@ -207,7 +246,7 @@ namespace rx::detail
                 }
                 else
                 {
-                    epsilon(q0, qf);
+                    make_epsilon(q0, qf);
                 }
                 break;
 
@@ -247,8 +286,8 @@ namespace rx::detail
                             auto q2{ node_create() };
 
                             stack.emplace_back(q0, q1, rep.idx);
-                            epsilon(q1, qf, not lazy);
-                            epsilon(q1, q2, lazy);
+                            make_epsilon(q1, qf, not lazy);
+                            make_epsilon(q1, q2, lazy);
             
                             max -= 1;
                             q0 = q2;
@@ -257,18 +296,18 @@ namespace rx::detail
                         {
                             auto q1{ node_create() };
 
-                            epsilon(q0, q1, lazy);
+                            make_epsilon(q0, q1, lazy);
 
                             if (tag_vec.empty() or tag_vec.at(idx).empty())
                             {
                                 /* generate tag-free nfa */
-                                epsilon(q0, qf, not lazy);
+                                make_epsilon(q0, qf, not lazy);
                             }
                             else
                             {
                                 /* generate tag-aware nfa */
                                 auto p1{ node_create() };
-                                epsilon(q0, p1, not lazy);
+                                make_epsilon(q0, p1, not lazy);
                                 make_ntags(p1, qf, tag_vec.at(rep.idx));
                             }
 
@@ -280,8 +319,8 @@ namespace rx::detail
                             auto q1{ node_create() };
 
                             stack.emplace_back(q0, q1, rep.idx);
-                            epsilon(q1, q0, lazy);
-                            epsilon(q1, qf, not lazy);
+                            make_epsilon(q1, q0, lazy);
+                            make_epsilon(q1, qf, not lazy);
             
                             break;
                         }
@@ -302,12 +341,44 @@ namespace rx::detail
                 {
                     /* in tree_expr tags start at 0, whereas here they start at 1 */
                     const auto& tag_entry{ std::get<typename ast_t::tag>(entry) };
-                    epsilon(q0, qf, 0, tag_entry.number + 1);
+                    make_epsilon(q0, qf, 0, tag_entry.number + 1);
                 }
                 break;
 
             case ast_index<typename ast_t::assertion>:
-                throw tnfa_error("Assertions are unimplemented");
+                {
+                    const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
+
+                    switch (assertion.type)
+                    {
+                    case assert_type::line_start:
+                        throw tnfa_error("Non-trivial assertions are unimplemented");
+                        // TODO: implement
+                        // has_lookbehind_1_ = true;
+                        // [[fallthrough]];
+                    
+                    case assert_type::text_start:
+                        make_assert(q0, qf, satr_t::type::sof);
+                        has_sof_anchor_ = true;
+                        break;
+                    
+                    case assert_type::line_end:
+                        throw tnfa_error("Non-trivial assertions are unimplemented");
+                        // TODO: implement
+                        // has_lookahead_1_ = true;
+                        // [[fallthrough]];
+                    
+                    case assert_type::text_end:
+                        make_assert(q0, qf, satr_t::type::eof);
+                        has_eof_anchor_ = true;
+                        break;
+
+                    default:
+                        throw tnfa_error("Non-trivial assertions are unimplemented");
+                        break;
+                    }
+                }
+                break;
 
             case ast_index<typename ast_t::backref>:
                 throw tnfa_error("Backreferences are unimplemented");
@@ -319,4 +390,284 @@ namespace rx::detail
         }
     }
 
+    
+    /* observers */
+
+    template<typename CharT>
+    constexpr std::vector<std::size_t> tagged_nfa<CharT>::strict_e_closure(const std::size_t q) const
+    {
+        std::vector<std::size_t> result;
+        std::vector to_visit{ q };
+
+        std::vector<bool> visited(node_count(), false);
+
+        while (not to_visit.empty())
+        {
+            const std::size_t current{ to_visit.back() };
+            to_visit.pop_back();
+
+            result.emplace_back(current);
+            
+            const auto& current_node{ get_node(current) };
+            
+            for (const auto& tr : current_node.tr | std::views::reverse)
+            {
+                if (const tnfa::epsilon_tr* etr{ std::get_if<tnfa::epsilon_tr>(&tr) }; etr != nullptr)
+                {
+                    if (visited.at(etr->next))
+                        continue;
+
+                    visited[etr->next] = true;
+                    to_visit.emplace_back(etr->next);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr std::vector<std::size_t> tagged_nfa<CharT>::relaxed_e_closure(const std::size_t q) const
+    {
+        std::vector<std::size_t> result;
+        std::vector to_visit{ q };
+
+        std::vector<bool> visited(node_count(), false);
+
+        while (not to_visit.empty())
+        {
+            const std::size_t current{ to_visit.back() };
+            to_visit.pop_back();
+
+            result.emplace_back(current);
+            
+            const auto& current_node{ get_node(current) };
+            
+            for (const auto& tr : current_node.tr | std::views::reverse)
+            {
+                if (const auto* etr{ std::get_if<tnfa::epsilon_tr>(&tr) }; etr != nullptr)
+                {
+                    if (visited.at(etr->next)) continue;
+                    visited[etr->next] = true;
+                    to_visit.emplace_back(etr->next);
+                }
+                else if (const auto* atr{ std::get_if<satr_t>(&tr) }; atr != nullptr)
+                {
+                    if (visited.at(atr->next)) continue;
+                    visited[atr->next] = true;
+                    to_visit.emplace_back(atr->next);
+                }
+                else if (const auto* atr{ std::get_if<aatr_t>(&tr) }; atr != nullptr)
+                {
+                    if (visited.at(atr->next)) continue;
+                    visited[atr->next] = true;
+                    to_visit.emplace_back(atr->next);
+                }
+                else if (const auto* atr{ std::get_if<latr_t>(&tr) }; atr != nullptr)
+                {
+                    if (visited.at(atr->next)) continue;
+                    visited[atr->next] = true;
+                    to_visit.emplace_back(atr->next);
+                }
+            }
+        }
+
+        return result;
+    }
+
+
+    /* dead state elimination */
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::remove_dead_states()
+    {
+        // TODO: Implement
+    }
+
+    /* assertion elimination */
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::rewrite_sof_anchors() 
+    {
+        const auto ec{ relaxed_e_closure(start_node()) };
+
+        /* create a copy of the start node's e-closure */
+
+        std::flat_map<std::size_t, std::size_t> mapped_states;
+        for (const std::size_t q : ec)
+            mapped_states[q] = node_create();
+
+        /* duplicate transitions */
+
+        for (const auto [q, p] : mapped_states)
+        {
+            for (const auto& tr: nodes_.at(q).tr)
+            {
+                if (const auto* ntr{ std::get_if<tnfa::transition<CharT>>(&tr)}; ntr != nullptr)
+                {
+                    /* transition from copied e-closure to main graph */
+                    make_transition(p, ntr->next, ntr->lower, ntr->upper);
+                }
+                else if (const auto* etr{ std::get_if<tnfa::epsilon_tr>(&tr)}; etr != nullptr)
+                {
+                    /* transition within copied e-closure */
+                    make_epsilon(p, mapped_states.at(etr->next), etr->priority, etr->tag);
+                }
+                else if (const auto* atr{ std::get_if<satr_t>(&tr)}; atr != nullptr)
+                {
+                    if (atr->mode == satr_t::type::sof)
+                    {
+                        /* transition from copied e-closure to main graph */
+                        make_epsilon(p, atr->next);
+                        /* also add e-transition in copied graph in case of ^^ */
+                        make_epsilon(p, mapped_states.at(atr->next));
+                    }
+                    else
+                    {
+                        /* transition within copied e-closure */
+                        make_assert(p, mapped_states.at(atr->next), atr->mode);
+                    }
+                }
+                else if (const auto* atr{ std::get_if<aatr_t>(&tr) }; atr != nullptr)
+                {
+                    /* transition within copied e-closure */
+                    make_assert(p, mapped_states.at(atr->next), atr->mode, atr->valid);
+                }
+                else if (const auto* atr{ std::get_if<latr_t>(&tr) }; atr != nullptr)
+                {
+                    /* transition within copied e-closure */
+                    make_assert(p, mapped_states.at(atr->next), atr->lookahead_start, atr->lookahead_end);
+                }
+            }
+        }
+
+        /* remove all sof anchors */
+
+        constexpr auto pred = [](const tnfa::node<CharT>::transition_t& tr)
+        {
+            const auto* atr{ std::get_if<satr_t>(&tr)};
+            return (atr != nullptr and atr->mode == satr_t::type::sof);
+        };
+
+        for (auto& node : nodes_)
+            std::erase_if(node.tr, pred);
+
+        /* reassign start node */
+
+        start_node_ = mapped_states.at(start_node());
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::rewrite_eof_anchors() 
+    {
+        std::vector<std::size_t> to_revisit;
+        std::vector<std::size_t> ec;
+
+        for (std::size_t q{ 0 }; q < node_count(); ++q)
+        {
+            for (const auto& tr: get_node(q).tr)
+            {
+                if (const auto* atr{ std::get_if<satr_t>(&tr)}; atr != nullptr and atr->mode == satr_t::type::eof)
+                {
+                    to_revisit.emplace_back(q);
+                    ec.append_range(relaxed_e_closure(q));
+                }
+            }
+        }
+
+        std::ranges::sort(ec);
+        const auto [ret, last]{ std::ranges::unique(ec) };
+        ec.erase(ret, last);
+
+        /* create copy of e-closures  */
+
+        std::flat_map<std::size_t, std::size_t> mapped_states;
+        for (const std::size_t q : ec)
+            mapped_states[q] = node_create();
+
+        /* duplicate transitions */
+
+        for (const auto [q, p] : mapped_states)
+        {
+            for (const auto& tr: nodes_.at(q).tr)
+            {
+                if (const auto* ntr{ std::get_if<tnfa::transition<CharT>>(&tr)}; ntr != nullptr)
+                {
+                    /* do not insert transition */
+                }
+                else if (const auto* etr{ std::get_if<tnfa::epsilon_tr>(&tr)}; etr != nullptr)
+                {
+                    /* transition within copied subgraph */
+                    make_epsilon(p, mapped_states.at(etr->next), etr->priority, etr->tag);
+                }
+                else if (const auto* atr{ std::get_if<satr_t>(&tr)}; atr != nullptr)
+                {
+                    if (atr->mode == satr_t::type::eof)
+                    {
+                        /* replace eof anchor with e-transition in copied subgraph in case of $$ */
+                        make_epsilon(p, mapped_states.at(atr->next));
+                    }
+                    else
+                    {
+                        /* transition within copied subgraph */
+                        make_assert(p, mapped_states.at(atr->next), atr->mode);
+                    }
+                }
+                else if (const auto* atr{ std::get_if<aatr_t>(&tr) }; atr != nullptr)
+                {
+                    /* transition within copied subgraph */
+                    make_assert(p, mapped_states.at(atr->next), atr->mode, atr->valid);
+                }
+                else if (const auto* atr{ std::get_if<latr_t>(&tr) }; atr != nullptr)
+                {
+                    /* transition within copied subgraph */
+                    make_assert(p, mapped_states.at(atr->next), atr->lookahead_start, atr->lookahead_end);
+                }
+            }
+        }
+
+        /* remove all eof anchors */
+
+        constexpr auto pred = [](const tnfa::node<CharT>::transition_t& tr)
+        {
+            const auto* atr{ std::get_if<satr_t>(&tr)};
+            return (atr != nullptr and atr->mode == satr_t::type::eof);
+        };
+
+        for (const std::size_t q : to_revisit)
+        {
+            auto& trs{ nodes_.at(q).tr };
+            for (auto it{ trs.begin() }; (it = std::ranges::find_if(it, trs.end(), pred)) != trs.end(); ++it)
+            {
+                const std::size_t next{ std::get<satr_t>(*it).next };
+                it->template emplace<tnfa::epsilon_tr>(mapped_states.at(next), 0, 0);
+            }
+        }
+            
+
+        /* set strict final node */
+
+        strict_final_node_ = mapped_states.at(final_node_);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::rewrite_assertions() 
+    {
+        if (has_sof_anchor_) rewrite_sof_anchors();
+        if (has_eof_anchor_) rewrite_eof_anchors();
+
+
+        if (has_sof_anchor_ or has_eof_anchor_ or has_lookahead_1_ or has_lookbehind_1_ or has_lookahead_n_) remove_dead_states();
+    }
+
+    
+    /* constructor */
+
+    template<typename CharT>
+    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags) : 
+        capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
+    {
+        thompson(ast);
+        rewrite_assertions();
+    }
 }

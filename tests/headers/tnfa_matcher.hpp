@@ -33,12 +33,14 @@ namespace rx::testing
         [[nodiscard]] constexpr tag_result make_submatch_results(const tag_vector& v, std::size_t size) const;
     };
     
+
     /* tagged nfa simulation */
 
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::e_closure(closure_t&& closure, const std::size_t k) const -> closure_t
     {
         using namespace rx::detail;
+        using namespace rx::detail::tnfa;
 
         closure_t new_closure;
         closure_t stack{ std::move(closure) };
@@ -75,7 +77,7 @@ namespace rx::testing
             if (this->node_is_final(e.first))
                 return false;
             return 0 != std::ranges::count_if(this->get_node(e.first).tr,
-                                              [](const auto& t) { return not std::holds_alternative<n_tr<CharT>>(t); });
+                                              [](const auto& t) { return not std::holds_alternative<transition<CharT>>(t); });
         });
 
         return new_closure;
@@ -85,17 +87,18 @@ namespace rx::testing
     constexpr auto tnfa_matcher<CharT>::step(const closure_t& closure, const CharT a) const -> closure_t
     {
         using namespace rx::detail;
+        using namespace rx::detail::tnfa;
 
         closure_t new_closure;
 
         for (auto& [q, m] : closure)
         {
-            std::vector<n_tr<CharT>> ct{ this->get_node(q).tr
-                                         | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<CharT>>(t); })
-                                         | std::views::transform([](const auto& t) -> n_tr<CharT> { return std::get<n_tr<CharT>>(t); })
-                                         | std::ranges::to<std::vector>() };
+            std::vector<transition<CharT>> ct{ this->get_node(q).tr
+                                               | std::views::filter([](const auto& t) { return std::holds_alternative<transition<CharT>>(t); })
+                                               | std::views::transform([](const auto& t) { return std::get<transition<CharT>>(t); })
+                                               | std::ranges::to<std::vector>() };
 
-            for (const n_tr<CharT>& c : ct)
+            for (const transition<CharT>& c : ct)
             {
                 if (c.lower <= a and a <= c.upper)
                 {

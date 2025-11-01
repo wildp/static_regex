@@ -268,3 +268,9 @@ static_assert(parse("(?# comment )", ""));
 static_assert(parse("(?:aaa)", "aaa"));
 static_assert(parse("\\Q...\\E", "..."));
 static_assert(test("(v*)*|j*"));
+
+/* anchor parsing tests */
+static_assert(test("(\na$)+"));
+static_assert(test("(?m)(\na$)+"));
+static_assert(test("(?m)(^a\n)+"));
+static_assert(test("(?ms)a$.^a"));

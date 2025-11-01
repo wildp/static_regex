@@ -182,6 +182,19 @@ static_assert(partial_match("(abc)+?a", "abcabca", { 0, 4, 0, 3 }));
 
 
 /* search tests */
+// TODO: add some tests
+
+/* sof+eof anchor tests */
+static_assert(partial_match("(a)+?$", "a", { 0, 1, 0, 1 }));
+static_assert(partial_match("(a)+?$", "aa", { 0, 2, 1, 2 }));
+static_assert(partial_match("(a)+?", "a", { 0, 1, 0, 1 }));
+static_assert(partial_match("(a)+?", "aa", { 0, 1, 0, 1 }));
+static_assert(not search("^ab", "bab"));
+static_assert(search("^ab", "aba", { 0, 2 }));
+static_assert(search("ab", "bab", { 1, 3 }));
+static_assert(search("ab", "aba", { 0, 2 }));
 
 
+/* other tests */
+// "R(est)|(Res)T" -> hopcroft
 

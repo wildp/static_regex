@@ -77,6 +77,7 @@ namespace rx::detail::tdfa
     {
         config_set_t    config;
         precedence_t    precedence;
+        bool            is_fallback{ false };
 
         friend constexpr bool operator==(const node_info&, const node_info&) = default;
     };
@@ -171,14 +172,14 @@ namespace rx::detail::tdfa
             visited.at(ce.tnfa_state) = true;
 
             // TODO: maybe reimplement to be more efficient, using getif?
-            std::vector<epsilon_tr> et{ std::from_range,
-                                        tnfa_ptr_->get_node(ce.tnfa_state).tr
-                                        | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t); })
-                                        | std::views::transform([](const auto& t) { return std::get<epsilon_tr>(t); }) };
+            std::vector<tnfa::epsilon_tr> et{ std::from_range,
+                                              tnfa_ptr_->get_node(ce.tnfa_state).tr
+                                              | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t); })
+                                              | std::views::transform([](const auto& t) { return std::get<tnfa::epsilon_tr>(t); }) };
             
-            std::ranges::sort(et, std::ranges::greater{}, &epsilon_tr::priority);
+            std::ranges::sort(et, std::ranges::greater{}, &tnfa::epsilon_tr::priority);
 
-            for (const epsilon_tr& e : et)
+            for (const tnfa::epsilon_tr& e : et)
             {
                 if (not visited.at(e.next))
                 {
@@ -197,23 +198,25 @@ namespace rx::detail::tdfa
                 if (tnfa_ptr_->node_is_final(ce.tnfa_state))
                     return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
-                                                  [](const auto& t) { return not std::holds_alternative<n_tr<CharT>>(t); });
+                                                  [](const auto& t) { return not std::holds_alternative<tnfa::transition<CharT>>(t); });
             });
         }
         else
         {
-            /* remove all (non-final) states with only e-transitions, and remove all states after first final state encountered */
+            /* remove all (non-final) states with only e-transitions, and remove all states after first fallback state encountered */
             bool end_found{ false };
             std::erase_if(new_closure, [this, &end_found](const closure_entry& ce) -> bool {
                 if (end_found)
                     return true;
-                if (tnfa_ptr_->node_is_final(ce.tnfa_state))
+                if (tnfa_ptr_->node_is_fallback(ce.tnfa_state))
                 {
                     end_found = true;
                     return false;
                 }
+                if (tnfa_ptr_->node_is_final(ce.tnfa_state))
+                    return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
-                                                [](const auto& t) { return not std::holds_alternative<n_tr<CharT>>(t); });
+                                                  [](const auto& t) { return not std::holds_alternative<tnfa::transition<CharT>>(t); });
             });
         }
 
@@ -250,6 +253,11 @@ namespace rx::detail::tdfa
                 result.regops_.emplace_back(std::move(final_ops));
             }
         }
+
+        /* set fallback state status for fallback_regops */
+        const auto it2{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_fallback(arg); }, &configuration::tnfa_state) };
+        if (it2 != std::ranges::end(current_cfg))
+            state_info_.back().is_fallback = true;
     }
 
     template<typename CharT>
@@ -289,6 +297,11 @@ namespace rx::detail::tdfa
                 result.regops_.emplace_back(std::move(final_ops));
             }
         }
+
+        /* set fallback state status for fallback_regops */
+        const auto it2{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_fallback(arg); }, &configuration::tnfa_state) };
+        if (it2 != std::ranges::end(current_cfg))
+            state_info_.back().is_fallback = true;
         
         return new_state;
     }
@@ -303,14 +316,14 @@ namespace rx::detail::tdfa
 
         // std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
 
-        using elem_t = std::pair<n_tr<char_type>, std::reference_wrapper<const configuration>>;
+        using elem_t = std::pair<tnfa::transition<char_type>, std::reference_wrapper<const configuration>>;
         std::vector<elem_t> transitions;
 
         for (const auto& cfg : configs)
         {
             transitions.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).tr
-                                     | std::views::filter([](const auto& t) { return std::holds_alternative<n_tr<char_type>>(t); })
-                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { std::get<n_tr<char_type>>(t), std::cref(cfg) }; }));
+                                     | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::transition<char_type>>(t); })
+                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { std::get<tnfa::transition<char_type>>(t), std::cref(cfg) }; }));
         }
 
         std::vector<std::pair<char_type, char_type>> symbol_pairs;
@@ -485,7 +498,10 @@ namespace rx::detail::tdfa
     {
         for (const auto [state, fop_index] : result.final_nodes_)
         {
-            /* we assume all final states can be a fallback state, which is an overapproximation */
+            /* check if current state is a fallback state */
+
+            if (not state_info_.at(state).is_fallback)
+                continue;
 
             const auto& final_ops{ result.get_regops(fop_index) };
 
