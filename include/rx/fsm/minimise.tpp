@@ -6,11 +6,11 @@
 #include <optional>
 #include <vector>
 
+#include <rx/etc/partition.hpp>
+
 
 namespace rx::detail::tdfa
 {
-
-
     template<typename CharT>
     class min
     {

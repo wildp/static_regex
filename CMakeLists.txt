@@ -27,6 +27,8 @@ add_link_options(
 
 include_directories(include/)
 
+set(CMAKE_LINKER_TYPE LLD)
+
 add_library(tests)
 target_sources(tests
     PUBLIC
@@ -40,7 +42,7 @@ target_sources(tests
 add_executable(main)
 target_sources(main
     PRIVATE 
-        testfile.cpp
+        tests/_testfile.cpp
 )
 
 

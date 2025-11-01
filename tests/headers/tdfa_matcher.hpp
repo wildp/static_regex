@@ -82,8 +82,6 @@ namespace rx::testing
         
         while (true)
         {
-            const auto& state{ this->get_node(next_state) };
-
             if (enable_fallback and this->fallback_nodes().contains(next_state))
             {
                 fallback_state = next_state;
@@ -102,7 +100,7 @@ namespace rx::testing
             {
                 bool success{ false };
 
-                for (const auto& t : state.tr)
+                for (const auto& t : this->get_node(next_state).tr)
                 {
                     if (t.lower <= *it and *it <= t.upper)
                     {
@@ -136,14 +134,14 @@ namespace rx::testing
     
         auto f = [&](const capture_info::tag_pair_t& p) -> bool {
             return not ((p.first.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.first.tag_number)))
-                            or (p.second.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.second.tag_number))));
+                         or (p.second.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.second.tag_number))));
         };
 
         auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<I, I> {
             return { std::next((p.first.tag_number >= 0) ? registers.at(final_reg.at(p.first.tag_number))
-                                : ((p.first.tag_number == start_of_input_tag) ? first : it), p.first.offset),
+                               : ((p.first.tag_number == start_of_input_tag) ? first : it), p.first.offset),
                      std::next((p.second.tag_number >= 0) ? registers.at(final_reg.at(p.second.tag_number))
-                                : ((p.second.tag_number == start_of_input_tag) ? first : it), p.second.offset) };
+                               : ((p.second.tag_number == start_of_input_tag) ? first : it), p.second.offset) };
         };
 
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)

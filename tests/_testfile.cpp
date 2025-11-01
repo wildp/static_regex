@@ -3,11 +3,15 @@
 
 #include <rx/regex.hpp>
 
-#include "tests/headers/printable_tree.hpp"
-#include "tests/headers/printable_tdfa.hpp"
-#include "tests/headers/tdfa_matcher.hpp"
-#include "tests/headers/tnfa_matcher.hpp"
-#include "tests/headers/tree_matcher.hpp"
+#include "headers/printable_tree.hpp"
+#include "headers/printable_tdfa.hpp"
+#include "headers/tdfa_matcher.hpp"
+#include "headers/tnfa_matcher.hpp"
+#include "headers/tree_matcher.hpp"
+
+#include <deque>
+#include <list>
+#include <set>
 
 
 namespace
@@ -36,6 +40,20 @@ namespace
         for (auto sv : tests)
         {
             auto result{ m.match(sv) };
+
+            if (result.has_value())
+                std::println("'{}': Match: {}", sv, *result);
+            else
+                std::println("'{}': No Match", sv);
+        }
+    }
+
+    template<typename M>
+    [[maybe_unused]] void print_partial_match_results(const M& m, const std::vector<std::string_view>& tests)
+    {
+        for (auto sv : tests)
+        {
+            auto result{ m.partial_match(sv) };
 
             if (result.has_value())
                 std::println("'{}': Match: {}", sv, *result);
@@ -118,7 +136,10 @@ namespace
                         }
                     }
 
-                    print_match_results(tdfa, test);
+                    if (Flags.fsm.enable_fallback)
+                        print_partial_match_results(tdfa, test);
+                    else
+                        print_match_results(tdfa, test);
                 }
                 else
                 {
@@ -139,9 +160,12 @@ namespace
     [[maybe_unused]] constexpr auto t4 = tester<{ .stage=3, .dbgok=true, .otags=true, .pdfao=true }>{};
     [[maybe_unused]] constexpr auto t5 = tester<{ .stage=3, .fsm=dff::search_single, .dbgok=true, .otags=true, .ptdfa=true, .pdfao=true }>{};
     [[maybe_unused]] constexpr auto t6 = tester<{ .stage=4, .fsm=dff::partial_match, .dbgok=true, .otags=true, .ptdfa=true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto t7 = tester<{ .stage=4, .dbghc=true, .otags = true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto t8 = tester<{ .stage=5, .dbgok=true, .otags = true, .pdfao=true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto t9 = tester<{ .stage=5, .fsm=dff::partial_match, .dbgok =true, .otags=true, .pdfao=true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto t7 = tester<{ .stage=4, .dbghc=true, .otags=true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto t8 = tester<{ .stage=5, .dbgok=true, .otags=true, .pdfao=true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto t9 = tester<{ .stage=5, .fsm=dff::partial_match, .dbgok=true, .otags=true, .pdfao=true, .pdfam=true }>{};
+    [[maybe_unused]] constexpr auto tA = tester<{ .stage=2, .fsm=dff::partial_match, .otags=true, .ptdfa=true }>{};
+    [[maybe_unused]] constexpr auto tB = tester<{ .stage=2, .fsm=dff::search_single, .otags=false, .ptags=true, .ptdfa=true }>{};
+    [[maybe_unused]] constexpr auto tC = tester<{ .stage=2, .fsm=dff::search_all, .otags=true, .ptdfa=true }>{};
 
     template<rx::string_literal S>
     [[maybe_unused]] void match(rx::static_regex<S> m, const std::vector<std::string_view>& test)
@@ -262,6 +286,36 @@ int main()
 
     // t7("abB|AB", {});
     // t8("abB|AB", {});
+
+    // tA("(a)+?$", { "", "a", "aa", "aaa" });
+    // tA("(a)+?", { " ", "a", "aa", "aaa" });
+
+    // tB("(a)+?$", { "", "a", "aa", "aaa" });
+    // tB("(a)+?", { " ", "a", "aa", "aaa" });
+
+    // tB("ab", { "ab", "baa", "bab", "abb", "aba" });
+    // tB("^ab", { "ab", "baa", "bab", "abb", "aba" });
+
+
+    // using namespace std::literals;
+    // auto m = "(Hello)|(World)?"_rx;
+
+    // std::println("{::?}",  m.match("Hello"));
+    // std::println("{::?}",  m.match("World"s));
+    // std::println("{::?}",  m.match("Hello"sv));
+    // std::println("{::?}",  m.match(std::vector<char>{ 'W', 'o', 'r', 'l', 'd' }));
+    // std::println("{::?}",  m.match(std::list<char>{ 'H', 'e', 'l', 'l', 'o' }));
+    // std::println("{::?}",  m.match(std::deque<char>{ 'W', 'o', 'r', 'l', 'd' }));
+    // std::println("{::?}",  m.match(std::set<char>{ 'H', 'e', 'l', 'l', 'o' }));
+    
+    // std::vector<char> vec{ 'V', 'n', 'q', 'k', 'c' };
+    // auto res = m.match(vec | std::views::transform([](char c){ return c + 1; }));
+    // std::println("{::?}", res);
+
+    // // auto res = m.match(std::vector<char>{ 'W', 'o', 'r', 'l', 'd' });
+    // auto sm = *res.begin();
+    // constexpr std::string_view u{ std::meta::display_string_of(std::meta::type_of(^^sm)) };
+    // std::println("{}", u);
 
     return 0;
 }
