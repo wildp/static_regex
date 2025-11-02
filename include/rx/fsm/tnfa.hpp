@@ -80,6 +80,20 @@ namespace rx::detail::tnfa
     {
         std::vector<transition<CharT>> tr;
     };
+
+    struct final_node_info
+    {
+        std::size_t continuation_index;
+        bool        is_fallback;
+    };
+
+    struct continue_info
+    {
+        using sub_e_closure = std::optional<std::vector<state_t>>;
+
+        state_t         value;
+        sub_e_closure   sub_ec;
+    };
 }
 
 
@@ -122,6 +136,8 @@ namespace rx::detail
         constexpr void rewrite_eof_anchors();
         constexpr void rewrite_sc_lookaround();
         constexpr void rewrite_assertions();
+
+        static constexpr state_t default_final_node{ 1 };
     
     public:
         [[nodiscard]] constexpr auto get_flags() const noexcept { return flags_; }
@@ -129,25 +145,25 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t node_count() const noexcept { return nodes_.size(); }
         [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
-        [[nodiscard]] constexpr bool node_is_final(state_t i) const { return i == final_node_ or i == strict_final_node_; }
-        [[nodiscard]] constexpr bool node_is_fallback(state_t i) const { return flags_.enable_fallback and i == final_node_; } // temporary implementation
+        [[nodiscard]] constexpr bool node_is_final(state_t i) const { return final_nodes_.contains(i); }
+        [[nodiscard]] constexpr bool node_is_fallback(state_t i) const { const auto it{ final_nodes_.find(i) }; return (it != final_nodes_.end() and it->second.is_fallback); }
         [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
 
     private:
-        std::vector<tnfa::node<CharT>> nodes_{ 2 };
-        capture_info capture_info_;
-        std::size_t tag_count_;
-        state_t start_node_{ 0 };
-        state_t final_node_{ 1 };
-        std::vector<state_t> continue_nodes_;
-        std::optional<state_t> strict_final_node_;
+        std::vector<tnfa::node<CharT>>                  nodes_{ 2 };
+        capture_info                                    capture_info_;
+        std::size_t                                     tag_count_;
+        state_t                                         start_node_{ 0 };
+        std::flat_map<state_t, tnfa::final_node_info>   final_nodes_;
+        std::vector<tnfa::continue_info>                cont_info_;
+
         fsm_flags flags_;
 
-        bool has_eof_anchor_ : 1 { false };
-        bool has_sof_anchor_ : 1 { false };
-        bool has_lookahead_1_ : 1 { false };
-        bool has_lookbehind_1_ : 1 { false };
-        bool has_lookahead_n_ : 1 { false };
+        bool has_eof_anchor_    : 1 { false };
+        bool has_sof_anchor_    : 1 { false };
+        bool has_lookahead_1_   : 1 { false };
+        bool has_lookbehind_1_  : 1 { false };
+        bool has_lookahead_n_   : 1 { false };
     };
 }
 

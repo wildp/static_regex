@@ -129,10 +129,7 @@ namespace rx::detail
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
 
         std::vector<stack_elem> stack;
-        stack.emplace_back(start_node_, final_node_, ast.root_idx());
-
-        if (flags_.is_iterator)
-            continue_nodes_.emplace_back(start_node_);
+        stack.emplace_back(start_node_, default_final_node, ast.root_idx());
 
         while (not stack.empty())
         {
@@ -562,14 +559,37 @@ namespace rx::detail
 
         /* create copy of e-closures  */
 
-        std::flat_map<std::size_t, std::size_t> mapped_states;
+        std::flat_map<state_t, state_t> mapped_states;
+        std::vector<std::pair<state_t, tnfa::final_node_info>> final_node_duplication_info;
+
         for (const std::size_t q : ec)
-            mapped_states[q] = node_create();
+        {
+            if (const auto it{ final_nodes_.find(q) }; it != final_nodes_.end()) 
+            {  
+                if (it->second.is_fallback)
+                {
+                    const state_t p{ node_create() };
+                    mapped_states[q] = p;
+                    final_node_duplication_info.emplace_back(p, it->second);
+                }
+                else
+                {
+                    /* avoid creating duplicate non-fallback final nodes */
+                    mapped_states[q] = q;
+                }
+            }
+            else
+            {
+                mapped_states[q] = node_create();
+            }
+        }
 
         /* duplicate transitions */
 
         for (const auto [q, p] : mapped_states)
         {
+            if (q == p) continue;
+
             for (const auto& tr: nodes_.at(q).tr)
             {
                 if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
@@ -606,11 +626,16 @@ namespace rx::detail
                 it->type.template emplace<tnfa::epsilon_tr>(0, 0);
             }
         }
-            
 
-        /* set strict final node */
+        /* duplicate final nodes */
 
-        strict_final_node_ = mapped_states.at(final_node_);
+        for (const auto& [mapped_state, fni] : final_node_duplication_info)
+        {
+            final_nodes_.emplace(mapped_state, tnfa::final_node_info{
+                .continuation_index = fni.continuation_index,
+                .is_fallback = false
+            });
+        }
     }
 
     template<typename CharT>
@@ -630,6 +655,14 @@ namespace rx::detail
     constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags) : 
         capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
     {
+        if (flags_.is_iterator)
+            cont_info_.emplace_back(start_node_);
+
+        final_nodes_.emplace(default_final_node, tnfa::final_node_info{
+            .continuation_index = start_node_,
+            .is_fallback = (flags.enable_fallback and not flags_.longest_match)
+        });
+
         thompson(ast);
         rewrite_assertions();
     }
