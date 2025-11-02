@@ -203,8 +203,7 @@ namespace rx::detail::tdfa
         {
             /* this version is needed for full matches, but below is needed for laziness in partial matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
-                if (tnfa_ptr_->node_is_final(ce.tnfa_state))
-                    return false;
+                if (tnfa_ptr_->get_node(ce.tnfa_state).is_fallback) return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
                                                   [](const auto& t) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(t.type); });
             });
@@ -214,15 +213,10 @@ namespace rx::detail::tdfa
             /* remove all (non-final) states with only e-transitions, and remove all states after first fallback state encountered */
             bool end_found{ false };
             std::erase_if(new_closure, [this, &end_found](const closure_entry& ce) -> bool {
-                if (end_found)
-                    return true;
-                if (tnfa_ptr_->node_is_fallback(ce.tnfa_state))
-                {
-                    end_found = true;
-                    return false;
-                }
-                if (tnfa_ptr_->node_is_final(ce.tnfa_state))
-                    return false;
+                if (end_found) return true;
+                const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
+                if (node.is_fallback) { end_found = true; return false; }
+                if (node.is_final) return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
                                                   [](const auto& t) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(t.type); });
             });
@@ -246,7 +240,7 @@ namespace rx::detail::tdfa
 
         /* make final regops if initial state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto it{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_final(arg); }, &configuration::tnfa_state) };
+        const auto it{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; }, &configuration::tnfa_state) };
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
@@ -262,10 +256,13 @@ namespace rx::detail::tdfa
             }
         }
 
-        /* set fallback state status for fallback_regops */
-        const auto it2{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_fallback(arg); }, &configuration::tnfa_state) };
-        if (it2 != std::ranges::end(current_cfg))
-            state_info_.back().is_fallback = true;
+        if (flags_.enable_fallback)
+        {
+            /* set fallback state status for fallback_regops */
+            const auto it2{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; }, &configuration::tnfa_state) };
+            if (it2 != std::ranges::end(current_cfg))
+                state_info_.back().is_fallback = true;
+        }
     }
 
     template<typename CharT>
@@ -290,7 +287,7 @@ namespace rx::detail::tdfa
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto it{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_final(arg); }, &configuration::tnfa_state) };
+        const auto it{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; }, &configuration::tnfa_state) };
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
@@ -306,10 +303,13 @@ namespace rx::detail::tdfa
             }
         }
 
-        /* set fallback state status for fallback_regops */
-        const auto it2{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->node_is_fallback(arg); }, &configuration::tnfa_state) };
-        if (it2 != std::ranges::end(current_cfg))
-            state_info_.back().is_fallback = true;
+        if (flags_.enable_fallback)
+        {
+            /* set fallback state status for fallback_regops */
+            const auto it2{ std::ranges::find_if(current_cfg, [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; }, &configuration::tnfa_state) };
+            if (it2 != std::ranges::end(current_cfg))
+                state_info_.back().is_fallback = true;
+        }
         
         return new_state;
     }

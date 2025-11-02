@@ -79,12 +79,10 @@ namespace rx::detail::tnfa
     struct node
     {
         std::vector<transition<CharT>> tr;
-    };
 
-    struct final_node_info
-    {
-        std::size_t continuation_index;
-        bool        is_fallback;
+        bool is_final{ false };
+        bool is_fallback{ false };          /* must equal false if not is_final */
+        std::uint16_t continue_at{ 0 };     /* only meaningful if is_final */
     };
 
     struct continue_info
@@ -137,6 +135,7 @@ namespace rx::detail
         constexpr void rewrite_sc_lookaround();
         constexpr void rewrite_assertions();
 
+        static constexpr state_t default_start_node{ 0 };
         static constexpr state_t default_final_node{ 1 };
     
     public:
@@ -145,16 +144,13 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t node_count() const noexcept { return nodes_.size(); }
         [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
-        [[nodiscard]] constexpr bool node_is_final(state_t i) const { return final_nodes_.contains(i); }
-        [[nodiscard]] constexpr bool node_is_fallback(state_t i) const { const auto it{ final_nodes_.find(i) }; return (it != final_nodes_.end() and it->second.is_fallback); }
         [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
 
     private:
         std::vector<tnfa::node<CharT>>                  nodes_{ 2 };
         capture_info                                    capture_info_;
         std::size_t                                     tag_count_;
-        state_t                                         start_node_{ 0 };
-        std::flat_map<state_t, tnfa::final_node_info>   final_nodes_;
+        state_t                                         start_node_{ default_start_node };
         std::vector<tnfa::continue_info>                cont_info_;
 
         fsm_flags flags_;

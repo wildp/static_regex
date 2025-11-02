@@ -129,7 +129,7 @@ namespace rx::detail
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
 
         std::vector<stack_elem> stack;
-        stack.emplace_back(start_node_, default_final_node, ast.root_idx());
+        stack.emplace_back(default_start_node, default_final_node, ast.root_idx());
 
         while (not stack.empty())
         {
@@ -560,17 +560,18 @@ namespace rx::detail
         /* create copy of e-closures  */
 
         std::flat_map<state_t, state_t> mapped_states;
-        std::vector<std::pair<state_t, tnfa::final_node_info>> final_node_duplication_info;
 
         for (const std::size_t q : ec)
         {
-            if (const auto it{ final_nodes_.find(q) }; it != final_nodes_.end()) 
+            if (const auto node{ get_node(q) }; node.is_final) 
             {  
-                if (it->second.is_fallback)
+                if (node.is_fallback)
                 {
+                    /* create duplicate non-fallback final node */
                     const state_t p{ node_create() };
                     mapped_states[q] = p;
-                    final_node_duplication_info.emplace_back(p, it->second);
+                    nodes_[p].is_final = true;
+                    nodes_[p].continue_at = node.continue_at;
                 }
                 else
                 {
@@ -626,16 +627,6 @@ namespace rx::detail
                 it->type.template emplace<tnfa::epsilon_tr>(0, 0);
             }
         }
-
-        /* duplicate final nodes */
-
-        for (const auto& [mapped_state, fni] : final_node_duplication_info)
-        {
-            final_nodes_.emplace(mapped_state, tnfa::final_node_info{
-                .continuation_index = fni.continuation_index,
-                .is_fallback = false
-            });
-        }
     }
 
     template<typename CharT>
@@ -655,13 +646,11 @@ namespace rx::detail
     constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags) : 
         capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
     {
-        if (flags_.is_iterator)
-            cont_info_.emplace_back(start_node_);
+        nodes_[default_final_node].is_final = true;
+        nodes_[default_final_node].is_fallback = (flags.enable_fallback and not flags_.longest_match);
 
-        final_nodes_.emplace(default_final_node, tnfa::final_node_info{
-            .continuation_index = start_node_,
-            .is_fallback = (flags.enable_fallback and not flags_.longest_match)
-        });
+        if (flags_.is_iterator)
+            cont_info_.emplace_back(default_start_node);
 
         thompson(ast);
         rewrite_assertions();
