@@ -185,10 +185,21 @@ static_assert(partial_match("(abc)+?a", "abcabca", { 0, 4, 0, 3 }));
 // TODO: add some tests
 
 /* sof+eof anchor tests */
+static_assert(match("a$", "a"));
+static_assert(match("^a", "a"));
+static_assert(match("^a$", "a"));
+static_assert(match("^$", ""));
+static_assert(not search("^$", "a"));
+static_assert(search("^$", "", { 0, 0 }));
+static_assert(search("$^", "", { 0, 0 }));
+static_assert(partial_match("(a)+?$$", "a", { 0, 1, 0, 1 }));
+static_assert(partial_match("(a)+?$$", "aa", { 0, 2, 1, 2 }));
 static_assert(partial_match("(a)+?$", "a", { 0, 1, 0, 1 }));
 static_assert(partial_match("(a)+?$", "aa", { 0, 2, 1, 2 }));
 static_assert(partial_match("(a)+?", "a", { 0, 1, 0, 1 }));
 static_assert(partial_match("(a)+?", "aa", { 0, 1, 0, 1 }));
+static_assert(not search("^^ab", "bab"));
+static_assert(search("^^ab", "aba", { 0, 2 }));
 static_assert(not search("^ab", "bab"));
 static_assert(search("^ab", "aba", { 0, 2 }));
 static_assert(search("ab", "bab", { 1, 3 }));
