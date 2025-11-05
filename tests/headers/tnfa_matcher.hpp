@@ -59,10 +59,11 @@ namespace rx::testing
             const auto& [q, m]{ new_closure.back() };
             
             using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
-            std::vector<epsilon_t> et{ std::from_range,
-                                       this->get_node(q).tr
-                                       | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
-                                       | std::views::transform([](const auto& t) -> epsilon_t { return { t.next, std::get<tnfa::epsilon_tr>(t.type) }; }) };
+            std::vector et{ std::from_range,
+                            this->get_node(q).out_tr
+                            | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
+                            | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
+                            | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; }) };
             
             std::ranges::sort(et, std::ranges::greater{}, compose(&epsilon_tr::priority, &epsilon_t::second));
 
@@ -81,10 +82,10 @@ namespace rx::testing
         }
 
         std::erase_if(new_closure, [this](const closure_entry& e) -> bool {
-            if (this->node_is_final(e.first))
+            if (this->get_node(e.first).is_final)
                 return false;
-            return 0 != std::ranges::count_if(this->get_node(e.first).tr,
-                                              [](const auto& t) { return not std::holds_alternative<normal_tr<CharT>>(t.type); });
+            return 0 != std::ranges::count_if(this->get_node(e.first).out_tr,
+                                              [&](const std::size_t i) { return not std::holds_alternative<normal_tr<CharT>>(this->get_tr(i).type); });
         });
 
         return new_closure;
@@ -101,10 +102,11 @@ namespace rx::testing
         for (auto& [q, m] : closure)
         {
             using normal_t = std::pair<tnfa::state_t, normal_tr<CharT>>;
-            std::vector<normal_t> ct{ std::from_range,
-                                      this->get_node(q).tr
-                                      | std::views::filter([](const auto& t) { return std::holds_alternative<normal_tr<CharT>>(t.type); })
-                                      | std::views::transform([](const auto& t) -> normal_t { return { t.next, std::get<normal_tr<CharT>>(t.type) }; }) };
+            std::vector ct{ std::from_range,
+                            this->get_node(q).out_tr
+                            | std::views::transform([&](const tnfa::state_t p) { return this->get_tr(p); })
+                            | std::views::filter([](const auto& t) { return std::holds_alternative<normal_tr<CharT>>(t.type); })
+                            | std::views::transform([](const auto& t) -> normal_t { return { t.dst, std::get<normal_tr<CharT>>(t.type) }; }) };
 
             for (const auto& [next, c] : ct)
             {
@@ -139,7 +141,7 @@ namespace rx::testing
         }
 
         c = e_closure(std::move(c), input.size());
-        auto result{ std::ranges::find_if(c, [&](std::size_t arg){ return this->node_is_final(arg); }, &closure_entry::first) };
+        auto result{ std::ranges::find_if(c, [&](std::size_t arg){ return this->get_node(arg).is_final; }, &closure_entry::first) };
 
         if (result == c.end())
             return {};

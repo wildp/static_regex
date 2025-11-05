@@ -179,11 +179,13 @@ namespace rx::detail::tdfa
             visited.at(ce.tnfa_state) = true;
 
             // TODO: maybe reimplement to be more efficient, using getif?
+            // also maybe sort e-transitions and avoid looking at node.out_tr and node.in_tr
             using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
-            std::vector<epsilon_t> et{ std::from_range,
-                                       tnfa_ptr_->get_node(ce.tnfa_state).tr
-                                       | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
-                                       | std::views::transform([](const auto& t) -> epsilon_t { return { t.next, std::get<tnfa::epsilon_tr>(t.type) }; }) };
+            std::vector et{ std::from_range,
+                            tnfa_ptr_->get_node(ce.tnfa_state).out_tr
+                            | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
+                            | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
+                            | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; }) };
             
             std::ranges::sort(et, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_t::second));
 
@@ -204,8 +206,8 @@ namespace rx::detail::tdfa
             /* this version is needed for full matches, but below is needed for laziness in partial matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
                 if (tnfa_ptr_->get_node(ce.tnfa_state).is_fallback) return false;
-                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
-                                                  [](const auto& t) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(t.type); });
+                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
+                                                  [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
             });
         }
         else
@@ -217,8 +219,8 @@ namespace rx::detail::tdfa
                 const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
                 if (node.is_fallback) { end_found = true; return false; }
                 if (node.is_final) return false;
-                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).tr,
-                                                  [](const auto& t) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(t.type); });
+                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
+                                                  [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
             });
         }
 
@@ -329,9 +331,10 @@ namespace rx::detail::tdfa
 
         for (const auto& cfg : configs)
         {
-            transitions.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).tr
+            transitions.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).out_tr
+                                     | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
                                      | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::normal_tr<char_type>>(t.type); })
-                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { t.next, std::get<tnfa::normal_tr<char_type>>(t.type), std::cref(cfg) }; }));
+                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { t.dst, std::get<tnfa::normal_tr<char_type>>(t.type), std::cref(cfg) }; }));
         }
 
         std::vector<std::pair<char_type, char_type>> symbol_pairs;

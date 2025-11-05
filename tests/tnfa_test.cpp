@@ -12,6 +12,8 @@ namespace
 
         if (captures.empty())
             return match_result.has_value();
+        else if (not match_result.has_value())
+            return false;
         else
             return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
     }

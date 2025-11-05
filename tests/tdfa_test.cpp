@@ -13,6 +13,8 @@ namespace
         
         if (captures.empty())
             return match_result.has_value();
+        else if (not match_result.has_value())
+            return false;
         else
             return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
     }
@@ -27,6 +29,8 @@ namespace
 
         if (captures.empty())
             return match_result.has_value();
+        else if (not match_result.has_value())
+            return false;
         else
             return std::ranges::equal(match_result.value(), captures);
     }
@@ -42,6 +46,8 @@ namespace
 
         if (captures.empty())
             return match_result.has_value();
+        else if (not match_result.has_value())
+            return false;
         else
             return std::ranges::equal(match_result.value(), captures);
     }
@@ -189,9 +195,16 @@ static_assert(match("a$", "a"));
 static_assert(match("^a", "a"));
 static_assert(match("^a$", "a"));
 static_assert(match("^$", ""));
+static_assert(partial_match("a$", "a"));
+static_assert(partial_match("^a", "a"));
+static_assert(partial_match("^a$", "a"));
+static_assert(partial_match("^$", ""));
 static_assert(not search("^$", "a"));
 static_assert(search("^$", "", { 0, 0 }));
 static_assert(search("$^", "", { 0, 0 }));
+static_assert(search("a$", "a", { 0, 1 }));
+static_assert(search("^a", "a", { 0, 1 }));
+static_assert(search("^a$", "a", { 0, 1 }));
 static_assert(partial_match("(a)+?$$", "a", { 0, 1, 0, 1 }));
 static_assert(partial_match("(a)+?$$", "aa", { 0, 2, 1, 2 }));
 static_assert(partial_match("(a)+?$", "a", { 0, 1, 0, 1 }));

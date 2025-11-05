@@ -20,7 +20,7 @@ namespace rx::detail
     };
 
 
-    /* modified thompson's algorithm */
+    /* graph helper functions */
 
     template<typename CharT>
     constexpr auto tagged_nfa<CharT>::node_create() -> state_t
@@ -31,21 +31,46 @@ namespace rx::detail
     }
 
     template<typename CharT>
+    constexpr auto tagged_nfa<CharT>::node_copy(const state_t q) -> state_t
+    {
+        const state_t tmp{ nodes_.size() };
+        nodes_.emplace_back();
+
+        const auto& n{ nodes_.at(q) };
+        nodes_[tmp].is_final = n.is_final;
+        nodes_[tmp].is_fallback = n.is_fallback ;
+        nodes_[tmp].continue_at = n.continue_at;
+        nodes_[tmp].final_offset = n.final_offset;
+
+        return tmp;
+    }
+
+    template<typename CharT>
+    template<typename... Args>
+    constexpr void tagged_nfa<CharT>::transition_create(const state_t q0, const state_t qf, Args&&... args)
+    {
+        const std::size_t transition_index{ transitions_.size() };
+        transitions_.emplace_back(q0, qf, std::forward<Args>(args)...);
+        nodes_.at(q0).out_tr.emplace_back(transition_index);
+        nodes_.at(qf).in_tr.emplace_back(transition_index);
+    }
+
+    template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_epsilon(const state_t q0, const state_t qf, const int priority, const int tag)
     {
-        nodes_.at(q0).tr.emplace_back(qf, std::in_place_type<tnfa::epsilon_tr>, priority, tag);
+        transition_create(q0, qf, std::in_place_type<tnfa::epsilon_tr>, priority, tag);
     }
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharT c)
     {
-        nodes_.at(q0).tr.emplace_back(qf, std::in_place_type<tnfa::normal_tr<CharT>>, c, c);
+        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, c, c);
     }
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharT lower, CharT upper)
     {
-        nodes_.at(q0).tr.emplace_back(qf, std::in_place_type<tnfa::normal_tr<CharT>>, lower, upper);
+        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, lower, upper);
     }
 
     template<typename CharT>
@@ -55,7 +80,7 @@ namespace rx::detail
         using type = std::conditional_t<V == acat_t::eof, tnfa::eof_anchor_tr,
                                         std::conditional_t<V == acat_t::sof, tnfa::sof_anchor_tr, void>>;
 
-        nodes_.at(q0).tr.emplace_back(qf, std::in_place_type<type>);
+        transition_create(q0, qf, std::in_place_type<type>);
     }
 
     template<typename CharT>
@@ -65,21 +90,27 @@ namespace rx::detail
         using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_1_tr<CharT>,
                                 std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_1_tr<CharT>, void>>;
 
-        nodes_.at(q0).tr.emplace_back(qf, std::in_place_type<type>, cs);
-    }
-    
-    template<typename CharT>
-    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, const state_t p0, const state_t pf)
-    {
-        nodes_.at(q0).tr.emplace_back(qf, std::in_place_type<tnfa::lookahead_assert_tr>, p0, pf);
+        transition_create(q0, qf, std::in_place_type<type>, cs);
     }
 
+    // template<typename CharT>
+    // template<tnfa::assert_category V>
+    // constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, const state_t p0, const state_t pf, tnfa::ac<V> /* category */)
+    // {
+    //     using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_tr,
+    //                             std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_tr, void>>;
+
+    //     transition_create(q0, qf, std::in_place_type<type>, p0, pf);
+    // }
+    
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_copy(const state_t q0, const state_t qf, const transition_info& type)
     {
-        nodes_.at(q0).tr.emplace_back(qf, type);
+        transition_create(q0, qf, type);
     }
 
+
+    /* modified thompson's algorithm */
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_ntags(state_t q0, const state_t qf, const std::vector<int>& ntags)
@@ -407,78 +438,183 @@ namespace rx::detail
     /* observers */
 
     template<typename CharT>
-    constexpr std::vector<std::size_t> tagged_nfa<CharT>::strict_e_closure(const std::size_t q) const
+    template<tnfa::ec_mode Mode, bool RetBitVec>
+    constexpr auto tagged_nfa<CharT>::epsilon_closure(std::vector<state_t>&& qs) const -> ec_result<RetBitVec>
     {
-        std::vector<std::size_t> result;
-        std::vector to_visit{ q };
+        using result_t = std::conditional_t<RetBitVec, std::monostate, ec_result<RetBitVec>>;
 
+        std::vector to_visit{ std::move(qs) };
+        std::ranges::reverse(to_visit);
+    
         std::vector<bool> visited(node_count(), false);
+        result_t result;
+
+        for (const auto q : to_visit)
+            visited.at(q) = true;  
 
         while (not to_visit.empty())
         {
-            const std::size_t current{ to_visit.back() };
+            const state_t current{ to_visit.back() };
             to_visit.pop_back();
 
-            result.emplace_back(current);
+            if constexpr (not RetBitVec)
+                result.emplace_back(current);
             
             const auto& current_node{ get_node(current) };
             
-            for (const auto& tr : current_node.tr | std::views::reverse)
+            for (const std::size_t tr_idx : current_node.out_tr | std::views::reverse)
             {
-                if (not std::holds_alternative<tnfa::epsilon_tr>(tr.type))
+                const auto& tr{ get_tr(tr_idx) };
+
+                if constexpr (Mode == tnfa::ec_mode::ec)
+                {
+                    /* only count e-transitions */
+                    if (not std::holds_alternative<tnfa::epsilon_tr>(tr.type))
+                        continue;
+                }
+                else if constexpr (Mode == tnfa::ec_mode::ec)
+                {
+                    /* allow assertions as e-transitions */
+                    if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                        continue;
+                }
+
+                if (visited.at(tr.dst))
                     continue;
 
-                if (visited.at(tr.next))
-                    continue;
-
-                visited[tr.next] = true;
-                to_visit.emplace_back(tr.next);
+                visited[tr.dst] = true;
+                to_visit.emplace_back(tr.dst);
             }
         }
 
-        return result;
+        if constexpr (RetBitVec)
+            return visited;
+        else
+            return result;
     }
 
     template<typename CharT>
-    constexpr std::vector<std::size_t> tagged_nfa<CharT>::relaxed_e_closure(const std::size_t q) const
+    template<tnfa::ec_mode Mode, bool RetBitVec>
+    constexpr auto tagged_nfa<CharT>::backwards_epsilon_closure(std::vector<state_t>&& qs) const -> ec_result<RetBitVec>
     {
-        std::vector<std::size_t> result;
-        std::vector to_visit{ q };
+        using result_t = std::conditional_t<RetBitVec, std::monostate, ec_result<RetBitVec>>;
 
+        std::vector to_visit{ std::move(qs) };
+        std::ranges::reverse(to_visit);
+        
         std::vector<bool> visited(node_count(), false);
+        result_t result;
+
+        for (const auto q : to_visit)
+            visited.at(q) = true;        
 
         while (not to_visit.empty())
         {
-            const std::size_t current{ to_visit.back() };
+            const state_t current{ to_visit.back() };
             to_visit.pop_back();
 
-            result.emplace_back(current);
+            if constexpr (not RetBitVec)
+                result.emplace_back(current);
             
             const auto& current_node{ get_node(current) };
             
-            for (const auto& tr : current_node.tr | std::views::reverse)
+            for (const std::size_t tr_idx : current_node.in_tr | std::views::reverse)
             {
-                if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                const auto& tr{ get_tr(tr_idx) };
+
+                if constexpr (Mode == tnfa::ec_mode::ec)
+                {
+                    /* only count e-transitions */
+                    if (not std::holds_alternative<tnfa::epsilon_tr>(tr.type))
+                        continue;
+                }
+                else if constexpr (Mode == tnfa::ec_mode::ec)
+                {
+                    /* allow assertions as e-transitions */
+                    if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                        continue;
+                }
+
+                if (visited.at(tr.src))
                     continue;
 
-                if (visited.at(tr.next))
-                    continue;
-
-                visited[tr.next] = true;
-                to_visit.emplace_back(tr.next);
+                visited[tr.src] = true;
+                to_visit.emplace_back(tr.src);
             }
         }
 
-        return result;
+        if constexpr (RetBitVec)
+            return visited;
+        else
+            return result;
     }
 
 
     /* dead state elimination */
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::remove_dead_states()
+    constexpr void tagged_nfa<CharT>::remove_dead_and_unreachable_states()
     {
-        // TODO: Implement
+        /* determine reachable states */
+
+        std::vector<state_t> initial_nodes{ start_node_ };
+    
+        for (const auto& ci :cont_info_)
+            if (ci.value != start_node_)
+                initial_nodes.emplace_back(ci.value);
+
+        const auto reachable_nodes{ epsilon_closure<tnfa::ec_mode::reach, true>(std::move(initial_nodes)) };
+
+        /* determine live states */
+
+        std::vector<state_t> final_nodes{};
+    
+        for (state_t q{ 0 }; q < nodes_.size(); ++q)
+            if (nodes_[q].is_final)
+                final_nodes.emplace_back(q);
+
+        const auto live_nodes{ backwards_epsilon_closure<tnfa::ec_mode::reach, true>(std::move(final_nodes)) };
+
+        /* remove transitions containing dead and unreachable nodes */
+
+        std::vector<bool> live_and_reachable(nodes_.size(), false);
+        std::ranges::transform(live_nodes, reachable_nodes, live_and_reachable.begin(), std::logical_and{});
+
+        std::vector<bool> removed_transitions(transitions_.size(), false);
+
+        for (std::size_t i{ 0 }; i < transitions_.size(); ++i)
+        {
+            auto& tr{ transitions_[i] };
+
+            if (tr.src == std::numeric_limits<state_t>::max() or tr.dst == std::numeric_limits<state_t>::max())
+                continue;
+
+            if (live_and_reachable.at(tr.src) and live_and_reachable.at(tr.dst))
+                continue;
+
+            removed_transitions[i] = true;
+            tr.unset();
+        }
+
+        /* remove dead and unreachable nodes and transitions from nodes */
+
+        const auto pred = [&](const std::size_t i){ return removed_transitions.at(i); };
+
+        for (state_t q{ 0 }; q < nodes_.size(); ++q)
+        {
+            tnfa::node& node{ nodes_[q] };
+
+            if (live_nodes[q])
+            {
+                std::erase_if(node.in_tr, pred);
+                std::erase_if(node.out_tr, pred);
+            }
+            else
+            {
+                /* reset from, to, and is_final */
+                node = tnfa::node{};
+            }
+        }
     }
 
     /* assertion elimination */
@@ -486,49 +622,63 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_sof_anchors() 
     {
-        const auto ec{ relaxed_e_closure(start_node()) };
+        const auto ec{ epsilon_closure<tnfa::ec_mode::aec>({ start_node() }) };
 
         /* create a copy of the start node's e-closure */
 
         std::flat_map<std::size_t, std::size_t> mapped_states;
-        for (const std::size_t q : ec)
-            mapped_states[q] = node_create();
+        
+        for (const state_t q : ec)
+        {
+            if (const auto& node{ get_node(q) }; node.is_final) 
+                mapped_states[q] = q; /* do not create duplicate final nodes */
+            else
+                mapped_states[q] = node_copy(q);
+        }
 
         /* duplicate transitions */
 
         for (const auto [q, p] : mapped_states)
         {
-            for (const auto& tr: nodes_.at(q).tr)
+            /* q == p is only possible when there are no transitions from q */
+            for (const std::size_t tr_idx : nodes_.at(q).out_tr)
             {
-                if (const auto* ntr{ std::get_if<tnfa::normal_tr<CharT>>(&tr.type)}; ntr != nullptr)
+                /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
+                const auto& tr{ get_tr(tr_idx) }; 
+
+                if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
                 {
                     /* transition from copied e-closure to main graph */
-                    make_transition(p, tr.next, ntr->lower, ntr->upper);
+                    make_copy(p, tr.dst, tr.type);
                 }
                 else if (std::holds_alternative<tnfa::sof_anchor_tr>(tr.type))
                 {
-                    /* transition from copied e-closure to main graph */
-                    make_epsilon(p, tr.next);
-                    /* also add e-transition in copied graph in case of ^^ */
-                    make_epsilon(p, mapped_states.at(tr.next));
+                     /* replace sof anchor with e-transition in copied subgraph */
+                    make_epsilon(p, mapped_states.at(tr.dst));
                 }
                 else
                 {
                     /* transition within copied e-closure */
-                    make_copy(p, mapped_states.at(tr.next), tr.type);
+                    make_copy(p, mapped_states.at(tr.dst), tr.type);
                 }
             }
         }
 
         /* remove all sof anchors */
 
-        constexpr auto pred = [](const tnfa::transition<CharT>& tr)
+        for (std::size_t tr_idx{ 0 }; tr_idx < transitions_.size(); ++tr_idx)
         {
-            return (std::holds_alternative<tnfa::sof_anchor_tr>(tr.type));
-        };
+            auto& tr{ transitions_[tr_idx] };
 
-        for (auto& node : nodes_)
-            std::erase_if(node.tr, pred);
+            if (not std::holds_alternative<tnfa::sof_anchor_tr>(tr.type))
+                continue;
+
+            /* delete transition */
+            std::erase(nodes_.at(tr.src).out_tr, tr_idx);
+            std::erase(nodes_.at(tr.dst).in_tr, tr_idx);
+            tr.unset();
+        }
+            
 
         /* reassign start node */
 
@@ -538,40 +688,41 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_eof_anchors() 
     {
-        std::vector<std::size_t> to_revisit;
-        std::vector<std::size_t> ec;
+        /* NOTE: this function must be called before any other function which adds final nodes */
+        std::vector<bool> bec{ backwards_epsilon_closure<tnfa::ec_mode::aec, true>({ default_final_node }) };
 
-        for (std::size_t q{ 0 }; q < node_count(); ++q)
+        std::vector<state_t> initial;
+        std::vector<std::size_t> to_revisit;
+
+        for (std::size_t tr_idx{ 0 }; tr_idx < transitions_.size(); ++tr_idx)
         {
-            for (const auto& tr: get_node(q).tr)
-            {
-                if (std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
-                {
-                    to_revisit.emplace_back(q);
-                    ec.append_range(relaxed_e_closure(tr.next));
-                }
-            }
+            const auto& tr{ transitions_[tr_idx] };
+
+            if (not std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
+                continue;
+
+            to_revisit.emplace_back(tr_idx);
+
+            if (bec.at(tr.dst))
+                initial.emplace_back(tr.dst);
         }
 
-        std::ranges::sort(ec);
-        const auto [ret, last]{ std::ranges::unique(ec) };
-        ec.erase(ret, last);
+        const auto ec{ epsilon_closure<tnfa::ec_mode::aec>(std::move(initial)) };
 
-        /* create copy of e-closures  */
+        /* create copy of the e-closures  */
 
         std::flat_map<state_t, state_t> mapped_states;
 
-        for (const std::size_t q : ec)
+        for (const state_t q : ec)
         {
-            if (const auto node{ get_node(q) }; node.is_final) 
+            if (const auto& node{ get_node(q) }; node.is_final) 
             {  
                 if (node.is_fallback)
                 {
                     /* create duplicate non-fallback final node */
-                    const state_t p{ node_create() };
+                    const state_t p{ node_copy(q) };
+                    nodes_[p].is_fallback = false;
                     mapped_states[q] = p;
-                    nodes_[p].is_final = true;
-                    nodes_[p].continue_at = node.continue_at;
                 }
                 else
                 {
@@ -589,42 +740,54 @@ namespace rx::detail
 
         for (const auto [q, p] : mapped_states)
         {
-            if (q == p) continue;
-
-            for (const auto& tr: nodes_.at(q).tr)
+            /* q == p is only possible when there are no transitions from q */
+            for (const std::size_t tr_idx : nodes_.at(q).out_tr)
             {
+                /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
+                const auto& tr{ get_tr(tr_idx) }; 
+
                 if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
                 {
                     /* do not insert transition */
                 }
                 else if (std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
                 {
-                    /* replace eof anchor with e-transition in copied subgraph in case of $$ */
-                    make_epsilon(p, mapped_states.at(tr.next));
+                    /* replace eof anchor with e-transition in copied subgraph */
+                    make_epsilon(p, mapped_states.at(tr.dst));
                 }
                 else
                 {
                     /* transition within copied subgraph */
-                    make_copy(p, mapped_states.at(tr.next), tr.type);
+                    make_copy(p, mapped_states.at(tr.dst), tr.type);
                 }
-
             }
         }
 
-        /* replace all eof anchors with transitions into copied subgraph */
+        /* replace all eof anchors with transitions into copied subgraph, or remove if not possible */
 
-        constexpr auto pred = [](const tnfa::transition<CharT>& tr)
+        for (const std::size_t tr_idx : to_revisit)
         {
-            return std::holds_alternative<tnfa::eof_anchor_tr>(tr.type);
-        };
+            auto& tr{ transitions_[tr_idx] };
 
-        for (const std::size_t q : to_revisit)
-        {
-            auto& trs{ nodes_.at(q).tr };
-            for (auto it{ trs.begin() }; (it = std::ranges::find_if(it, trs.end(), pred)) != trs.end(); ++it)
+            if (auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
             {
-                it->next = mapped_states.at(it->next);
-                it->type.template emplace<tnfa::epsilon_tr>(0, 0);
+                /* remap rhs and replace with e-transition */
+                const auto [q, p]{ *it };
+                tr.type.template emplace<tnfa::epsilon_tr>(0, 0);
+
+                if (q != p)
+                {
+                    std::erase(nodes_.at(q).in_tr, tr_idx);
+                    nodes_.at(p).in_tr.emplace_back(tr_idx);
+                    tr.dst = p;
+                }
+            }
+            else
+            {
+                /* delete transition */
+                std::erase(nodes_.at(tr.src).out_tr, tr_idx);
+                std::erase(nodes_.at(tr.dst).in_tr, tr_idx);
+                tr.unset();
             }
         }
     }
@@ -636,7 +799,7 @@ namespace rx::detail
         if (has_eof_anchor_) rewrite_eof_anchors();
 
 
-        if (has_sof_anchor_ or has_eof_anchor_ or has_lookahead_1_ or has_lookbehind_1_ or has_lookahead_n_) remove_dead_states();
+        if (has_sof_anchor_ or has_eof_anchor_ or has_lookahead_1_ or has_lookbehind_1_ or has_lookahead_n_) remove_dead_and_unreachable_states();
     }
 
     
