@@ -306,21 +306,10 @@ namespace rx::testing
                             input = *s.it++;
                         }
 
-                        
-                        if (cla.data.is_negated())
-                        {
-                            for (const auto& [lower, upper] : cla.data.get())
-                                if (lower <= input and input <= upper)
-                                    return rc::match_failure;
-                            return rc::match_continue;
-                        }
-                        else
-                        {
-                            for (const auto& [lower, upper] : cla.data.get())
-                                if (lower <= input and input <= upper)
-                                    return rc::match_continue;
-                            return rc::match_failure;
-                        }
+                        for (const auto& [lower, upper] : cla.data.intervals())
+                            if (lower <= input and input <= upper)
+                                return rc::match_continue;
+                        return rc::match_failure;
                     }
                 });
 

@@ -2,7 +2,6 @@
 
 #include <rx/ast/tree.hpp>
 
-#include <limits>
 #include <ranges>
 
 #include <rx/api/regex_error.hpp>
@@ -665,15 +664,15 @@ namespace rx::detail::parser
         /* depending on flags, insert true wildcard instead of [^\n] */
         if (capstack_.dotall())
         { 
-            using uct = char_class::underlying_char_type;
-            char_class result{ false };
-            result.data.insert(std::numeric_limits<uct>::min(), std::numeric_limits<uct>::max());
+            char_class result{ true };
+            result.data.normalise();
             return new_expression<char_class>(std::move(result));
         }
         else
         {
             char_class result{ true };
             result.data.insert('\n');
+            result.data.normalise();
             return new_expression<char_class>(std::move(result));
         }
     }

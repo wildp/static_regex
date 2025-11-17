@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <concepts>
 #include <iterator>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -139,21 +138,18 @@ namespace rx::testing
                     result += lit.data;
                 },
                 [&](const this_type::char_class& cla) {
-                    if (cla.data.get().size() == 1) {
-                        using uct = typename this_type::char_class::underlying_char_type;
-                        const auto& [lower, upper]{ cla.data.get().front() };
-                        if ((not cla.data.is_negated() and lower == std::numeric_limits<uct>::min() and upper == std::numeric_limits<uct>::max())
-                            or (cla.data.is_negated() and lower == '\n' and upper == '\n')) {
-                            result += '.';
-                            return;
-                        }
+                    using pair_t = typename this_type::char_class::impl_type::underlying_type::char_interval;
+                    const auto den{ make_denormalised(cla.data) };
+                    const auto ci{ den.intervals() };
+                    if (den.is_negated() and ((ci.empty()) or (ci.size() == 1 and ci.front() == pair_t{ '\n', '\n' }))) {
+                        result += '.';
+                        return;
                     }
 
                     result += '[';
-                    if (cla.data.is_negated())
+                    if (den.is_negated())
                         result += '^';
-                    for (const auto& [lower, upper] : cla.data.get()) {
-                        /* TODO: maybe escape certain characters */
+                    for (const auto& [lower, upper] : ci) {
                         escape(result, lower);
                         if (upper == lower) continue;
                         result += '-';

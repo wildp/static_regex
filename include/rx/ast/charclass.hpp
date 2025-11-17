@@ -1,11 +1,12 @@
 #pragma once
 
 #include <cstddef>
-#include <iterator>
-#include <numeric>
+#include <cstdint>
+#include <string_view>
 #include <vector>
 
-#include <rx/etc/util.hpp>
+#include <rx/etc/bitcharset.hpp>
+#include <rx/etc/charset.hpp>
 
 
 namespace rx::detail
@@ -29,190 +30,81 @@ namespace rx::detail
         hexdigits,
     };
 
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    class char_class_impl
+
+    /* class definitions */
+
+    class wide_char_class_impl
     {
     public:
-        using char_type     = CharT;
-        
-        struct char_range
-        {
-            char_type lower;
-            char_type upper;
-        };
+        using char_type = char32_t;
+        using underlying_type = charset<char_type>;
 
-        constexpr explicit char_class_impl(named_character_class ncc, bool negate = false) :
-            negated_{ negate }
-        {
-            insert(ncc);
-        }
+        constexpr explicit wide_char_class_impl(named_character_class ncc, bool negate = false) :
+            negated_{ negate }, orig_negated_{ negate } { insert(ncc); }
 
-        constexpr explicit char_class_impl(bool negate = false) :
-            negated_{ negate }
-        {
-        }
+        constexpr explicit wide_char_class_impl(bool negate = false) noexcept :
+            negated_{ negate }, orig_negated_{ negate } {}
 
-        constexpr void insert(char_type c);
-        constexpr void insert(char_type first, char_type last);
+        constexpr void insert(char_type c) { data_.insert(c); }
+        constexpr void insert(char_type first, char_type last) { data_.insert(first, last); };
         constexpr void insert(named_character_class ncc);
-        constexpr void insert(const char_class_impl& cc);
+        constexpr void insert(const wide_char_class_impl& cc) { data_ |= cc.data_; };
 
+        [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
+        [[nodiscard]] constexpr std::size_t count() const noexcept { return data_.count(); }
         [[nodiscard]] constexpr bool is_negated() const noexcept { return negated_; }
-        [[nodiscard]] constexpr const auto& get() const noexcept { return data_; }
-        constexpr void make_negated(std::vector<char_range>& result) const;
-    
+        [[nodiscard]] constexpr const auto& intervals() const noexcept { return data_.get_intervals(); }
+
+        constexpr void normalise() noexcept { if (negated_) { data_.negate(); negated_ = false; } }
         constexpr void make_caseless();
 
-    private:
-        constexpr std::size_t insert_impl(CharT c);
+        template<typename T>
+        friend constexpr T make_denormalised(const T& original) noexcept;
 
-        std::vector<char_range> data_;
-        bool                    negated_;
+    private:
+        underlying_type data_;
+        bool            negated_;
+        bool            orig_negated_;
     };
 
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr std::size_t char_class_impl<CharT>::insert_impl(const CharT c)
+    class narrow_char_class_impl
     {
-        if (data_.empty())
-        {
-            data_.emplace_back(c, c);
-            return 0;
-        }
+    public:
+        using char_type = char;
+        using underlying_type = bitcharset<char>;
 
-        std::size_t lb{ 0 };
-        std::size_t ub{ data_.size() - 1 };
+        constexpr explicit narrow_char_class_impl(named_character_class ncc, bool negate = false) noexcept :
+            negated_{ negate }, orig_negated_{ negate } { insert(ncc); }
 
-        while (true)
-        {
-            const std::size_t mid{ std::midpoint(lb, ub) };
-            const auto [lower, upper]{ data_.at(mid) };
+        constexpr explicit narrow_char_class_impl(bool negate = false) noexcept :
+            negated_{ negate }, orig_negated_{ negate } {}
 
-            if (lower != std::numeric_limits<char_type>::min() and c + 1 == lower)
-            {
-                /* extend range of pair by 1 */
-                data_.at(mid).lower -= 1;
+        constexpr void insert(char_type c) noexcept { data_.insert(c); }
+        constexpr void insert(char_type first, char_type last) noexcept { data_.insert(first, last); }
+        constexpr void insert(named_character_class ncc) noexcept;
+        constexpr void insert(const narrow_char_class_impl& cc) noexcept { data_ |= cc.data_; };
 
-                /* attempt to merge with (mid - 1) */
-                if (mid > 0 and (data_.at(mid).lower - data_.at(mid - 1).upper <= 1))
-                {
-                    data_.at(mid).lower = data_.at(mid - 1).lower;
-                    data_.erase(std::next(data_.begin(), mid - 1));
-                    return mid - 1;
-                }
-                else
-                {
-                    return mid;
-                }
-            }
-            else if (upper != std::numeric_limits<char_type>::max() and c == upper + 1)
-            {
-                /* extend range of pair by 1 */
-                data_.at(mid).upper += 1;
+        [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
+        [[nodiscard]] constexpr std::size_t count() const noexcept { return data_.count(); }
+        [[nodiscard]] constexpr bool is_negated() const noexcept { return negated_; }
+        [[nodiscard]] constexpr auto intervals() const { return data_.get_intervals(); }
 
-                /* attempt to merge with (mid + 1) */
-                if (mid + 1 < data_.size() and (data_.at(mid + 1).lower - data_.at(mid).upper <= 1))
-                {
-                    data_.at(mid).upper = data_.at(mid + 1).upper;
-                    data_.erase(std::next(data_.begin(), mid + 1));
-                }
-                
-                return mid;
-            }
-            else if (c < lower)
-            {
-                if (mid == lb)
-                {
-                    /* insert pair before mid */
-                    data_.emplace(std::next(data_.begin(), mid), c, c);
-                    return mid;
-                }
-                else
-                {
-                    /* continue search */
-                    ub = mid - 1;
-                }
+        constexpr void normalise() noexcept { if (negated_) { data_.negate(); negated_ = false; } }
+        constexpr void make_caseless() noexcept { data_.make_ascii_case_insensitive(); }
 
-            }
-            else if (c > upper)
-            {
-                if (mid == ub)
-                {
-                    /* insert pair after mid */
-                    data_.emplace(std::next(data_.begin(), mid + 1), c, c);
-                    return mid + 1;
-                }
-                else
-                {
-                    /* continue search */
-                    lb = mid + 1;
-                }
-            }
-            else /* (lower <= c and c <= upper) */
-            {
-                /* c is already in char class */
-                return mid;
-            }
-        }
-    }
+        template<typename T>
+        friend constexpr T make_denormalised(const T& original) noexcept;
 
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::insert(const char_type c)
-    {
-        insert_impl(c);
-    }
+    private:
+        underlying_type data_;
+        bool            negated_;
+        bool            orig_negated_;
+    };
 
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::insert(const char_type first, const char_type last)
-    {
-        const std::size_t target{ insert_impl(first) };
 
-        auto& current{ data_.at(target) };
+    /* member function definitions */
 
-        if (current.upper > last)
-            return; /* no need to merge */
-        
-        current.upper = last;
-        
-        /* attempt to merge */
-
-        while (true)
-        {
-            if (target + 1 >= data_.size())
-                break; /* target is at end of data_: can't merge */
-
-            auto [lower, upper]{ data_.at(target + 1) };
-
-            if (last >= upper)
-            {
-                /* range of (target) is a superset of (target + 1): erase (target + 1) */
-                data_.erase(std::next(data_.begin(), target + 1));
-            }
-            else if (last + 1 >= lower)
-            {
-                /* we don't need to worry about signed integer overflow here, since if
-                 * lower == numeric_limits<CharT>::max(), then upper must equal lower
-                 * and so the previous branch (last >= upper) is taken instead          */
-
-                /* ranges of (target) and (target + 1) partially overlap or are adjacent: merge */
-                current.upper = upper;
-                data_.erase(std::next(data_.begin(), target + 1));
-                break;
-            }
-            else
-            {
-                /* ranges of (target) and (target + 1) do not overlap and are not adjacent: can't merge */
-                break;
-            }
-        }
-    }
-
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::insert(const named_character_class ncc)
+    constexpr void wide_char_class_impl::insert(named_character_class ncc)
     {
         switch (ncc)
         {
@@ -224,7 +116,7 @@ namespace rx::detail
             insert('a', 'z');
             break;
         case named_character_class::ascii:
-            insert('\x00', '\x7f');
+            insert('\x00', '\x7F');
             break;
         case named_character_class::blank:
             insert('\t');
@@ -279,59 +171,13 @@ namespace rx::detail
         }
     }
 
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::insert(const char_class_impl<CharT>& cc)
-    {
-        std::vector<char_range> negated;
-
-        if (cc.is_negated())
-            make_negated(negated);
-
-        const std::vector<char_range>& ref{ (cc.is_negated()) ? negated : cc.data_ };
-
-        for (const auto& [lower, upper] : ref)
-        {
-            if (lower == upper)
-                insert(lower);
-            else
-                insert(lower, upper);
-        }
-    }
-
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::make_negated(std::vector<char_range>& result) const
-    {
-        /* negate character ranges in cc */
-        char_type tmp{ std::numeric_limits<CharT>::min() };
-        bool final_insert{ true };
-
-        for (const auto& [lower, upper] : data_)
-        {
-            if (tmp < lower)
-                result.emplace_back(tmp, lower - 1);
-
-            if (upper == std::numeric_limits<CharT>::max())
-                final_insert = false;
-
-            tmp = upper + 1;
-        }
-
-        if (final_insert)
-            result.emplace_back(tmp, std::numeric_limits<CharT>::max());
-    }
-
-
-    template<typename CharT>
-    requires (not char_is_multibyte<CharT>)
-    constexpr void char_class_impl<CharT>::make_caseless()
+    constexpr void wide_char_class_impl::make_caseless()
     {
         static constexpr char_type offset{ 'a' - 'A' };
 
-        std::vector<char_range> to_insert;
+        std::vector<underlying_type::char_interval> to_insert;
 
-        for (const auto [lower, upper] : data_)
+        for (const auto [lower, upper] : data_.get_intervals())
         {
             if (upper >= 'a' and lower <= 'Z')
             {
@@ -353,5 +199,82 @@ namespace rx::detail
         
         for (const auto [lower, upper] : to_insert)
             insert(lower, upper);
+    }
+        
+    constexpr void narrow_char_class_impl::insert(named_character_class ncc) noexcept
+    {
+        constexpr auto make_bcs = [](const std::vector<char> pairs, const std::vector<char> singles = {}) consteval {
+            bitcharset<char> result;
+
+            for (std::size_t i{ 0 }; i + 1 < pairs.size(); i += 2)
+                result.insert(pairs[i], pairs[i + 1]);
+
+            for (std::size_t i{ 0 }; i < singles.size(); i += 1)
+                result.insert(singles[i]);
+
+            return result;
+        };
+
+        switch (ncc)
+        {
+        case named_character_class::alphanumeric:
+            data_ |= make_bcs({ '0', '9', 'A', 'Z', 'a', 'z' });
+            return;
+        case named_character_class::alphabetic:
+            data_ |= make_bcs({ 'A', 'Z', 'a', 'z' });
+            break;
+        case named_character_class::ascii:
+            data_ |= make_bcs({ 0x00, 0x7F });
+            break;
+        case named_character_class::blank:
+            data_ |= make_bcs({}, { '\t', ' ' });
+            break;
+        case named_character_class::control:
+            data_ |= make_bcs({ 0x00, 0x1F }, { 0x7F });
+            break;
+        case named_character_class::digits:
+            data_ |= make_bcs({ '0', '9' });
+            break;
+        case named_character_class::graphical:
+            data_ |= make_bcs({ '!', '~' });
+            break;
+        case named_character_class::lowercase:
+            data_ |= make_bcs({ 'a', 'z' });
+            break;
+        case named_character_class::printable:
+            data_ |= make_bcs({ ' ', '~' });
+            break;
+        case named_character_class::punctuation:
+            data_ |= make_bcs({ '!', '/', ':', '@', '[', '`', '{', '~' });
+            break;
+        case named_character_class::posix_whitespace:
+            data_ |= make_bcs({}, { '\v', '\t', '\n', '\f', '\r', ' '});
+            break;
+        case named_character_class::perl_whitespace:
+            data_ |= make_bcs({}, { '\t', '\n', '\f', '\r', ' '});
+            break;
+        case named_character_class::uppercase:
+            data_ |= make_bcs({ 'A', 'Z' });
+            break;
+        case named_character_class::word:
+            data_ |= make_bcs({ '0', '9', 'A', 'Z', 'a', 'z' }, { '_' });
+            break;
+        case named_character_class::hexdigits:
+            data_ |= make_bcs({ '0', '9', 'A', 'F', 'a', 'f' });
+            break;
+        }
+    }
+
+    template<typename T>
+    [[maybe_unused]] [[nodiscard]] constexpr T make_denormalised(const T& original) noexcept
+    {
+        static_assert(std::same_as<T, wide_char_class_impl> or std::same_as<T, narrow_char_class_impl>);
+
+        T result{ original.orig_negated_ };
+        if (original.negated_ == false and original.orig_negated_ == true)
+            result.data_ = ~original.data_;
+        else
+            result.data_ = original.data_;
+        return result;
     }
 }

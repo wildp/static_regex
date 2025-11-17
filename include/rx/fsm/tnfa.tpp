@@ -193,7 +193,6 @@ namespace rx::detail
                 {
                     const auto& cla{ std::get<typename ast_t::char_class>(entry) };
                     // using uct = decltype(cla)::underlying_char_type;
-                    using char_range = decltype(cla.data)::char_range;
 
                     if constexpr (char_is_utf8<CharT>)
                     {
@@ -207,14 +206,7 @@ namespace rx::detail
                     }
                     else
                     {
-                        std::vector<char_range> negated;
-
-                        if (cla.data.is_negated())
-                            cla.data.make_negated(negated);
-
-                        const std::vector<char_range>& ref{ (cla.data.is_negated()) ? negated : cla.data.get() };
-
-                        for (const auto& [lower, upper] : ref)
+                        for (const auto& [lower, upper] : cla.data.intervals())
                             make_transition(q0, qf, lower, upper);             
                     }
                 }

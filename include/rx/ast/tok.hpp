@@ -67,9 +67,8 @@ namespace rx::detail
         template<typename CharT>
         struct char_class
         {
-            using underlying_char_type = std::conditional_t<char_is_multibyte<CharT>, char32_t, CharT>;
-
-            using impl_type = char_class_impl<underlying_char_type>;
+            using underlying_char_type = std::conditional_t<std::same_as<char, CharT>, char, char32_t>;
+            using impl_type = std::conditional_t<std::same_as<char, CharT>, narrow_char_class_impl, wide_char_class_impl>;
 
             impl_type data;
 
@@ -667,7 +666,7 @@ namespace rx::detail
             switch (*it_++)
             {
             case ']':
-                if (result.data.get().empty() and not c.has_value())
+                if (result.data.empty() and not c.has_value())
                     nc = ']';
                 else
                     loop = false;
@@ -756,7 +755,7 @@ namespace rx::detail
                 if (selected_cc->second)
                 {
                     /* insert negated char class */
-                    char_class_impl<underlying_char_t> tmp{ selected_cc->first, true };
+                    typename char_class::impl_type tmp{ selected_cc->first, true };
                     result.data.insert(tmp);
                 }
                 else
@@ -801,6 +800,7 @@ namespace rx::detail
             }
         }
 
+        result.data.normalise();
         return result;
     }
 

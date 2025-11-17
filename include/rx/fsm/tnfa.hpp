@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <rx/ast/tree.hpp>
+#include <rx/etc/charset.hpp>
 #include <rx/fsm/flags.hpp>
 
 
@@ -16,7 +17,7 @@ namespace rx::detail::tnfa
     using tr_index = std::size_t;
 
     template<typename CharT>
-    using char_set = char_class_impl<CharT>;
+    using char_set = std::conditional_t<true, charset<CharT>, void>;
 
     enum class assert_category : std::int8_t
     {

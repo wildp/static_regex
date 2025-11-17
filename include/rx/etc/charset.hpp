@@ -1,0 +1,538 @@
+#pragma once
+
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
+#include <limits>
+#include <optional>
+#include <utility>
+#include <vector>
+
+
+namespace rx::detail
+{
+    template<typename CharT>
+    class charset
+    {
+    public:
+        using char_type = CharT;
+        using char_interval = std::pair<char_type, char_type>;
+        
+        constexpr charset() = default;
+
+
+        /* observers */
+
+        [[nodiscard]] constexpr bool empty() const noexcept
+        {
+            return data_.empty();
+        }
+
+        [[nodiscard]] constexpr std::size_t count() const noexcept
+        {
+            std::size_t result{ 0 };
+            for (const auto [first, second] : data_)
+                result += (first + 1 - second);
+            return result;
+        }
+
+        [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const noexcept
+        {
+            return data_;
+        }
+
+
+        /* modifiers */
+
+        constexpr void clear() noexcept
+        {
+            data_.clear();
+        }
+
+        constexpr void negate()
+        {
+            data_ = std::move(make_absolute_complement(data_));
+        }
+
+        constexpr void insert(char_type c)
+        {
+            insert_single(c);
+        }
+
+        constexpr void insert(char_type first, char_type last)
+        {
+            merge_into(insert_single(first), last);
+        }
+
+
+        /* operators */
+
+        constexpr charset& operator&=(const charset& other)
+        {
+            if (this != &other)
+                data_ = std::move(make_intersection(data_, other.data_));
+            return *this;
+        }
+
+        constexpr charset& operator|=(const charset& other)
+        {
+            if (this != &other)
+                data_ = std::move(make_union(data_, other.data_));
+            return *this;
+        }
+
+        constexpr charset& operator^=(const charset& other)
+        {
+            if (this != &other)
+                data_ = std::move(make_symmetric_difference(data_, other.data_));
+            else
+                data_.clear();
+            return *this;
+        }
+
+        constexpr charset& operator-=(const charset& other)
+        {
+            if (this != &other)
+                data_ = std::move(make_relative_complement(data_, other.data_));
+            else
+                data_.clear();
+            return *this;
+        }
+
+        friend constexpr charset operator&(const charset& lhs, const charset& rhs)
+        {
+            if (&lhs == &rhs)
+                return lhs;
+            return charset{ make_intersection(lhs.data_, rhs.data_) };
+        }
+
+        friend constexpr charset operator|(const charset& lhs, const charset& rhs)
+        {
+            if (&lhs == &rhs)
+                return lhs;
+            return charset{ make_union(lhs.data_, rhs.data_) };
+        }
+
+        friend constexpr charset operator^(const charset& lhs, const charset& rhs)
+        {
+            if (&lhs == &rhs)
+                return charset{};
+            return charset{ make_symmetric_difference(lhs.data_, rhs.data_) };
+        }
+
+        friend constexpr charset operator-(const charset& lhs, const charset& rhs)
+        {
+            if (&lhs == &rhs)
+                return charset{};
+            return charset{ make_relative_complement(lhs.data_, rhs.data_) };
+        }
+
+        friend constexpr charset operator~(const charset& cs)
+        {
+            return charset{ make_absolute_complement(cs.data_) };
+        }
+
+        friend constexpr bool operator==(const charset&, const charset&) = default;
+        friend constexpr auto operator<=>(const charset&, const charset&) = default; /* largely meaningless but */
+
+    private:
+        using underlying_t = std::vector<char_interval>;
+
+        constexpr explicit charset(underlying_t&& data) : data_{ std::move(data) } {}
+
+        constexpr underlying_t::iterator insert_single(char_type c);
+        constexpr underlying_t::iterator merge_into(underlying_t::iterator inserted, char_type c);
+
+        static constexpr underlying_t make_intersection(const underlying_t& lhs, const underlying_t& rhs);
+        static constexpr underlying_t make_union(const underlying_t& lhs, const underlying_t& rhs);
+        static constexpr underlying_t make_symmetric_difference(const underlying_t& lhs, const underlying_t& rhs);
+        static constexpr underlying_t make_relative_complement(const underlying_t& lhs, const underlying_t& rhs);
+        static constexpr underlying_t make_absolute_complement(const underlying_t& und);
+
+        underlying_t data_;
+    };
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::insert_single(const char_type c) -> underlying_t::iterator
+    {
+        if (data_.empty())
+            return data_.emplace(data_.end(), c, c);
+
+        /* form a closed interval */
+        auto lower_bound{ data_.begin() };
+        auto upper_bound{ std::ranges::prev(data_.end()) };
+
+        while (true)
+        {
+            auto midpoint{ lower_bound + (std::ranges::distance(lower_bound, upper_bound) / 2)};
+
+            if (midpoint->first != std::numeric_limits<char_type>::min() and c + 1 == midpoint->first)
+            {
+                /* extend range of pair by 1 */
+                midpoint->first -= 1;
+
+                /* attempt to merge with (mid - 1) */
+                if (midpoint != data_.begin())
+                {
+                    if (auto prev{ std::ranges::prev(midpoint) }; midpoint->first - prev->second <= 1)
+                    {
+                        midpoint->first = prev->second;
+                        midpoint = data_.erase(prev);
+                    }
+                }
+
+                return midpoint;
+            }
+            else if (midpoint->second != std::numeric_limits<char_type>::max() and c == midpoint->second + 1)
+            {
+                /* extend range of pair by 1 */
+                midpoint->second += 1;
+
+                /* attempt to merge with (mid + 1) */
+                if (auto next{ std::ranges::next(midpoint) }; next != data_.end() and next->first - midpoint->second <= 1)
+                {
+                    midpoint->second = next->second;
+                    data_.erase(next);
+                }
+                
+                return midpoint;
+            }
+            else if (c < midpoint->first)
+            {
+                if (midpoint == lower_bound)
+                {
+                    /* insert pair before mid */
+                    return data_.emplace(midpoint, c, c);
+                }
+                else
+                {
+                    /* continue search */
+                    upper_bound = std::ranges::prev(midpoint);
+                }
+
+            }
+            else if (c > midpoint->second)
+            {
+                if (midpoint == upper_bound)
+                {
+                    /* insert pair after mid */
+                    return data_.emplace(std::ranges::next(midpoint), c, c);
+                }
+                else
+                {
+                    /* continue search */
+                    lower_bound = std::ranges::next(midpoint);
+                }
+            }
+            else /* (lower <= c and c <= upper) */
+            {
+                /* c is already in char class */
+                return midpoint;
+            }
+        }
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::merge_into(underlying_t::iterator inserted, const char_type c) -> underlying_t::iterator
+    {
+        /* assume inserted != data_.end() */
+
+        if (inserted->second >= c)
+            return inserted; /* no need to merge */
+        
+        inserted->second = c;
+        
+        /* attempt to merge */
+
+        while (true)
+        {
+            auto next{ std::ranges::next(inserted) };
+
+            if (next == data_.end())
+                break; /* inserted is at end of data_: can't merge */
+
+            if (c >= next->second)
+            {
+                /* range of (inserted) is a superset of (next): erase (next) */
+                data_.erase(next);
+            }
+            else if (c + 1 >= next->first)
+            {
+                /* we don't need to worry about signed integer overflow here, since if
+                * `last == numeric_limits<CharT>::max()`, then `next->first == next->second`
+                * is true and so the previous branch (`last >= next->second`) is taken instead */
+
+                /* ranges of (inserted) and (next) partially overlap or are adjacent: merge */
+                inserted->second = next->second;
+                data_.erase(next);
+                break;
+            }
+            else
+            {
+                /* ranges of (inserted) and (next) do not overlap and are not adjacent: can't merge */
+                break;
+            }
+        }
+
+        return inserted;
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::make_intersection(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    {
+        underlying_t result;
+
+        auto lit{ lhs.cbegin() };
+        auto rit{ rhs.cbegin() };
+        const auto lend{ lhs.cend() };
+        const auto rend{ rhs.cend() };
+
+        while (lit != lend and rit != rend)
+        {
+            if (lit->second < rit->first)
+            {
+                ++lit;
+            }
+            else if (rit->second < lit->first)
+            {
+                ++rit;
+            }
+            else
+            {
+                const char_type first{ std::max(lit->first, rit->first) };
+
+                if (lit->second == rit->second)
+                {
+                    result.emplace_back(first, lit->second);
+                    ++lit, ++rit;
+                }
+                else if (lit->second < rit->second)
+                {
+                    result.emplace_back(first, lit->second);
+                    ++lit;
+                }
+                else /* (lit->second > rit->second) */
+                {
+                    result.emplace_back(first, rit->second);
+                    ++rit;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::make_union(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    {
+        underlying_t result;
+
+        std::ranges::merge(lhs, rhs, std::back_inserter(result), {}, &char_interval::first, &char_interval::first);
+
+        for (auto it{ result.begin() }; it != result.end();)
+        {
+            const auto erase_begin{ std::ranges::next(it) };
+            auto next{ erase_begin };
+
+            for (; next != result.end(); ++next)
+            {
+                if (it->second != std::numeric_limits<char_type>::max() and it->second + 1 < next->first)
+                    break; /* no overlap */ 
+                
+                if (it->second < next->second)
+                    it->second = next->second;
+            }
+
+            it = result.erase(erase_begin, next);
+        }
+
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::make_symmetric_difference(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    {
+        if (lhs.empty())
+            return rhs;
+        if (rhs.empty())
+            return lhs;
+
+        underlying_t result;
+
+        auto lit{ lhs.cbegin() };
+        auto rit{ rhs.cbegin() };
+        const auto lend{ lhs.cend() };
+        const auto rend{ rhs.cend() };
+
+        std::optional<char_type> tmp;
+
+        while (lit != lend and rit != rend)
+        {
+            const auto [min_first, max_first]{ std::minmax(lit->first, rit->first) };
+            const auto min_first_or_tmp{ tmp.value_or(min_first) }; 
+
+            const auto [min_second, max_second]{ std::minmax(lit->second, rit->second) };
+            auto& smaller_it{ (lit->second < rit->second) ? lit : rit };
+
+            if (min_second < max_first)
+            {
+
+                if (not result.empty() and result.back().second + 1 == min_first_or_tmp)
+                    result.back().second = min_second;
+                else
+                    result.emplace_back(min_first_or_tmp, min_second);
+
+                tmp.reset();
+                ++smaller_it;
+            }
+            else 
+            {
+                /* lit and rit overlap */
+
+                if (min_first_or_tmp < max_first)
+                {   
+                    if (not result.empty() and result.back().second + 1 == min_first_or_tmp)
+                        result.back().second = max_first - 1;
+                    else
+                        result.emplace_back(min_first_or_tmp, max_first - 1);
+                }
+
+                if (min_second < max_second)
+                {
+                    tmp = min_second + 1; /* tmp <= max_second on next iteration */
+                    ++smaller_it;
+                }
+                else /* (min_second == max_second) */
+                {
+                    tmp.reset();
+                    ++lit;
+                    ++rit;
+                }
+            }
+        }
+
+        if (lit != lend or rit != rend)
+        {
+            auto it{ (lit != lend) ? lit : rit };
+            const auto end{ (lit != lend) ? lend : rend };
+            const auto min_first_or_tmp{ tmp.value_or(it->first) };
+
+            if (not result.empty() and result.back().second + 1 == min_first_or_tmp)
+                result.back().second = it->second;
+            else
+                result.emplace_back(min_first_or_tmp, it->second);
+
+            ++it;
+
+            while (it != end)
+            {
+                result.emplace_back(it->first, it->second);
+                ++it;
+            }
+        }
+
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::make_relative_complement(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    {
+        if (rhs.empty())
+            return lhs;
+
+        underlying_t result;
+
+        auto lit{ lhs.cbegin() };
+        auto rit{ rhs.cbegin() };
+        const auto lend{ lhs.cend() };
+        const auto rend{ rhs.cend() };
+
+        char_type rhs_lower{ std::numeric_limits<char_type>::min() };
+
+        while (lit != lend)
+        {
+            char_type rhs_upper{};
+
+            if (rit == rend)
+            {
+                if (rhs_lower == std::numeric_limits<char_type>::min())
+                    break; /* reached end of complement of rhs */
+                else
+                    rhs_upper = std::numeric_limits<char_type>::max();
+            }
+            else if (rhs_lower >= rit->first)
+            {
+                ++rit;
+                continue;
+            }
+            else
+            {
+                rhs_upper = rit->first - 1;
+            }
+
+            bool advance_rit{ false };
+
+            if (lit->second < rhs_lower)
+            {
+                ++lit;
+            }
+            else if (rhs_upper < lit->first)
+            {
+                advance_rit = true;
+            }
+            else
+            {
+                const char_type first{ std::max(lit->first, rhs_lower) };
+
+                if (lit->second == rhs_upper)
+                {
+                    result.emplace_back(first, lit->second);
+                    ++lit;
+                    advance_rit = true;
+                }
+                else if (lit->second < rhs_upper)
+                {
+                    result.emplace_back(first, lit->second);
+                    ++lit;
+                }
+                else /* (lit->second > rhs_upper) */
+                {
+                    result.emplace_back(first, rhs_upper);
+                    advance_rit = true;
+                }
+            }
+
+            if (advance_rit)
+            {
+                if (rit == rend)
+                    break; /* reached end of complement of rhs */
+
+                rhs_lower = static_cast<char_type>(static_cast<std::make_unsigned_t<char_type>>(rit->second) + 1);
+                ++rit;
+            }
+        }
+
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::make_absolute_complement(const underlying_t& und) -> underlying_t
+    {
+        underlying_t result;
+        char_type tmp{ std::numeric_limits<char_type>::min() };
+
+        for (const auto& [lower, upper] : und)
+        {
+            if (tmp < lower)
+                result.emplace_back(tmp, lower - 1);
+
+            /* avoid UB by casting to unsigned for addition */
+            tmp = static_cast<char_type>(static_cast<std::make_unsigned_t<char_type>>(upper) + 1);
+        }
+
+        if (tmp != std::numeric_limits<char_type>::min() or und.empty())
+            result.emplace_back(tmp, std::numeric_limits<char_type>::max());
+
+        return result;
+    }
+}

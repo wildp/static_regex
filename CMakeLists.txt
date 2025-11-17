@@ -32,6 +32,8 @@ set(CMAKE_LINKER_TYPE LLD)
 add_library(tests)
 target_sources(tests
     PUBLIC
+        tests/bset_test.cpp
+        tests/cset_test.cpp
         tests/expo_test.cpp
         tests/part_test.cpp
         tests/tdfa_test.cpp
