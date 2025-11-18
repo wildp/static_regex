@@ -80,7 +80,7 @@ namespace rx
         {
             using namespace detail;
 
-            constexpr auto current{ dfa_t::value.captures.captures[N] };
+            static constexpr auto current{ dfa_t::value.captures.captures[N] };
 
             if (not this->has_value())
                 return {};

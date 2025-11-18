@@ -20,7 +20,7 @@ namespace rx::detail
         using interval_t = std::pair<T, T>;
         using vec_t = std::vector<interval_t>;
 
-        constexpr auto re_sort_lookahead = [](vec_t& vec, std::size_t current_idx)
+        static constexpr auto re_sort_lookahead = [](vec_t& vec, std::size_t current_idx)
         {
             if (auto it{ vec.begin() + current_idx + 1 }; it + 1 != vec.end())
             {
@@ -43,7 +43,7 @@ namespace rx::detail
             }
         };
 
-        constexpr auto re_sort_lookahead_and_insert = [](vec_t& vec, std::size_t current_idx, interval_t to_insert)
+        static constexpr auto re_sort_lookahead_and_insert = [](vec_t& vec, std::size_t current_idx, interval_t to_insert)
         {
             if (auto it{ vec.begin() + current_idx + 1 }; it + 1 != vec.end())
             {
@@ -193,7 +193,7 @@ namespace rx::detail
     {
         using vec_t = std::vector<partition_entry<T, U>>;
 
-        constexpr auto re_sort_lookahead = [](vec_t& vec, std::size_t current_idx)
+        static constexpr auto re_sort_lookahead = [](vec_t& vec, std::size_t current_idx)
         {
             if (auto it{ vec.begin() + current_idx + 1 }; it + 1 != vec.end())
             {
@@ -218,7 +218,7 @@ namespace rx::detail
             }
         };
 
-        constexpr auto re_sort_lookahead_and_insert = [](vec_t& vec, std::size_t current_idx, partition_entry<T, U> to_insert)
+        static constexpr auto re_sort_lookahead_and_insert = [](vec_t& vec, std::size_t current_idx, partition_entry<T, U> to_insert)
         {
             if (auto it{ vec.begin() + current_idx + 1 }; it + 1 != vec.end())
             {

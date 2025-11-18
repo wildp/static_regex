@@ -141,7 +141,7 @@ struct std::tuple_element<N, rx::submatch<Iter>>
 /* formatting support for submatch */
 
 template<std::bidirectional_iterator Iter>
-constexpr auto std::format_kind<rx::submatch<Iter>> = std::range_format::string;
+inline constexpr auto std::format_kind<rx::submatch<Iter>> = std::range_format::string;
 
 static_assert(std::formattable<rx::submatch<const char*>, char>);
 

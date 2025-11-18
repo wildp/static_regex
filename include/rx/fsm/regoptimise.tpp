@@ -574,7 +574,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_matrix& overlapping_lifetimes) -> remap_t
     {
-        constexpr reg_t no_register{ std::numeric_limits<reg_t>::max() };
+        static constexpr reg_t no_register{ std::numeric_limits<reg_t>::max() };
 
         remap_t remap_result(dfa.register_count_, no_register);
         remap_t representative_map(dfa.register_count_, no_register);

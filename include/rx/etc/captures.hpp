@@ -65,7 +65,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
         {
-            constexpr auto compose = [](const auto& g, const auto& f) {
+            static constexpr auto compose = [](const auto& g, const auto& f) {
                 return [=]<typename T>(T&& arg) { 
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
@@ -86,7 +86,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map) 
         {
-            constexpr auto compose = [](const auto& g, const auto& f) {
+            static constexpr auto compose = [](const auto& g, const auto& f) {
                 return [=]<typename T>(T&& arg) { 
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };

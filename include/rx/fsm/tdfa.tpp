@@ -151,7 +151,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
-        constexpr auto compose = [](const auto& g, const auto& f) {
+        static constexpr auto compose = [](const auto& g, const auto& f) {
             return [=]<typename T>(T&& arg) { 
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };

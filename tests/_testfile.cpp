@@ -9,10 +9,6 @@
 #include "headers/tnfa_matcher.hpp"
 #include "headers/tree_matcher.hpp"
 
-#include <deque>
-#include <list>
-#include <set>
-
 
 namespace
 {

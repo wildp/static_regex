@@ -1,3 +1,5 @@
+#pragma once
+
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -53,7 +55,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr std::vector<char_interval> get_intervals() const
         {
-            constexpr auto offset_max{ static_cast<int>(integer_bits) };
+            static constexpr auto offset_max{ static_cast<int>(integer_bits) };
 
             std::vector<char_interval> result;
 
@@ -219,24 +221,23 @@ namespace rx::detail
         constexpr void make_ascii_case_insensitive() noexcept requires std::same_as<char_type, char>
         {
             using integer_t = std::uint64_t;
-            constexpr auto bits{ 64 };
 
-            constexpr auto uppercase_beg{ static_cast<int>('a') - std::numeric_limits<char>::min() };
-            constexpr auto uppercase_end{ static_cast<int>('z') - std::numeric_limits<char>::min() + 1 }; 
-            constexpr auto lowercase_beg{ static_cast<int>('A') - std::numeric_limits<char>::min() };
-            constexpr auto lowercase_end{ static_cast<int>('Z') - std::numeric_limits<char>::min() + 1 }; 
+            static constexpr auto uppercase_beg{ static_cast<int>('a') - std::numeric_limits<char>::min() };
+            static constexpr auto uppercase_end{ static_cast<int>('z') - std::numeric_limits<char>::min() + 1 }; 
+            static constexpr auto lowercase_beg{ static_cast<int>('A') - std::numeric_limits<char>::min() };
+            static constexpr auto lowercase_end{ static_cast<int>('Z') - std::numeric_limits<char>::min() + 1 }; 
 
             /* ensure that A-Za-z lies in the same integer_t in bitcharset<char> */
-            constexpr auto index{ uppercase_beg / bits };
-            static_assert(uppercase_beg / bits == index);
-            static_assert(uppercase_end / bits == index);
-            static_assert(lowercase_beg / bits == index);
-            static_assert(lowercase_end / bits == index);
+            static constexpr auto index{ uppercase_beg / integer_bits };
+            static_assert(uppercase_beg / integer_bits == index);
+            static_assert(uppercase_end / integer_bits == index);
+            static_assert(lowercase_beg / integer_bits == index);
+            static_assert(lowercase_end / integer_bits == index);
 
-            constexpr integer_t uppercase_mask{ ((0b1uz << (uppercase_beg % bits)) - 1) ^ ((0b1uz << (uppercase_end % bits)) - 1) };
-            constexpr integer_t lowercase_mask{ ((0b1uz << (lowercase_beg % bits)) - 1) ^ ((0b1uz << (lowercase_end % bits)) - 1) };
-            constexpr int uppercase_offset{ std::countr_zero(uppercase_mask) };
-            constexpr int lowercase_offset{ std::countr_zero(lowercase_mask) };
+            static constexpr integer_t uppercase_mask{ ((0b1uz << (uppercase_beg % integer_bits)) - 1) ^ ((0b1uz << (uppercase_end % integer_bits)) - 1) };
+            static constexpr integer_t lowercase_mask{ ((0b1uz << (lowercase_beg % integer_bits)) - 1) ^ ((0b1uz << (lowercase_end % integer_bits)) - 1) };
+            static constexpr int uppercase_offset{ std::countr_zero(uppercase_mask) };
+            static constexpr int lowercase_offset{ std::countr_zero(lowercase_mask) };
 
             integer_t mask1{ (data_[index] & lowercase_mask) >> lowercase_offset };
             integer_t mask2{ (data_[index] & uppercase_mask) >> uppercase_offset };

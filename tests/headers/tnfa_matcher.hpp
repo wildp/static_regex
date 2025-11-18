@@ -39,7 +39,7 @@ namespace rx::testing
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::e_closure(closure_t&& closure, const std::size_t k) const -> closure_t
     {
-        constexpr auto compose = [](const auto& g, const auto& f) {
+        static constexpr auto compose = [](const auto& g, const auto& f) {
             return [=]<typename T>(T&& arg) { 
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };

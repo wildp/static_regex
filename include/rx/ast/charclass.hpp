@@ -203,7 +203,7 @@ namespace rx::detail
         
     constexpr void narrow_char_class_impl::insert(named_character_class ncc) noexcept
     {
-        constexpr auto make_bcs = [](const std::vector<char> pairs, const std::vector<char> singles = {}) consteval {
+        static constexpr auto make_bcs = [](const std::vector<char> pairs, const std::vector<char> singles = {}) consteval {
             bitcharset<char> result;
 
             for (std::size_t i{ 0 }; i + 1 < pairs.size(); i += 2)
