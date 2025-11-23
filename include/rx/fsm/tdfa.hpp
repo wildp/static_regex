@@ -14,6 +14,9 @@
 namespace rx::detail::tdfa
 {
     template<typename CharT>
+    using charset_t = tnfa::charset_t<CharT>;
+
+    template<typename CharT>
     class factory;
 
     template<typename CharT>
@@ -71,8 +74,7 @@ namespace rx::detail::tdfa
     {
         std::size_t next;
         std::size_t op_index; /* use no_transition_regops for no ops */
-        CharT lower;
-        CharT upper;
+        charset_t<CharT> cs;
     };
 
     template<typename CharT>

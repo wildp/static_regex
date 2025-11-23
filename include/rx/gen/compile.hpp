@@ -81,14 +81,27 @@ namespace rx::detail
     };
 
     template<typename CharT>
+    struct static_transition
+    {
+        std::size_t next;
+        std::size_t op_index;
+        static_span<const std::pair<CharT, CharT>> cs;
+    };
+
+    template<typename CharT>
     struct tdfa_info
     {
         using char_type = CharT;
 
     private:
+        static consteval auto make_static_transition(const tdfa::transition<char_type>& tr)
+        {
+            return static_transition{ tr.next, tr.op_index, static_span{ std::define_static_array(tr.cs.get_intervals()) } };
+        }
+
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)
         {
-            return static_span<const tdfa::transition<char_type>>{ std::define_static_array(n.tr) }; 
+            return static_span<const static_transition<char_type>>{ std::define_static_array(n.tr | std::views::transform(make_static_transition)) }; 
         }
 
         static consteval auto make_register_operations(const tdfa::regops_t& o) -> static_span<const register_operation>
@@ -121,7 +134,7 @@ namespace rx::detail
         }
 
         /* data members (public so that tdfa_info is structural) */
-        static_span<const static_span<const tdfa::transition<char_type>>> nodes;
+        static_span<const static_span<const static_transition<char_type>>> nodes;
         static_span<const static_span<const register_operation>> regops;
         static_span<const std::size_t> final_nodes;
         static_span<const std::size_t> final_node_regops;

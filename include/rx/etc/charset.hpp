@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <flat_map>
 #include <iterator>
 #include <limits>
 #include <optional>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -18,7 +20,20 @@ namespace rx::detail
         using char_type = CharT;
         using char_interval = std::pair<char_type, char_type>;
         
-        constexpr charset() = default;
+        consteval charset() noexcept = default;
+
+        template<typename... Args>
+        requires (sizeof...(Args) >= 1 and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...))
+        constexpr explicit charset(Args... args)
+        {
+            template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
+            {
+                if constexpr (std::convertible_to<Args...[i], char_type>  )
+                    insert(args...[i]);
+                else if constexpr (std::convertible_to<Args...[i], char_interval>)
+                    insert(args...[i].first, args...[i].second);
+            }
+        }
 
 
         /* observers */
@@ -34,6 +49,14 @@ namespace rx::detail
             for (const auto [first, second] : data_)
                 result += (first + 1 - second);
             return result;
+        }
+
+        [[nodiscard]] constexpr bool contains(char_type c) const
+        {
+            const auto it{ std::ranges::lower_bound(data_, c, {}, &char_interval::second) };
+            if (it == data_.end())
+                return false;
+            return c >= it->first;
         }
 
         [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const noexcept
@@ -135,8 +158,34 @@ namespace rx::detail
         friend constexpr bool operator==(const charset&, const charset&) = default;
         friend constexpr auto operator<=>(const charset&, const charset&) = default; /* largely meaningless but */
 
+
+        /* partition functions and type aliases */
+
+        using ref = std::reference_wrapper<const charset>;
+
+        template<typename T>
+        using ref_pair = std::pair<ref, T>;
+
+        using partition_result = std::vector<charset>;
+
+        template<typename T>
+        using partition_pair_result = std::vector<std::pair<charset, std::vector<T>>>;
+
+        template<typename T>
+        using partition_contents_result = std::vector<std::vector<T>>;
+     
+        [[nodiscard]] static constexpr auto partition(const std::vector<ref>& input) -> partition_result;
+
+        template<typename T>
+        [[nodiscard]] static constexpr auto partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>;
+
+        template<typename T>
+        [[nodiscard]] static constexpr auto partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>;
+
     private:
         using underlying_t = std::vector<char_interval>;
+        using partition_entry = std::pair<char_interval, std::vector<bool>>;
+        using partitioned_intervals = std::vector<partition_entry>;
 
         constexpr explicit charset(underlying_t&& data) : data_{ std::move(data) } {}
 
@@ -148,6 +197,12 @@ namespace rx::detail
         static constexpr underlying_t make_symmetric_difference(const underlying_t& lhs, const underlying_t& rhs);
         static constexpr underlying_t make_relative_complement(const underlying_t& lhs, const underlying_t& rhs);
         static constexpr underlying_t make_absolute_complement(const underlying_t& und);
+
+        static constexpr void part_sort_lookahead(partitioned_intervals& part, std::size_t current_idx);
+        static constexpr void part_sort_lookahead_and_insert(partitioned_intervals& part, std::size_t current_idx, partition_entry&& to_insert);
+        static constexpr void part_sort_and_dedup(partitioned_intervals& sorted_part);
+        static constexpr void part_merge_intervals(partitioned_intervals& sorted_part);
+        static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<std::vector<bool>, charset>;
 
         underlying_t data_;
     };
@@ -535,4 +590,318 @@ namespace rx::detail
 
         return result;
     }
+
+    template<typename CharT>
+    constexpr void charset<CharT>::part_sort_lookahead(partitioned_intervals& part, std::size_t current_idx)
+    {
+        if (auto it{ part.begin() + current_idx + 1 }; it + 1 != part.end())
+        {
+            if (*it >= *(it + 1))
+            {
+                /* re-sort lookahead */
+                const auto pos{ std::ranges::lower_bound(it + 1, part.end(), it->first, {}, &partition_entry::first) };
+                if (pos == part.end() or *pos != *it)
+                {
+                    std::ranges::rotate(it, it + 1, pos);
+                }
+                else
+                {
+                    /* remove lookahead as a duplicate */
+                    part.erase(it);
+                }
+            }         
+        }
+    }
+
+    template<typename CharT>
+    constexpr void charset<CharT>::part_sort_lookahead_and_insert(partitioned_intervals& part, std::size_t current_idx, partition_entry&& to_insert)
+    {
+        if (auto it{ part.begin() + current_idx + 1 }; it + 1 != part.end())
+        {
+            if (*it >= *(it + 1))
+            {
+                /* re-sort lookahead */
+                const auto pos{ std::ranges::lower_bound(it + 1, part.end(), it->first, {}, &partition_entry::first) };
+                if (pos == part.end() or *pos != *it)
+                {
+                    const auto rot{ std::ranges::rotate(it, it + 1, pos) };
+
+                    /* insert new pair */
+                    const auto pos2{ std::ranges::upper_bound(std::ranges::begin(rot) + 1, part.end(), to_insert) };
+                    if (pos2 == part.end() or *pos2 != to_insert)
+                        part.emplace(pos2, std::move(to_insert));
+                }
+                else
+                {
+                    /* remove lookahead as a duplicate */
+                    if (to_insert >= *(it + 1))
+                    { 
+                        const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first) };
+                        if (pos2 == part.end() or pos2->first != to_insert.first)
+                        {
+                            *it = std::move(to_insert);
+                            std::ranges::rotate(it, it + 1, pos2);
+                        }
+                        else
+                        {
+                            /* remove to_insert as a duplicate */
+                            part.erase(it);
+                        }
+                    }
+                    else
+                    {
+                        *it = std::move(to_insert);
+                    }
+                }
+            }
+            else
+            {
+                const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {},  &partition_entry::first) };
+                if (pos2 == part.end() or pos2->first != to_insert.first)
+                    part.emplace(pos2, std::move(to_insert));
+            }
+        }
+        else
+        {
+            /* lookahead is last element in vec; append new pair*/
+            if (to_insert.first > part.back().first)
+            {
+                part.emplace(part.end(), std::move(to_insert));
+            }
+            else if (to_insert.first < part.back().first)
+            {
+                part.emplace(part.end() - 1, std::move(to_insert));
+            }
+            else
+            {
+                /* lookahead is same as element to insert */
+            }
+        }
+    };
+
+    template<typename CharT>
+    constexpr void charset<CharT>::part_sort_and_dedup(partitioned_intervals& part)
+    {
+        std::ranges::sort(part, {}, &partition_entry::first);
+        
+        for (auto it{ part.begin() }; it != part.end(); ++it)
+        {
+            const auto duplicate_begin{ std::next(it) };
+            auto duplicate_it{ duplicate_begin };
+
+            for (; duplicate_it != part.end() and duplicate_it->first == it->first; ++duplicate_it)
+                for (std::size_t j{ 0 }, j_max{ std::min(it->second.size(), duplicate_it->second.size()) }; j < j_max; ++j)
+                    it->second[j] = it->second[j] or duplicate_it->second[j];
+
+            if (duplicate_it != duplicate_begin)
+                part.erase(duplicate_begin, duplicate_it);
+        }
+    }
+
+    template<typename CharT>
+    constexpr void charset<CharT>::part_merge_intervals(partitioned_intervals& part)
+    {
+        for (std::size_t i{ 0 }; i + 1 < part.size();)
+        {
+            auto& [current, current_mask]{ part[i] };
+            auto& [lookahead, lookahead_mask]{ part[i + 1] };
+
+            if (current.first == lookahead.first)
+            {
+                /* current.second <= lookahead.second
+                 * because vec is sorted and has unique elements */
+
+                if (current.second < lookahead.second)
+                {
+                    /* -----
+                     * ---------
+                     */
+
+                    lookahead.first = current.second + 1;
+
+                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
+                        current_mask[j] = current_mask[j] or lookahead_mask[j];
+
+                    part_sort_lookahead(part, i);
+                }
+                else
+                {
+                    /* ---------
+                     * ---------
+                     */
+
+                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
+                        current_mask[j] = current_mask[j] or lookahead_mask[j];
+
+                    part.erase(part.begin() + i + 1); /* dedup */
+                }
+            }
+            else if (current.second >= lookahead.first)
+            {
+                /* current and lookahead overlap
+                 * and current.first < lookahead.first */
+
+                if (current.second == lookahead.second)
+                {
+                    /* -----------
+                     *      ------
+                     */
+
+                    current.second = lookahead.first - 1; 
+
+                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
+                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
+
+                    part_sort_lookahead(part, i);
+                }
+                else if (current.second < lookahead.second)
+                {
+                    /* ------
+                     *    ---------
+                     */
+
+                    partition_entry to_insert{ { current.second + 1, lookahead.second }, lookahead_mask };
+                    lookahead.second = current.second;
+                    current.second = lookahead.first - 1;
+
+                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
+                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
+
+                    part_sort_lookahead_and_insert(part, i, std::move(to_insert));
+                }
+                else
+                {
+                    /* --------------
+                     *    --------
+                     */
+
+                    partition_entry to_insert{ { lookahead.second + 1, current.second }, current_mask };
+                    current.second = lookahead.first - 1;
+
+                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
+                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
+
+                    part_sort_lookahead_and_insert(part, i, std::move(to_insert));
+                }
+            }
+            else
+            {
+                ++i;
+            }
+        }
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::part_make_map(const partitioned_intervals& part) -> std::flat_map<std::vector<bool>, charset>
+    {
+        std::flat_map<std::vector<bool>, charset> map;
+
+        for (const auto& [interval, mask] : part)
+        {
+            /* since part is already sorted, we can directly insert
+             * instead of calling charset::insert() */
+            map[mask].data_.emplace_back(interval);
+        }
+
+        return map;
+    }
+
+    template<typename CharT>
+    constexpr auto charset<CharT>::partition(const std::vector<ref>& input) -> partition_result
+    {
+        if (input.empty())
+            return {};
+        else if (input.size() == 1)
+            return { input.back().get() };
+
+        partitioned_intervals part;
+
+        for (std::size_t i{ 0 }; i < input.size(); ++i)
+        {
+            std::vector<bool> mask(input.size(), false);
+            mask[input.size() - i - 1] = true;
+            for (const auto& pair: input[i].get().data_)
+                part.emplace_back(pair, mask);
+        }
+
+        part_sort_and_dedup(part);
+        part_merge_intervals(part);
+        const auto map{ part_make_map(part) };
+
+        return map.values();
+    }
+
+    template<typename CharT>
+    template<typename T>
+    constexpr auto charset<CharT>::partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>
+    {
+        if (input.empty())
+            return {};
+        else if (input.size() == 1)
+            return { { input.back().first, { input.back().second } } };
+
+        partitioned_intervals part;
+
+        for (std::size_t i{ 0 }; i < input.size(); ++i)
+        {
+            std::vector<bool> mask(input.size(), false);
+            mask[input.size() - i - 1] = true;
+            for (const auto& pair: input[i].first.get().data_)
+                part.emplace_back(pair, mask);
+        }
+
+        part_sort_and_dedup(part);
+        part_merge_intervals(part);
+        auto map{ part_make_map(part) };
+
+        partition_pair_result<T> result;
+
+        for (auto it{ map.begin() }, end{ map.end() }; it != end; ++it)
+        {
+            result.emplace_back(std::move(it->second), std::vector<T>{});
+            for (std::size_t i{ 0 }; i < input.size(); ++i)
+                if (it->first.at(input.size() - i - 1))
+                    result.back().second.emplace_back(input[i].second);
+        }
+
+        return result;
+    }
+
+
+    template<typename CharT>
+    template<typename T>
+    constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>
+    {
+        if (input.empty())
+            return {};
+        else if (input.size() == 1)
+            return { { input.back().second } };
+
+        partitioned_intervals part;
+
+        for (std::size_t i{ 0 }; i < input.size(); ++i)
+        {
+            std::vector<bool> mask(input.size(), false);
+            mask[input.size() - i - 1] = true;
+            for (const auto& pair: input[i].first.get().data_)
+                part.emplace_back(pair, mask);
+        }
+
+        part_sort_and_dedup(part);
+        part_merge_intervals(part);
+        const auto map{ part_make_map(part) };
+
+        partition_contents_result<T> result;
+
+        for (auto it{ map.cbegin() }, end{ map.cend() }; it != end; ++it)
+        {
+            result.emplace_back();
+            for (std::size_t i{ 0 }; i < input.size(); ++i)
+                if (it->first.at(input.size() - i - 1))
+                    result.back().emplace_back(input[i].second);
+        }
+
+        return result;
+    }
+    
 }

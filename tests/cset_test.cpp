@@ -24,6 +24,16 @@ namespace
         return result;
     }
 
+    consteval auto make_cs_vec(const std::vector<const char*>& vec)
+    {
+        std::vector<rx::detail::charset<char>> result;
+        result.reserve(vec.size());
+        for (const char* cstr : vec)
+            result.emplace_back(make_cs(cstr));
+        return result;
+    }
+
+
     consteval bool test_ident(const char* arg, const char* result)
     {
         return make_cs(arg) == make_cs(result);
@@ -57,6 +67,18 @@ namespace
     consteval bool test_relcomp(const char* lhs, const char* rhs, const char* result)
     {
         return (make_cs(lhs) - make_cs(rhs)) == make_cs(result);
+    }
+
+    consteval bool contains(const char* arg, char c)
+    {
+        return make_cs(arg).contains(c);
+    }
+
+    consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
+    {
+        const auto input{ make_cs_vec(arg) };
+        std::vector refs{ std::from_range, input | std::views::transform([](const auto& b){ return std::cref(b); }) };
+        return rx::detail::charset<char>::partition(refs) == make_cs_vec(result);
     }
 }
 
@@ -122,3 +144,30 @@ static_assert(test_relcomp("ac", "", "ac"));
 static_assert(test_relcomp("", "ac", ""));
 static_assert(test_relcomp("ac", "bc", "aa"));
 static_assert(test_relcomp("bc", "ac", ""));
+
+/* contains tests */
+static_assert(contains("bb", 'b'));
+static_assert(not contains("bb", 'a'));
+static_assert(not contains("bb", 'c'));
+static_assert(contains("Azaz", 'z'));
+static_assert(contains("Azaz", 'A'));
+static_assert(contains("Azaz", 'f'));
+static_assert(contains("ac", 'c'));
+static_assert(contains("acef", 'c'));
+static_assert(not contains("ac", 'd'));
+static_assert(not contains("acef", 'd'));
+
+/* partition tests */
+static_assert(test_part({}, {}));
+static_assert(test_part({"ac"}, {"ac"}));
+static_assert(test_part({"ac","ac"}, {"ac"}));
+static_assert(test_part({"ac","ae"}, {"de","ac"}));
+static_assert(test_part({"ae","ac"}, {"de","ac"}));
+static_assert(test_part({"ae","bc"}, {"aade","bc"}));
+static_assert(test_part({"bc","ae"}, {"aade","bc"}));
+static_assert(test_part({"aj","bdfg"}, {"aaeehj","bdfg"}));
+static_assert(test_part({"aj","em"}, {"ad","km", "ej"}));
+static_assert(test_part({"aj","em"}, {"ad","km", "ej"}));
+static_assert(test_part({"em","aj"}, {"km","ad", "ej"}));
+static_assert(test_part({"adgh","dfhj"}, {"acgg","efij", "ddhh"}));
+static_assert(test_part({"adgh","dfhj", "dh"}, {"ac","ij", "gg", "ef", "ddhh"}));

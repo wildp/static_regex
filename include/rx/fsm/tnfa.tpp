@@ -6,6 +6,7 @@
 #include <iterator>
 #include <limits>
 #include <ranges>
+#include <type_traits>
 #include <utility>
 
 #include <rx/api/regex_error.hpp>
@@ -45,6 +46,9 @@ namespace rx::detail
         return tmp;
     }
 
+    
+    /* transition creation helper functions */
+
     template<typename CharT>
     template<typename... Args>
     constexpr void tagged_nfa<CharT>::transition_create(const state_t q0, const state_t qf, Args&&... args)
@@ -64,13 +68,15 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharT c)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, c, c);
+        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, tnfa::charset_t<CharT>{ c });
     }
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharT lower, CharT upper)
+    template<typename CharSet>
+    requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
+    constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharSet&& cs)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, lower, upper);
+        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, std::forward<CharSet>(cs));
     }
 
     template<typename CharT>
@@ -84,13 +90,14 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    template<tnfa::assert_category V>
-    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, const tnfa::char_set<CharT> cs, tnfa::ac<V> /* category */)
+    template<typename CharSet, tnfa::assert_category V>
+    requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
+    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, CharSet&& cs, tnfa::ac<V> /* category */)
     {
         using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_1_tr<CharT>,
                                 std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_1_tr<CharT>, void>>;
 
-        transition_create(q0, qf, std::in_place_type<type>, cs);
+        transition_create(q0, qf, std::in_place_type<type>, std::forward<CharSet>(cs));
     }
 
     // template<typename CharT>
@@ -204,10 +211,14 @@ namespace rx::detail
                         // TODO: implement multibyte chars;
                         throw tnfa_error("UTF16 character classes are unimplemented");
                     }
+                    else if constexpr (std::same_as<tnfa::charset_t<char_type>, typename ast_t::char_class::impl_type::underlying_type>)
+                    {
+                        make_transition(q0, qf, cla.data.get());
+                    }
                     else
                     {
-                        for (const auto& [lower, upper] : cla.data.intervals())
-                            make_transition(q0, qf, lower, upper);             
+                        // Should be unreachable?
+                        throw tnfa_error("Cannot convert character class to representation used by tnfa");
                     }
                 }
                 break;

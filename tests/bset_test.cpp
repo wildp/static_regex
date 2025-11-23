@@ -24,6 +24,15 @@ namespace
         return result;
     }
 
+    consteval auto make_bs_vec(const std::vector<const char*>& vec)
+    {
+        std::vector<rx::detail::bitcharset<char>> result;
+        result.reserve(vec.size());
+        for (const char* cstr : vec)
+            result.emplace_back(make_bs(cstr));
+        return result;
+    }
+
     consteval auto make_pairvec(std::string_view sv)
     {
         std::vector<rx::detail::bitcharset<char>::char_interval> result;
@@ -69,7 +78,7 @@ namespace
 
     consteval bool test_intervals(const char* arg, const char* result)
     {
-        return (make_bs(arg).get_intervals() == make_pairvec(result));
+        return make_bs(arg).get_intervals() == make_pairvec(result);
     }
 
     consteval bool test_caseless(const char* arg, const char* result)
@@ -77,6 +86,18 @@ namespace
         auto bs{ make_bs(arg) };
         bs.make_ascii_case_insensitive();
         return (bs == make_bs(result));
+    }
+
+    consteval bool contains(const char* arg, char c)
+    {
+        return make_bs(arg).contains(c);
+    }
+
+    consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
+    {
+        const auto input{ make_bs_vec(arg) };
+        std::vector refs{ std::from_range, input | std::views::transform([](const auto& b){ return std::cref(b); }) };
+        return rx::detail::bitcharset<char>::partition(refs) == make_bs_vec(result);
     }
 }
 
@@ -157,3 +178,30 @@ static_assert(test_caseless("ac", "ACac"));
 static_assert(test_caseless("AC", "ACac"));
 static_assert(test_caseless("acXZ", "ACXZacxz"));
 static_assert(test_caseless("09ac", "09ACac"));
+
+/* contains tests */
+static_assert(contains("bb", 'b'));
+static_assert(not contains("bb", 'a'));
+static_assert(not contains("bb", 'c'));
+static_assert(contains("Azaz", 'z'));
+static_assert(contains("Azaz", 'A'));
+static_assert(contains("Azaz", 'f'));
+static_assert(contains("ac", 'c'));
+static_assert(contains("acef", 'c'));
+static_assert(not contains("ac", 'd'));
+static_assert(not contains("acef", 'd'));
+
+/* partition tests */
+static_assert(test_part({}, {}));
+static_assert(test_part({"ac"}, {"ac"}));
+static_assert(test_part({"ac","ac"}, {"ac"}));
+static_assert(test_part({"ac","ae"}, {"de","ac"}));
+static_assert(test_part({"ae","ac"}, {"de","ac"}));
+static_assert(test_part({"ae","bc"}, {"aade","bc"}));
+static_assert(test_part({"bc","ae"}, {"aade","bc"}));
+static_assert(test_part({"aj","bdfg"}, {"aaeehj","bdfg"}));
+static_assert(test_part({"aj","em"}, {"ad","km", "ej"}));
+static_assert(test_part({"aj","em"}, {"ad","km", "ej"}));
+static_assert(test_part({"em","aj"}, {"km","ad", "ej"}));
+static_assert(test_part({"adgh","dfhj"}, {"acgg","efij", "ddhh"}));
+static_assert(test_part({"adgh","dfhj", "dh"}, {"ac","ij", "gg", "ef", "ddhh"}));

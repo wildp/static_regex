@@ -15,7 +15,7 @@
 namespace rx::detail
 {
     template<std::integral T>
-    constexpr void partition_v1(std::vector<std::pair<T, T>>& vec)
+    [[deprecated]] constexpr void partition_v1(std::vector<std::pair<T, T>>& vec)
     {
         using interval_t = std::pair<T, T>;
         using vec_t = std::vector<interval_t>;
@@ -178,7 +178,7 @@ namespace rx::detail
     }
 
     template<std::integral T, typename U>
-    struct partition_entry
+    struct [[deprecated]] partition_entry
     {
         std::pair<T, T> range;
         std::vector<U>  data;
@@ -189,7 +189,7 @@ namespace rx::detail
     };
 
     template<std::integral T, typename U>
-    constexpr void partition_v2(std::vector<partition_entry<T, U>>& vec)
+    [[deprecated]] constexpr void partition_v2(std::vector<partition_entry<T, U>>& vec)
     {
         using vec_t = std::vector<partition_entry<T, U>>;
 

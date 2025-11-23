@@ -1,10 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -17,7 +19,8 @@ namespace rx::detail
         using integer_t = std::uint64_t;
         static constexpr std::size_t byte_bits{ std::numeric_limits<unsigned char>::digits }; 
         static constexpr std::size_t integer_bits{ std::numeric_limits<integer_t>::digits };
-        static constexpr std::size_t array_size{ (0b1uz << (sizeof(CharT) * byte_bits)) / integer_bits };
+        static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
+        static constexpr std::size_t array_size{ total_size / integer_bits };
 
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
@@ -27,12 +30,20 @@ namespace rx::detail
         using char_type = CharT;
         using char_interval = std::pair<char_type, char_type>;
 
-        
-        constexpr bitcharset() noexcept
+        consteval bitcharset() noexcept = default;
+
+        template<typename... Args>
+        requires (sizeof...(Args) >= 1 and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...))
+        constexpr explicit bitcharset(Args... args)
         {
-            for (std::size_t i{ 0 }; i < array_size; ++i)
-                data_[i] = 0;
-        };
+            template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
+            {
+                if constexpr (std::convertible_to<Args...[i], char_type>  )
+                    insert(args...[i]);
+                else if constexpr (std::convertible_to<Args...[i], char_interval>)
+                    insert(args...[i].first, args...[i].second);
+            }
+        }
 
 
         /* observers */
@@ -51,6 +62,14 @@ namespace rx::detail
             for (std::size_t i{ 0 }; i < array_size; ++i)
                 result += std::popcount(data_[i]);
             return result;
+        }
+
+        [[nodiscard]] constexpr bool contains(char_type c) const noexcept
+        {
+            /* widen to accommodate signed chars */
+            const auto input{ static_cast<int>(c) - std::numeric_limits<char_type>::min() };
+
+            return data_[input / integer_bits] & (0b1uz << (input % integer_bits));
         }
 
         [[nodiscard]] constexpr std::vector<char_interval> get_intervals() const
@@ -246,7 +265,193 @@ namespace rx::detail
             data_[index] |= (mask2 << lowercase_offset);
         }
 
+
+        /* partition functions and type aliases */
+
+        using ref = std::reference_wrapper<const bitcharset>;
+
+        template<typename T>
+        using ref_pair = std::pair<ref, T>;
+
+        using partition_result = std::vector<bitcharset>;
+
+        template<typename T>
+        using partition_pair_result = std::vector<std::pair<bitcharset, std::vector<T>>>;
+
+        template<typename T>
+        using partition_contents_result = std::vector<std::vector<T>>;
+     
+        [[nodiscard]] static constexpr auto partition(const std::vector<ref>& input) -> partition_result;
+
+        template<typename T>
+        [[nodiscard]] static constexpr auto partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>;
+
+        template<typename T>
+        [[nodiscard]] static constexpr auto partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>;
+
     private:
-        std::array<integer_t, array_size> data_;
+        std::array<integer_t, array_size> data_{};
     };
+
+    template<typename CharT>
+    constexpr auto bitcharset<CharT>::partition(const std::vector<ref>& input) -> partition_result
+    {
+        if (input.empty())
+            return {};
+        else if (input.size() == 1)
+            return { input.back().get() };
+
+        /* note: partitions.size() >= 1 is always true, since for each iteration we insert
+         *       at least one element into next_gen per element in partitions, since at
+         *       most one of partitions[i] & val and partitions[i] & ~val will be empty */
+        std::vector<bitcharset<CharT>> partitions(1);
+        partitions.back().negate();
+
+        for (const bitcharset& val : input)
+        {
+            std::vector<bitcharset<CharT>> next_gen;
+            next_gen.reserve(partitions.size() * 2);
+
+            for (std::size_t i{ 0 }; i < partitions.size(); ++i)
+                if (auto cs{ partitions[i] & val }; not cs.empty())
+                    next_gen.emplace_back(cs);
+
+            const auto complement{ ~val };
+
+            for (std::size_t i{ 0 }; i + 1 < partitions.size(); ++i)
+                if (auto cs{ partitions[i] & complement }; not cs.empty())
+                    next_gen.emplace_back(cs);
+
+            /* always insert intersection of all complements as last element */
+            next_gen.emplace_back(partitions.back() & complement);
+
+            partitions = std::move(next_gen);
+        }
+
+        /* remove last element, which corresponds to intersection of all complements */ 
+        partitions.pop_back();
+
+        std::ranges::reverse(partitions); // TEMPORARY: TODO: Remove later
+
+        return partitions;
+    }
+
+    template<typename CharT>
+    template<typename T>
+    constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>
+    {
+        using part_pair = std::pair<bitcharset, std::vector<bool>>;
+
+        if (input.empty())
+            return {};
+        else if (input.size() == 1)
+            return { { input.back().first, { input.back().second } } };
+
+        std::vector<part_pair> partitions(1);
+        partitions.back().first.negate();
+
+        for (const auto& [val, _] : input)
+        {
+            std::vector<part_pair> next_gen;
+            next_gen.reserve(partitions.size() * 2);
+
+            const auto complement{ ~val.get() };
+
+            for (const auto& [v, from] : partitions)
+            {
+                if (auto cs{ v & complement }; not cs.empty())
+                {
+                    next_gen.emplace_back(cs, from);
+                    next_gen.back().second.emplace_back(false);
+                }
+            }
+
+            for (const auto& [v, from] : partitions)
+            {
+                if (auto cs{ v & val.get() }; not cs.empty())
+                {
+                    next_gen.emplace_back(cs, from);
+                    next_gen.back().second.emplace_back(true);
+                }
+            }
+
+            partitions = std::move(next_gen);
+        }
+
+        partition_pair_result<T> result;
+        const std::vector<bool> empty(input.size(), false);
+
+        for (const auto& [v, from] : partitions)
+        {
+            if (from == empty)
+                continue;
+
+            result.emplace_back(v, std::vector<T>{});
+            for (std::size_t i{ 0 }; i < input.size(); ++i)
+                if (from.at(i))
+                    result.back().second.emplace_back(input[i].second);
+        }
+
+        return result;
+    }
+
+    template<typename CharT>
+    template<typename T>
+    constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>
+    {
+        using part_pair = std::pair<bitcharset, std::vector<bool>>;
+
+        if (input.empty())
+            return {};
+        else if (input.size() == 1)
+            return { std::vector<T>{ input.back().second } };
+
+        std::vector<part_pair> partitions(1);
+        partitions.back().first.negate();
+
+        for (const auto& [val, _] : input)
+        {
+            std::vector<part_pair> next_gen;
+            next_gen.reserve(partitions.size() * 2);
+
+            const auto complement{ ~val.get() };
+
+            for (const auto& [v, from] : partitions)
+            {
+                if (auto cs{ v & complement }; not cs.empty())
+                {
+                    next_gen.emplace_back(cs, from);
+                    next_gen.back().second.emplace_back(false);
+                }
+            }
+
+            for (const auto& [v, from] : partitions)
+            {
+                if (auto cs{ v & val.get() }; not cs.empty())
+                {
+                    next_gen.emplace_back(cs, from);
+                    next_gen.back().second.emplace_back(true);
+                }
+            }
+
+            partitions = std::move(next_gen);
+        }
+
+        std::vector<std::vector<T>> result;
+        const std::vector<bool> empty(input.size(), false);
+
+        for (const auto& [v, from] : partitions)
+        {
+            if (from == empty)
+                continue;
+
+            result.emplace_back();
+            for (std::size_t i{ 0 }; i < input.size(); ++i)
+                if (from.at(i))
+                    result.back().emplace_back(input[i].second);
+        }
+
+        return result;
+    }
+
 }

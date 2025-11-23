@@ -7,11 +7,8 @@
 #include <iterator>
 #include <numeric>
 #include <ranges>
-#include <tuple>
 #include <utility>
 #include <variant>
-
-#include <rx/etc/partition.hpp>
 
 
 // TODO: fix implementation 
@@ -67,10 +64,11 @@ namespace rx::detail::tdfa
     using register_map_t = std::flat_map<reg_t, reg_t>;
 
     template<typename CharT>
-    using multistep_closure = partition_entry<CharT, closure_entry>;
+    using multistep_closures_t = charset_t<CharT>::template partition_pair_result<closure_entry>;
 
     template<typename CharT>
-    using multistep_closures_t = std::vector<multistep_closure<CharT>>;
+    using multistep_closure_t = multistep_closures_t<CharT>::value_type;
+
 
     using precedence_t = std::monostate;
 
@@ -129,7 +127,7 @@ namespace rx::detail::tdfa
     private:
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o);
-        [[nodiscard]] constexpr multistep_closures_t<char_type> multistep_v1(std::size_t state) const;
+        [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
         [[nodiscard]] constexpr multistep_closures_t<char_type> multistep_v2(std::size_t state) const;
         [[nodiscard]] constexpr regops_t transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const;
         [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
@@ -317,47 +315,28 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr auto factory<CharT>::multistep_v1(std::size_t state) const -> multistep_closures_t<char_type>
+    constexpr auto factory<CharT>::multistep(std::size_t state) const -> multistep_closures_t<char_type>
     {
-        multistep_closures_t<char_type> multi_closures;
-
         auto configs{ state_info_.at(state).config };
         // const auto& p{ state_info_.at(state).precedence };
 
         // std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
 
-        using elem_t = std::tuple<tnfa::state_t, tnfa::normal_tr<char_type>, std::reference_wrapper<const configuration>>;
+        using elem_t = tnfa::charset_t<char_type>::template ref_pair<closure_entry>;
+
         std::vector<elem_t> transitions;
 
         for (const auto& cfg : configs)
         {
-            transitions.append_range(tnfa_ptr_->get_node(cfg.tnfa_state).out_tr
-                                     | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
-                                     | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::normal_tr<char_type>>(t.type); })
-                                     | std::views::transform([&cfg](const auto& t) -> elem_t { return { t.dst, std::get<tnfa::normal_tr<char_type>>(t.type), std::cref(cfg) }; }));
-        }
-
-        std::vector<std::pair<char_type, char_type>> symbol_pairs;
-
-        for (const auto& [_, tr, _] : transitions)
-            symbol_pairs.emplace_back(tr.lower, tr.upper);
-
-        partition_v1(symbol_pairs);
-
-        for (auto [lower, upper] : symbol_pairs)
-        {
-            multi_closures.emplace_back(lower, upper);
-
-            for (const auto& [next, t, cfg] : transitions)
+            for (std::size_t tr_idx : tnfa_ptr_->get_node(cfg.tnfa_state).out_tr)
             {
-                if (t.lower <= lower and upper <= t.upper)
-                {
-                    multi_closures.back().data.emplace_back(next, cfg.get().registers, cfg.get().tag_seq);
-                }
-            }   
+                const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
+                if (const auto* const ptr{ std::get_if<tnfa::normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
+                    transitions.emplace_back(std::cref(ptr->cs), closure_entry{ tr.dst, cfg.registers, cfg.tag_seq });
+            }
         }
 
-        return multi_closures;
+        return charset_t<char_type>::partition_ext(transitions);
     }
 
     template<typename CharT>
@@ -605,32 +584,31 @@ namespace rx::detail::tdfa
         result.final_registers_.resize(tag_count_);
         std::ranges::iota(result.final_registers_, tag_count_);
 
-        closure_t c;
+        closure_t initial_cfg;
         // c.emplace_back(is_search ? tnfa_t::substr_start : tnfa_t::match_start, std::move(initial_reg));
-        c.emplace_back(input.start_node(), std::move(initial_reg));
-        c = e_closure(std::move(c));
-        add_initial_state(result, c, precedence_t{ /* c */ });
+        initial_cfg.emplace_back(input.start_node(), std::move(initial_reg));
+        initial_cfg = e_closure(std::move(initial_cfg));
+        add_initial_state(result, initial_cfg, precedence_t{ /* cfg0 */ });
 
         for (std::size_t state{ 0 }; state < result.nodes_.size(); ++state)
         {
             tag_op_map map;
 
-            for (auto& [pair, c] : multistep_v1(state) /* multistep_v1(state) */)
+            for (auto& [cs, cfg] : multistep(state))
             {
-                c = e_closure(std::move(c));
-                auto o{ transition_regops(c, result.register_count_, map) };
-                const auto s{ add_state(result, c, precedence_t{ /* c */ }, o) };
+                cfg = e_closure(std::move(cfg));
+                auto o{ transition_regops(cfg, result.register_count_, map) };
+                const auto s{ add_state(result, cfg, precedence_t{ /* cfg */ }, o) };
 
                 /* Add transition to tdfa */
-                const auto [lower, upper]{ pair };
                 if (o.empty())
                 {
                     /* avoid creating empty regop blocks */
-                    result.nodes_.at(state).tr.emplace_back(s, no_transition_regops, lower, upper);
+                    result.nodes_.at(state).tr.emplace_back(s, no_transition_regops, std::move(cs));
                 }   
                 else
                 {
-                    result.nodes_.at(state).tr.emplace_back(s, result.regops_.size(), lower, upper);
+                    result.nodes_.at(state).tr.emplace_back(s, result.regops_.size(), std::move(cs));
                     result.regops_.emplace_back(std::move(o));
                 }
             }

@@ -101,21 +101,19 @@ namespace rx::testing
 
         for (auto& [q, m] : closure)
         {
-            using normal_t = std::pair<tnfa::state_t, normal_tr<CharT>>;
-            std::vector ct{ std::from_range,
-                            this->get_node(q).out_tr
-                            | std::views::transform([&](const tnfa::state_t p) { return this->get_tr(p); })
-                            | std::views::filter([](const auto& t) { return std::holds_alternative<normal_tr<CharT>>(t.type); })
-                            | std::views::transform([](const auto& t) -> normal_t { return { t.dst, std::get<normal_tr<CharT>>(t.type) }; }) };
-
-            for (const auto& [next, c] : ct)
+            for (std::size_t i{ 0 }; i < this->get_node(q).out_tr.size(); ++i)
             {
-                if (c.lower <= a and a <= c.upper)
+                const auto& tr{ this->get_tr(this->get_node(q).out_tr[i]) };
+                
+                if (const auto* const ptr{ std::get_if<normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
                 {
-                    if (ct.size() == 1)
-                        new_closure.emplace_back(next, std::move(m));
-                    else
-                        new_closure.emplace_back(next, m);
+                    if (ptr->cs.contains(a))
+                    {
+                        if (i + 1 == this->get_node(q).out_tr.size())
+                            new_closure.emplace_back(tr.dst, std::move(m));
+                        else
+                            new_closure.emplace_back(tr.dst, m);
+                    }
                 }
             }      
         }

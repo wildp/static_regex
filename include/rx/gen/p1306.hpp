@@ -17,13 +17,37 @@ namespace rx::detail
 {
     /* p1306 matcher implementation */
 
-    template<tdfa::transition Tr, typename CharT>
+    template<typename CharT, CharT Lower, CharT Upper>
+    [[clang::always_inline]] inline constexpr bool tr_possible_interval_impl(CharT c)
+    {
+        if constexpr (Lower == Upper)
+            return (c == Lower);
+        else
+            return (Lower <= c and c <= Upper);
+    }
+
+    template<typename CharT, std::pair<CharT, CharT>... Intervals>
+    [[clang::always_inline]] inline constexpr bool tr_possible_impl(CharT c)
+    {
+        return (tr_possible_interval_impl<CharT, Intervals.first, Intervals.second>(c)  or ...);
+    }
+
+    template<typename CharT>
+    consteval auto tr_possible_make_refl(static_transition<CharT> tr)
+    {
+        std::vector<std::meta::info> result{ ^^CharT };
+        result.reserve(1 + tr.cs.size());
+        for (const auto& pair : tr.cs)
+            result.emplace_back(std::meta::reflect_constant(pair));
+        return result;
+    }
+
+
+    template<static_transition Tr, typename CharT>
     [[clang::always_inline]] inline constexpr bool tr_possible(CharT c)
     {
-        if constexpr (Tr.lower == Tr.upper)
-            return (c == Tr.lower);
-        else
-            return (Tr.lower <= c and c <= Tr.upper);
+        constexpr auto func{ std::meta::substitute(^^tr_possible_impl, tr_possible_make_refl(Tr)) };
+        return [: func :](c);
     }
 
 
@@ -100,7 +124,7 @@ namespace rx::detail
             }
             else
             {
-                template for (constexpr tdfa::transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
                 {
                     if (tr_possible<tr>(*it))
                     {
@@ -135,7 +159,7 @@ namespace rx::detail
             }
             else
             {
-                template for (constexpr tdfa::transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
                 {
                     if (tr_possible<tr>(*ptr))
                     {

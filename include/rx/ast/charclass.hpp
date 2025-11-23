@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <string_view>
 #include <vector>
 
 #include <rx/etc/bitcharset.hpp>
@@ -54,6 +53,7 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t count() const noexcept { return data_.count(); }
         [[nodiscard]] constexpr bool is_negated() const noexcept { return negated_; }
         [[nodiscard]] constexpr const auto& intervals() const noexcept { return data_.get_intervals(); }
+        [[nodiscard]] constexpr const auto& get() const { return data_; }
 
         constexpr void normalise() noexcept { if (negated_) { data_.negate(); negated_ = false; } }
         constexpr void make_caseless();
@@ -88,6 +88,7 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t count() const noexcept { return data_.count(); }
         [[nodiscard]] constexpr bool is_negated() const noexcept { return negated_; }
         [[nodiscard]] constexpr auto intervals() const { return data_.get_intervals(); }
+        [[nodiscard]] constexpr const auto& get() const { return data_; }
 
         constexpr void normalise() noexcept { if (negated_) { data_.negate(); negated_ = false; } }
         constexpr void make_caseless() noexcept { data_.make_ascii_case_insensitive(); }
@@ -203,64 +204,55 @@ namespace rx::detail
         
     constexpr void narrow_char_class_impl::insert(named_character_class ncc) noexcept
     {
-        static constexpr auto make_bcs = [](const std::vector<char> pairs, const std::vector<char> singles = {}) consteval {
-            bitcharset<char> result;
-
-            for (std::size_t i{ 0 }; i + 1 < pairs.size(); i += 2)
-                result.insert(pairs[i], pairs[i + 1]);
-
-            for (std::size_t i{ 0 }; i < singles.size(); i += 1)
-                result.insert(singles[i]);
-
-            return result;
-        };
+        using bcs = bitcharset<char>;
+        using p = typename bcs::char_interval;
 
         switch (ncc)
         {
         case named_character_class::alphanumeric:
-            data_ |= make_bcs({ '0', '9', 'A', 'Z', 'a', 'z' });
-            return;
+            data_ |= bcs{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' } };
+            break;
         case named_character_class::alphabetic:
-            data_ |= make_bcs({ 'A', 'Z', 'a', 'z' });
+            data_ |= bcs{ p{ 'A', 'Z' }, p{ 'a', 'z' } };
             break;
         case named_character_class::ascii:
-            data_ |= make_bcs({ 0x00, 0x7F });
+            data_ |= bcs{ p{ 0x00, 0x7F } };
             break;
         case named_character_class::blank:
-            data_ |= make_bcs({}, { '\t', ' ' });
+            data_ |= bcs{ '\t', ' ' };
             break;
         case named_character_class::control:
-            data_ |= make_bcs({ 0x00, 0x1F }, { 0x7F });
+            data_ |= bcs{ p{ 0x00, 0x1F }, 0x7F };
             break;
         case named_character_class::digits:
-            data_ |= make_bcs({ '0', '9' });
+            data_ |= bcs{ p{ '0', '9' } };
             break;
         case named_character_class::graphical:
-            data_ |= make_bcs({ '!', '~' });
+            data_ |= bcs{ p{ '!', '~' } };
             break;
         case named_character_class::lowercase:
-            data_ |= make_bcs({ 'a', 'z' });
+            data_ |= bcs{ p{ 'a', 'z' } };
             break;
         case named_character_class::printable:
-            data_ |= make_bcs({ ' ', '~' });
+            data_ |= bcs{ p{ ' ', '~' } };
             break;
         case named_character_class::punctuation:
-            data_ |= make_bcs({ '!', '/', ':', '@', '[', '`', '{', '~' });
+            data_ |= bcs{ p{ '!', '/' }, p{ ':', '@' }, p{ '[', '`' }, p{ '{', '~' } };
             break;
         case named_character_class::posix_whitespace:
-            data_ |= make_bcs({}, { '\v', '\t', '\n', '\f', '\r', ' '});
+            data_ |= bcs{ '\v', '\t', '\n', '\f', '\r', ' ' };
             break;
         case named_character_class::perl_whitespace:
-            data_ |= make_bcs({}, { '\t', '\n', '\f', '\r', ' '});
+            data_ |= bcs{ '\t', '\n', '\f', '\r', ' '};
             break;
         case named_character_class::uppercase:
-            data_ |= make_bcs({ 'A', 'Z' });
+            data_ |= bcs{ p{ 'A', 'Z' } };
             break;
         case named_character_class::word:
-            data_ |= make_bcs({ '0', '9', 'A', 'Z', 'a', 'z' }, { '_' });
+            data_ |= bcs{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
             break;
         case named_character_class::hexdigits:
-            data_ |= make_bcs({ '0', '9', 'A', 'F', 'a', 'f' });
+            data_ |= bcs{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
             break;
         }
     }

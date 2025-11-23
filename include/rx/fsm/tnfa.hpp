@@ -8,6 +8,7 @@
 
 #include <rx/ast/tree.hpp>
 #include <rx/etc/charset.hpp>
+#include <rx/etc/bitcharset.hpp>
 #include <rx/fsm/flags.hpp>
 
 
@@ -17,7 +18,7 @@ namespace rx::detail::tnfa
     using tr_index = std::size_t;
 
     template<typename CharT>
-    using char_set = std::conditional_t<true, charset<CharT>, void>;
+    using charset_t = std::conditional_t<sizeof(CharT) == 1, bitcharset<CharT>, charset<CharT>>;
 
     enum class assert_category : std::int8_t
     {
@@ -37,7 +38,7 @@ namespace rx::detail::tnfa
     template<typename CharT>
     struct normal_tr
     {
-        CharT lower, upper;
+        charset_t<CharT> cs;
     };
 
     struct epsilon_tr
@@ -52,13 +53,13 @@ namespace rx::detail::tnfa
     template<typename CharT>
     struct lookahead_1_tr
     {
-        char_set<CharT> cs;
+        charset_t<CharT> cs;
     };
 
     template<typename CharT>
     struct lookbehind_1_tr
     {
-        char_set<CharT> cs;
+        charset_t<CharT> cs;
     };
 
     // struct lookahead_tr 
@@ -129,18 +130,29 @@ namespace rx::detail
     class tagged_nfa
     {
     public:
-        explicit constexpr tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags);
-
+        using char_type = CharT;
         using state_t = tnfa::state_t;
         using tr_index = tnfa::tr_index;
 
+        explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
+
+        [[nodiscard]] constexpr auto get_flags() const noexcept { return flags_; }
+        [[nodiscard]] constexpr const tnfa::node& get_node(state_t i) const { return nodes_.at(i); }
+        [[nodiscard]] constexpr const tnfa::transition<char_type>& get_tr(tr_index idx) const { return transitions_.at(idx); }
+        [[nodiscard]] constexpr std::size_t node_count() const noexcept { return nodes_.size(); }
+        [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
+        [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
+        [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
+
     private:
-        using ast_t = expr_tree<CharT>;
+        using ast_t = expr_tree<char_type>;
         using acat_t = tnfa::assert_category;
-        using transition_info = tnfa::transition<CharT>::transition_type;
+        using transition_info = tnfa::transition<char_type>::transition_type;
 
         template<in_variant<typename ast_t::type> T>
         static constexpr state_t ast_index{ index_of_impl<typename ast_t::type, T>::value };
+
+        /* fundamental helpers */
 
         constexpr state_t node_create();
         constexpr state_t node_copy(state_t q);
@@ -148,17 +160,31 @@ namespace rx::detail
         template<typename... Args>
         constexpr void transition_create(state_t q0, state_t qf, Args&&... args);
 
+        /* transition creation */
+
         constexpr void make_epsilon(state_t q0, state_t qf, int priority = 0, int tag = 0);
-        constexpr void make_transition(state_t q0, state_t qf, CharT lower, CharT upper);
-        constexpr void make_transition(state_t q0, state_t qf, CharT c);
-        template<acat_t V> constexpr void make_assert(state_t q0, state_t qf, tnfa::ac<V> category);
-        template<acat_t V> constexpr void make_assert(state_t q0, state_t qf, tnfa::char_set<CharT>, tnfa::ac<V> category);
-        // template<acat_t V> constexpr void make_assert(state_t q0, state_t qf, state_t p0, state_t pf, tnfa::ac<V> category);
+        
+        constexpr void make_transition(state_t q0, state_t qf, char_type c);
+
+        template<typename CharSet>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<char_type>>
+        constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
+
+        template<acat_t V>
+        constexpr void make_assert(state_t q0, state_t qf, tnfa::ac<V> category);
+
+        template<typename CharSet, acat_t V>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<char_type>>
+        constexpr void make_assert(state_t q0, state_t qf, CharSet&& cs, tnfa::ac<V> category);
+
+        // template<acat_t V>
+        // constexpr void make_assert(state_t q0, state_t qf, state_t p0, state_t pf, tnfa::ac<V> category);
+
         constexpr void make_copy(state_t q0, state_t qf, const transition_info& type);
 
         constexpr void make_ntags(state_t q0, state_t qf, const std::vector<int>& ntags);
-        constexpr void make_wildcard(state_t q0, state_t qf);
-        constexpr void thompson(const expr_tree<CharT>& ast);
+        
+        constexpr void thompson(const expr_tree<char_type>& ast);
 
         template<bool RetBitVec>
         using ec_result = std::conditional_t<RetBitVec, std::vector<bool>, std::vector<state_t>>;
@@ -174,24 +200,19 @@ namespace rx::detail
         constexpr void remove_dead_and_unreachable_states();
         constexpr void rewrite_sof_anchors();
         constexpr void rewrite_eof_anchors();
-        constexpr void rewrite_sc_lookaround();
+        constexpr void rewrite_sc_lookahead();
+        constexpr void rewrite_sc_lookbehind();
         constexpr void rewrite_assertions();
+
+        /* constants */
 
         static constexpr state_t default_start_node{ 0 };
         static constexpr state_t default_final_node{ 1 };
-    
-    public:
-        [[nodiscard]] constexpr auto get_flags() const noexcept { return flags_; }
-        [[nodiscard]] constexpr const tnfa::node& get_node(state_t i) const { return nodes_.at(i); }
-        [[nodiscard]] constexpr const tnfa::transition<CharT>& get_tr(tr_index idx) const { return transitions_.at(idx); }
-        [[nodiscard]] constexpr std::size_t node_count() const noexcept { return nodes_.size(); }
-        [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
-        [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
-        [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
 
-    private:
+        /* data members */
+    
         std::vector<tnfa::node>                         nodes_{ 2 };
-        std::vector<tnfa::transition<CharT>>            transitions_;
+        std::vector<tnfa::transition<char_type>>        transitions_;
         capture_info                                    capture_info_;
         std::size_t                                     tag_count_;
         state_t                                         start_node_{ default_start_node };

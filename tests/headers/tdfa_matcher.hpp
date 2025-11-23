@@ -102,7 +102,7 @@ namespace rx::testing
 
                 for (const auto& t : this->get_node(next_state).tr)
                 {
-                    if (t.lower <= *it and *it <= t.upper)
+                    if (t.cs.contains(*it))
                     {
                         next_state = t.next;
                         regops_implementation(it, t.op_index, registers, registers_enabled);

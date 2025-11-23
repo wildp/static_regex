@@ -25,6 +25,7 @@ add_link_options(
     -Wl,--rpath=${LIBCXX_BUILD}/lib/x86_64-unknown-linux-gnu
 )
 
+
 include_directories(include/)
 
 set(CMAKE_LINKER_TYPE LLD)
@@ -35,7 +36,6 @@ target_sources(tests
         tests/bset_test.cpp
         tests/cset_test.cpp
         tests/expo_test.cpp
-        tests/part_test.cpp
         tests/tdfa_test.cpp
         tests/tnfa_test.cpp
         tests/tree_test.cpp

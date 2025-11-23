@@ -125,18 +125,16 @@ namespace rx::detail::tdfa
 
             // is this better as a flat_map or as a vector?
             // std::vector<std::vector<partition_entry<char_type, std::size_t>>> symbol_pairs_map(tdfa.reg);
-            std::flat_map<std::size_t, std::vector<partition_entry<char_type, std::size_t>>> symbol_pairs_map;
+            std::flat_map<std::size_t, std::vector<std::pair<std::reference_wrapper<const charset_t<CharT>>, std::size_t>>> symbol_pairs_map;
 
             for (std::size_t i{ 0 }; i < dfa.nodes_.size(); ++i)
                 for (const auto& tr : dfa.nodes_[i].tr)
                     if (transitions_to[tr.next])
-                        symbol_pairs_map[tr.op_index].emplace_back(tr.lower, tr.upper, i);
+                        symbol_pairs_map[tr.op_index].emplace_back(std::cref(tr.cs), i);
 
-            for (auto it{ symbol_pairs_map.begin() }, end{ symbol_pairs_map.end() }; it != end; ++it)
+            for (auto smit{ symbol_pairs_map.begin() }, end{ symbol_pairs_map.end() }; smit != end; ++smit)
             {
-                partition_v2(it->second);
-
-                for (const auto& [_, states] : it->second)
+                for (const auto& states : charset_t<CharT>::partition_contents(smit->second))
                 {
                     bitset_t transitions_from(bitset_size, false);
 
