@@ -16,14 +16,9 @@ namespace rx::detail::tdfa
     template<typename CharT>
     using charset_t = tnfa::charset_t<CharT>;
 
-    template<typename CharT>
-    class factory;
-
-    template<typename CharT>
-    class opt;
-
-    template<typename CharT>
-    class min;
+    template<typename CharT> class factory;
+    template<typename CharT> class opt;
+    template<typename CharT> class min;
 
     using reg_t = std::uint_least32_t;
 
@@ -62,7 +57,15 @@ namespace rx::detail::tdfa
     using regops_t = std::vector<regop>;
     inline constexpr regops_t empty_regops{};
 
-    using final_nodes_t = std::flat_map<std::size_t, std::size_t>;
+    struct final_node_info
+    {
+        std::size_t op_index;
+        std::uint16_t final_offset;
+        /* todo: add continuation index? */
+    };
+
+    using final_nodes_t = std::flat_map<std::size_t, final_node_info>;
+    using fallback_nodes_t = std::flat_map<std::size_t, std::size_t>;
     using final_regs_t = std::vector<reg_t>;
 
     inline constexpr std::size_t no_transition_regops{ std::numeric_limits<std::size_t>::max() };
@@ -110,7 +113,7 @@ namespace rx::detail
         [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
         [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { if (i == tdfa::no_transition_regops) return tdfa::empty_regops; else return regops_.at(i); }
         [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
-        [[nodiscard]] constexpr const tdfa::final_nodes_t& fallback_nodes() const { return fallback_nodes_; }
+        [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
         [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
         [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
@@ -121,15 +124,15 @@ namespace rx::detail
         using data_t = std::vector<tdfa::node<char_type>>;
         using regop_data_t = std::vector<tdfa::regops_t>;
 
-        data_t              nodes_;
-        tdfa::final_nodes_t final_nodes_;
-        tdfa::final_nodes_t fallback_nodes_;
-        tdfa::final_regs_t  final_registers_;
-        regop_data_t        regops_;
-        capture_info        capture_info_;
-        std::size_t         tag_count_;
-        tdfa::reg_t         register_count_{ 0 };
-        fsm_flags           flags_;
+        data_t                  nodes_;
+        tdfa::final_nodes_t     final_nodes_;
+        tdfa::fallback_nodes_t  fallback_nodes_;
+        tdfa::final_regs_t      final_registers_;
+        regop_data_t            regops_;
+        capture_info            capture_info_;
+        std::size_t             tag_count_;
+        tdfa::reg_t             register_count_{ 0 };
+        fsm_flags               flags_;
     };
 }
 

@@ -218,6 +218,15 @@ static_assert(search("^ab", "aba", { 0, 2 }));
 static_assert(search("ab", "bab", { 1, 3 }));
 static_assert(search("ab", "aba", { 0, 2 }));
 
+/* eol anchor tests */
+static_assert(partial_match("(?m)a$", "a", { 0, 1 }));
+static_assert(partial_match("(?m)a$", "a\na", { 0, 1 }));
+static_assert(partial_match("(?m)a$\na", "a\na", { 0, 3 }));
+static_assert(partial_match("(?m)a$\na", "a\na", { 0, 3 }));
+static_assert(partial_match("(?m)($\na)+", "\na", { 0, 2, 0, 2 }));
+static_assert(partial_match("(?m)($\na)+", "\na\na", { 0, 4, 2, 4 }));
+static_assert(partial_match("(?m)(\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(partial_match("(?m)(a$)", "a\na", { 0, 1, 0, 1 }));
 
 /* other tests */
 // "R(est)|(Res)T" -> hopcroft

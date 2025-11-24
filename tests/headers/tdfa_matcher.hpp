@@ -92,7 +92,8 @@ namespace rx::testing
             {
                 if (this->final_nodes().contains(next_state))
                 {
-                    regops_implementation(it, this->final_nodes().at(next_state), registers, registers_enabled);
+                    regops_implementation(it, this->final_nodes().at(next_state).op_index, registers, registers_enabled);
+                    it -= this->final_nodes().at(next_state).final_offset;
                     break;  /* outer */
                 }
             }
@@ -121,6 +122,7 @@ namespace rx::testing
             
             it = fallback_it;
             regops_implementation(it, this->fallback_nodes().at(fallback_state), registers, registers_enabled);
+            it -= this->final_nodes().at(fallback_state).final_offset;
             break; /* outer */
         }
         

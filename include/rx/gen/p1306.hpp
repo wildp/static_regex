@@ -96,8 +96,13 @@ namespace rx::detail
             {
                 if (fallback_state == dfa_t::value.fallback_nodes[i])
                 {
-                    register_operations<dfa_t::value.fallback_node_regops[i]>(fallback_it, res);
-                    res.match_end() = fallback_it;
+                    register_operations<dfa_t::value.fallback_node_regops.at(i)>(fallback_it, res);
+
+                    if constexpr (constexpr auto offset{ dfa_t::value.final_node_regops.at(i) }; offset != 0)
+                        res.match_end() = fallback_it - offset;
+                    else
+                        res.match_end() = fallback_it;
+
                     return;
                 }
             }
@@ -117,8 +122,13 @@ namespace rx::detail
                 if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
                               key != dfa_t::value.final_nodes.end() and *key == DFAState)
                 {
-                    register_operations<dfa_t::value.final_node_regops[key - dfa_t::value.final_nodes.begin()]>(it, res);
-                    res.match_end() = it;
+                    register_operations<dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()).Z>(it, res);
+                    
+                    if constexpr (constexpr auto offset{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) }; offset != 0)
+                        res.match_end() = it - offset;
+                    else
+                        res.match_end() = it;
+                    
                     return;
                 }
             }

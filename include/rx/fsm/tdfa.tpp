@@ -244,14 +244,15 @@ namespace rx::detail::tdfa
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
+            const auto final_offset{ tnfa_ptr_->get_node(it->tnfa_state).final_offset };
             if (final_ops.empty())
             {
                 /* avoid creating empty regop blocks */
-                result.final_nodes_.emplace(0, no_transition_regops);
+                result.final_nodes_.emplace(0, final_node_info{ .op_index = no_transition_regops, .final_offset = final_offset });
             }
             else
             {
-                result.final_nodes_.emplace(0, result.regops_.size());
+                result.final_nodes_.emplace(0, final_node_info{ .op_index = result.regops_.size(), .final_offset = final_offset });
                 result.regops_.emplace_back(std::move(final_ops));
             }
         }
@@ -291,14 +292,15 @@ namespace rx::detail::tdfa
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
+            const auto final_offset{ tnfa_ptr_->get_node(it->tnfa_state).final_offset };
             if (final_ops.empty())
             {
                 /* avoid creating empty regop blocks */
-                result.final_nodes_.emplace(new_state, no_transition_regops);
+                result.final_nodes_.emplace(new_state, final_node_info{ .op_index = no_transition_regops, .final_offset = final_offset });
             }
             else
             {
-                result.final_nodes_.emplace(new_state, result.regops_.size());
+                result.final_nodes_.emplace(new_state, final_node_info{ .op_index = result.regops_.size(), .final_offset = final_offset });
                 result.regops_.emplace_back(std::move(final_ops));
             }
         }
@@ -486,14 +488,14 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr void factory<CharT>::fallback_regops(tdfa_t& result)
     {
-        for (const auto [state, fop_index] : result.final_nodes_)
+        for (const auto [state, fni] : result.final_nodes_)
         {
             /* check if current state is a fallback state */
 
             if (not state_info_.at(state).is_fallback)
                 continue;
 
-            const auto& final_ops{ result.get_regops(fop_index) };
+            const auto& final_ops{ result.get_regops(fni.op_index) };
 
             /* determine clobbered registers */
 

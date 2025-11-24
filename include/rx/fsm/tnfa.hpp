@@ -30,7 +30,7 @@ namespace rx::detail::tnfa
 
     enum class ec_mode : std::int8_t
     {
-        ec, aec, reach 
+        ec, aec, reach
     };
 
     /* tnfa transitions */
@@ -133,6 +133,7 @@ namespace rx::detail
         using char_type = CharT;
         using state_t = tnfa::state_t;
         using tr_index = tnfa::tr_index;
+        using char_set_type = tnfa::charset_t<char_type>;
 
         explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
 
@@ -167,14 +168,14 @@ namespace rx::detail
         constexpr void make_transition(state_t q0, state_t qf, char_type c);
 
         template<typename CharSet>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<char_type>>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, char_set_type>
         constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
 
         template<acat_t V>
         constexpr void make_assert(state_t q0, state_t qf, tnfa::ac<V> category);
 
         template<typename CharSet, acat_t V>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<char_type>>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, char_set_type>
         constexpr void make_assert(state_t q0, state_t qf, CharSet&& cs, tnfa::ac<V> category);
 
         // template<acat_t V>

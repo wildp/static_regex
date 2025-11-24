@@ -137,7 +137,7 @@ namespace rx::detail
         static_span<const static_span<const static_transition<char_type>>> nodes;
         static_span<const static_span<const register_operation>> regops;
         static_span<const std::size_t> final_nodes;
-        static_span<const std::size_t> final_node_regops;
+        static_span<const tdfa::final_node_info> final_node_regops;
         static_span<const std::size_t> fallback_nodes;
         static_span<const std::size_t> fallback_node_regops;
         static_span<const tdfa::reg_t> final_registers;

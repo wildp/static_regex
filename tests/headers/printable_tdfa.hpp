@@ -62,20 +62,28 @@ namespace rx::testing
 
             if (this->final_nodes().contains(i))
             {
-                std::print("\t'' -> ACCEPT:");
+                const auto& fni{ this->final_nodes().at(i) };
+                if (fni.final_offset == 0)
+                    std::print("\t'' -> ACCEPT:");
+                else
+                    std::print("\t'' -> ACCEPT: [Offset {}]", fni.final_offset);
 
-                if (this->final_nodes().at(i) != no_transition_regops)
-                    std::println(" [Block {}]", this->final_nodes().at(i));
+                if (fni.op_index != no_transition_regops)
+                    std::println(" [Block {}]", fni.op_index);
                 else
                     std::println();
 
-                for (const auto& op : this->get_regops(this->final_nodes().at(i)))
+                for (const auto& op : this->get_regops(fni.op_index))
                     print_regop(op, "\t\t");
             }
 
             if (this->fallback_nodes().contains(i))
             {
-                std::print("\tFALLBACK -> ACCEPT:");
+                const auto& fin{ this->final_nodes().at(i) };
+                if (fin.final_offset == 0)
+                    std::print("\tFALLBACK -> ACCEPT:");
+                else
+                    std::print("\tFALLBACK -> ACCEPT: [Offset {}]", fin.final_offset);
 
                 if (this->fallback_nodes().at(i) != no_transition_regops)
                     std::println(" [Block {}]", this->fallback_nodes().at(i));

@@ -3,6 +3,7 @@
 #include <rx/fsm/tnfa.hpp>
 
 #include <algorithm>
+#include <concepts>
 #include <iterator>
 #include <limits>
 #include <ranges>
@@ -66,9 +67,9 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharT c)
+    constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, char_type c)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, tnfa::charset_t<CharT>{ c });
+        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<char_type>>, tnfa::charset_t<char_type>{ c });
     }
 
     template<typename CharT>
@@ -76,7 +77,7 @@ namespace rx::detail
     requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharSet&& cs)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<CharT>>, std::forward<CharSet>(cs));
+        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<char_type>>, std::forward<CharSet>(cs));
     }
 
     template<typename CharT>
@@ -94,8 +95,8 @@ namespace rx::detail
     requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, CharSet&& cs, tnfa::ac<V> /* category */)
     {
-        using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_1_tr<CharT>,
-                                std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_1_tr<CharT>, void>>;
+        using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_1_tr<char_type>,
+                                std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_1_tr<char_type>, void>>;
 
         transition_create(q0, qf, std::in_place_type<type>, std::forward<CharSet>(cs));
     }
@@ -139,29 +140,9 @@ namespace rx::detail
             make_epsilon(q0, qf);
         }
     }
-
     
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::make_wildcard(const state_t q0, const state_t qf)
-    {
-        if constexpr (char_is_utf8<CharT>)
-        {
-            // TODO: implement multibyte chars;
-            throw tnfa_error("UTF8 wildcards are unimplemented");
-        }
-        else if constexpr (char_is_utf16<CharT>)
-        {
-            // TODO: implement multibyte chars;
-            throw tnfa_error("UTF16 wildcards are unimplemented");
-        }
-        else 
-        {
-            make_transition(q0, qf, std::numeric_limits<CharT>::lowest(), std::numeric_limits<CharT>::max());
-        }
-    }
-
-    template<typename CharT>
-    constexpr void tagged_nfa<CharT>::thompson(const expr_tree<CharT>& ast)
+    constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast)
     {
         std::vector<std::vector<int>> tag_vec{};
         if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
@@ -201,12 +182,12 @@ namespace rx::detail
                     const auto& cla{ std::get<typename ast_t::char_class>(entry) };
                     // using uct = decltype(cla)::underlying_char_type;
 
-                    if constexpr (char_is_utf8<CharT>)
+                    if constexpr (char_is_utf8<char_type>)
                     {
                         // TODO: implement multibyte chars;
                         throw tnfa_error("UTF8 character classes are unimplemented");
                     }
-                    else if constexpr (char_is_utf16<CharT>)
+                    else if constexpr (char_is_utf16<char_type>)
                     {
                         // TODO: implement multibyte chars;
                         throw tnfa_error("UTF16 character classes are unimplemented");
@@ -396,6 +377,13 @@ namespace rx::detail
                 {
                     const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
 
+                    using p = typename char_set_type::char_interval;
+
+                    /* note: these are not Unicode-aware; TODO: FIX */
+                    static constexpr char_set_type newline_cs{ '\n' };
+                    static constexpr char_set_type word_cs{ p{ '0', '9'}, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
+                    [[maybe_unused]] static constexpr char_set_type not_word_cs{ ~word_cs };
+
                     switch (assertion.type)
                     {
                     case assert_type::line_start:
@@ -410,10 +398,9 @@ namespace rx::detail
                         break;
                     
                     case assert_type::line_end:
-                        throw tnfa_error("Non-trivial assertions are unimplemented");
-                        // TODO: implement
-                        // has_lookahead_1_ = true;
-                        // [[fallthrough]];
+                        make_assert(q0, qf, newline_cs, tnfa::ac<acat_t::lookahead>{});
+                        has_lookahead_1_ = true;
+                        [[fallthrough]];
                     
                     case assert_type::text_end:
                         make_assert(q0, qf, tnfa::ac<acat_t::eof>{});
@@ -463,9 +450,7 @@ namespace rx::detail
             if constexpr (not RetBitVec)
                 result.emplace_back(current);
             
-            const auto& current_node{ get_node(current) };
-            
-            for (const std::size_t tr_idx : current_node.out_tr | std::views::reverse)
+            for (const std::size_t tr_idx : get_node(current).out_tr | std::views::reverse)
             {
                 const auto& tr{ get_tr(tr_idx) };
 
@@ -475,10 +460,10 @@ namespace rx::detail
                     if (not std::holds_alternative<tnfa::epsilon_tr>(tr.type))
                         continue;
                 }
-                else if constexpr (Mode == tnfa::ec_mode::ec)
+                else if constexpr (Mode == tnfa::ec_mode::aec)
                 {
                     /* allow assertions as e-transitions */
-                    if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                    if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                         continue;
                 }
 
@@ -519,9 +504,7 @@ namespace rx::detail
             if constexpr (not RetBitVec)
                 result.emplace_back(current);
             
-            const auto& current_node{ get_node(current) };
-            
-            for (const std::size_t tr_idx : current_node.in_tr | std::views::reverse)
+            for (const std::size_t tr_idx : get_node(current).in_tr | std::views::reverse)
             {
                 const auto& tr{ get_tr(tr_idx) };
 
@@ -531,10 +514,10 @@ namespace rx::detail
                     if (not std::holds_alternative<tnfa::epsilon_tr>(tr.type))
                         continue;
                 }
-                else if constexpr (Mode == tnfa::ec_mode::ec)
+                else if constexpr (Mode == tnfa::ec_mode::aec)
                 {
                     /* allow assertions as e-transitions */
-                    if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                    if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                         continue;
                 }
 
@@ -649,7 +632,7 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(tr_idx) }; 
 
-                if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                 {
                     /* transition from copied e-closure to main graph */
                     make_copy(p, tr.dst, tr.type);
@@ -749,7 +732,7 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(tr_idx) }; 
 
-                if (std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type))
+                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                 {
                     /* do not insert transition */
                 }
@@ -796,10 +779,169 @@ namespace rx::detail
     }
 
     template<typename CharT>
+    constexpr void tagged_nfa<CharT>::rewrite_sc_lookahead()
+    {
+        using transition_map_t = std::flat_map<tnfa::charset_t<char_type>, std::vector<std::size_t>>;
+        using state_map_t = std::flat_map<std::size_t, std::size_t>;
+        using all_states_map_t = std::flat_map<tnfa::charset_t<char_type>, state_map_t>;
+
+        transition_map_t sc_transitions; 
+
+        for (std::size_t tr_idx{ 0 }; tr_idx < transitions_.size(); ++tr_idx)
+        {
+            const auto& tr{ transitions_[tr_idx] };
+            if (const auto* ptr{ std::get_if<tnfa::lookahead_1_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                sc_transitions[ptr->cs].emplace_back(tr_idx);
+        }
+
+        /* create copy of the e-closures of destinations of lookahead_1 transitions  */
+
+        all_states_map_t all_mapped_states;
+
+        std::vector<std::pair<char_set_type, std::vector<state_t>>> outer_visit;
+        
+        for (const auto& [edge, tr_vec] : sc_transitions)
+        {
+            outer_visit.emplace_back(edge, std::vector<state_t>{});
+            outer_visit.back().second.reserve(tr_vec.size());
+            for (const std::size_t tr_idx : tr_vec | std::views::reverse)
+                outer_visit.back().second.emplace_back(transitions_[tr_idx].dst);
+        }
+
+        while (not outer_visit.empty())
+        {
+            /* modified epsilon closure */
+            const auto edge{ std::move(outer_visit.back().first) };
+            std::vector to_visit{ std::move(outer_visit.back().second) };
+            outer_visit.pop_back();
+
+            std::vector<bool> visited(node_count(), false);
+            std::vector<state_t> ec;
+
+            for (const auto q : to_visit)
+                visited.at(q) = true;  
+
+            while (not to_visit.empty())
+            {
+                const state_t current{ to_visit.back() };
+                to_visit.pop_back();
+                ec.emplace_back(current);
+                
+                for (const std::size_t tr_idx : get_node(current).out_tr | std::views::reverse)
+                {
+                    const auto& tr{ get_tr(tr_idx) };
+
+                    if (visited.at(tr.dst))
+                        continue;
+
+                    /* skip normal transitions and eof anchors */
+                    if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type) or std::holds_alternative<tnfa::eof_anchor_tr>(tr.type) )
+                        continue;
+
+                    if (const auto* const ptr{ std::get_if<tnfa::lookahead_1_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                    {
+                        if (auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
+                        {
+                            /* intersection with lookahead_1 transition requires cloned subgraph */
+                            outer_visit.emplace_back(std::move(new_edge), std::vector{ tr.dst });
+                        }
+                    }
+                    else
+                    {
+                        visited[tr.dst] = true;
+                        to_visit.emplace_back(tr.dst);
+                    }
+                }
+            }
+
+            /* duplicate all nodes in each subgraph at most once */
+            auto& mapped_states{ all_mapped_states[edge] };
+            for (const state_t q : ec)
+                if (not mapped_states.contains(q)) /* probably inefficient */
+                    mapped_states[q] = node_create();
+
+        }
+
+        /* duplicate transitions */
+
+        std::optional<state_t> offset_end;
+
+        for (const auto& [edge, mapped_states] : all_mapped_states) 
+        {
+            for (const auto [q, p] : mapped_states)
+            {
+                if (const auto& node{ nodes_.at(q) }; node.is_final and node.is_fallback)
+                {
+                    /* reminder: reference 'node' may be invalidated after calling node_create */
+
+                    if (not offset_end.has_value())
+                    {
+                        /* create new offset end node */
+                        offset_end = node_create();
+                        auto& n{ nodes_.at(*offset_end) };
+                        n.is_final = true;
+                        n.is_fallback = true ;
+                        n.final_offset = 1;
+                    }
+
+                    make_transition(p, *offset_end, edge);
+                }
+
+                for (const std::size_t tr_idx : nodes_.at(q).out_tr)
+                {
+                    /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
+                    const auto& tr{ get_tr(tr_idx) }; 
+
+                    if (const auto* const ptr{ std::get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                    {
+                        /* conditionally transition from copied e-closure to main graph */
+                        if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                            make_transition(p, tr.dst, std::move(new_edge));
+                    }
+                    else if (const auto* const ptr{ std::get_if<tnfa::lookahead_1_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                    {
+                        /* conditionally e-transition between copied subgraphs */
+                        if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                            make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));                            
+                    }
+                    else if (not std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
+                    {
+                        /* transition within copied e-closure */
+                        make_copy(p, mapped_states.at(tr.dst), tr.type);
+                    }
+                }
+            }
+        }
+
+        /* replace lookahead_1 transitions with e-transitions into their respective subgraphs */
+
+        for (const auto& [edge, tr_vec] : sc_transitions)
+        {
+            const auto& mapped_states{ all_mapped_states.at(edge) };
+            for (const std::size_t tr_idx : tr_vec)
+            {
+                auto& tr{ transitions_.at(tr_idx) };
+                tr.dst = mapped_states.at(tr.dst);
+                tr.type = tnfa::epsilon_tr{};
+            }
+        }
+    }
+
+
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::rewrite_sc_lookbehind()
+    {
+
+    } 
+
+    template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_assertions() 
     {
         if (has_sof_anchor_) rewrite_sof_anchors();
         if (has_eof_anchor_) rewrite_eof_anchors();
+        if (has_lookahead_1_) rewrite_sc_lookahead();
+        // if (has_lookbehind_1_) rewrite_sc_lookbehind();
 
 
         if (has_sof_anchor_ or has_eof_anchor_ or has_lookahead_1_ or has_lookbehind_1_ or has_lookahead_n_) remove_dead_and_unreachable_states();
@@ -809,7 +951,7 @@ namespace rx::detail
     /* constructor */
 
     template<typename CharT>
-    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<CharT>& ast, fsm_flags flags) : 
+    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags) : 
         capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
     {
         nodes_[default_final_node].is_final = true;
