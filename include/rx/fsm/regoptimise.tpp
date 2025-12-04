@@ -214,8 +214,8 @@ namespace rx::detail::tdfa
             /* add final transitions too */
 
             if (dfa.final_nodes_.contains(node_idx))
-                 if (auto final_block_idx{ dfa.final_nodes_.at(node_idx) }; final_block_idx != no_transition_regops)
-                    successor_blocks.at(node_idx).emplace_back(final_block_idx);
+                 if (auto fni{ dfa.final_nodes_.at(node_idx) }; fni.op_index != no_transition_regops)
+                    successor_blocks.at(node_idx).emplace_back(fni.op_index);
         }
 
         /* calculate reachability matrix (inital reachability is added above) */
@@ -369,9 +369,9 @@ namespace rx::detail::tdfa
         
         /* make registers assigned to in final transitions live */
 
-        for (const auto [_, block_idx] : dfa.final_nodes_)
+        for (const auto [_, fni] : dfa.final_nodes_)
             for (const reg_t final_reg : dfa.final_registers_)
-                liveness.at(block_idx, final_reg) = true;
+                liveness.at(fni.op_index, final_reg) = true;
                 
         for (bool loop{ true }; loop; )
         {

@@ -5,6 +5,7 @@
 #include <iterator>
 #include <numeric>
 #include <ranges>
+#include <string_view>
 #include <vector>
 
 #include <rx/api/regex_error.hpp>
@@ -31,7 +32,24 @@ namespace rx::testing
         {
             return match(std::ranges::begin(r), std::ranges::end(r));
         }
+
+        [[nodiscard]] constexpr std::optional<tag_result> match(const CharT* cstr) const
+        {
+            return match(std::basic_string_view{ cstr });
+        }
     };
+
+    template<typename CharT>
+    tree_matcher(std::basic_string_view<CharT>) -> tree_matcher<CharT>;
+
+    template<typename CharT>
+    tree_matcher(std::basic_string_view<CharT>, detail::parser_flags) -> tree_matcher<CharT>;
+
+    template<typename CharT>
+    tree_matcher(const CharT*) -> tree_matcher<CharT>;
+
+    template<typename CharT>
+    tree_matcher(const CharT*, detail::parser_flags) -> tree_matcher<CharT>;
 
     
     /* helper for tree matcher */

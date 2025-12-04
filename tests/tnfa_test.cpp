@@ -6,9 +6,11 @@ namespace
     template<typename CharT>
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        const rx::detail::expr_tree<CharT> ast{ pattern };
-        const rx::testing::tnfa_matcher<CharT> tnfa{ ast, rx::detail::default_fsm_flags::full_match };
-        auto match_result{ tnfa.match(str) };
+        using namespace rx::detail;
+        expr_tree ast{ pattern };
+
+        const rx::testing::tnfa_matcher nfa{ ast, default_fsm_flags::full_match };
+        const auto match_result{ nfa.match(str) };
 
         if (captures.empty())
             return match_result.has_value();
@@ -21,10 +23,12 @@ namespace
     template<typename CharT>
     consteval bool ends_with(const CharT* pattern, const CharT* str, std::size_t start_pos)
     {
-        rx::detail::expr_tree<CharT> ast{ pattern };
+        using namespace rx::detail;
+        expr_tree ast{ pattern };
         ast.insert_search_prefix();
-        const rx::testing::tnfa_matcher<CharT> tnfa{ ast, rx::detail::default_fsm_flags::full_match };
-        auto match_result{ tnfa.match(str) };
+
+        const rx::testing::tnfa_matcher nfa{ ast, default_fsm_flags::full_match };
+        const auto match_result{ nfa.match(str) };
 
         if (not match_result.has_value())
             return false;

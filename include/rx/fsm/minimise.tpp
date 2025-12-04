@@ -221,7 +221,7 @@ namespace rx::detail::tdfa
 
         typename tdfa_t::data_t new_nodes(partitions.size());
         final_nodes_t new_final_nodes;
-        final_nodes_t new_fallback_nodes;
+        fallback_nodes_t new_fallback_nodes;
 
         bitset_t new_states_visited(partitions.size(), false);
 

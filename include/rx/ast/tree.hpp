@@ -101,6 +101,12 @@ namespace rx::detail
         tag_number_t tag_count_{ 0 };
         parser_flags flags_;
     };
+
+    template<typename CharT>
+    expr_tree(const CharT*) -> expr_tree<CharT>;
+
+    template<typename CharT>
+    expr_tree(const CharT*, parser_flags) -> expr_tree<CharT>;
 }
 
 

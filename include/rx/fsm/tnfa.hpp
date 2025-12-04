@@ -136,11 +136,15 @@ namespace rx::detail
         using char_set_type = tnfa::charset_t<char_type>;
 
         explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
+        constexpr void rewrite_assertions();
+
+        /* observers */
 
         [[nodiscard]] constexpr auto get_flags() const noexcept { return flags_; }
-        [[nodiscard]] constexpr const tnfa::node& get_node(state_t i) const { return nodes_.at(i); }
+        [[nodiscard]] constexpr const tnfa::node& get_node(state_t q) const { return nodes_.at(q); }
         [[nodiscard]] constexpr const tnfa::transition<char_type>& get_tr(tr_index idx) const { return transitions_.at(idx); }
         [[nodiscard]] constexpr std::size_t node_count() const noexcept { return nodes_.size(); }
+        [[nodiscard]] constexpr std::size_t transition_count() const noexcept { return transitions_.size(); }
         [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
         [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
@@ -203,7 +207,6 @@ namespace rx::detail
         constexpr void rewrite_eof_anchors();
         constexpr void rewrite_sc_lookahead();
         constexpr void rewrite_sc_lookbehind();
-        constexpr void rewrite_assertions();
 
         /* constants */
 

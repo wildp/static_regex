@@ -104,10 +104,8 @@ namespace rx::detail
         friend class tdfa::opt<char_type>;
         friend class tdfa::min<char_type>;
 
-        template<typename CharT2>
-        friend struct tdfa_info;
-
-    protected:
+        /* observers */
+        
         static constexpr std::size_t match_start{ 0 };
 
         [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }

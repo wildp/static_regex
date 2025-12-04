@@ -3,6 +3,7 @@
 #include <meta>
 #include <numeric>
 #include <ranges>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -151,10 +152,7 @@ namespace rx::detail
     template<typename CharT, std::size_t N>
     consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, fsm_flags f)
     {
-        using char_type = CharT;
-        using string_view_t = std::basic_string_view<char_type>;
-
-        string_view_t pat{ pattern.value.begin(), std::ranges::find(pattern.value, '\0') };
+        std::basic_string_view pat{ pattern.value.begin(), std::ranges::find(pattern.value, '\0') };
         
         /* parse pattern string into tree */
         expr_tree ast{ pat };
@@ -162,7 +160,8 @@ namespace rx::detail
         ast.optimise_tags();
 
         /* convert to tnfa */
-        tagged_nfa nfa{ ast, f }; 
+        tagged_nfa nfa{ ast, f };
+        nfa.rewrite_assertions();
 
         /* convert to tdfa */
         tagged_dfa dfa{ nfa };

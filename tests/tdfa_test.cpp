@@ -6,10 +6,13 @@ namespace
     template<typename CharT>
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        const rx::detail::expr_tree<CharT> ast{ pattern };
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::full_match };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
-        auto match_result{ tdfa.match(std::string_view{ str }) };
+        using namespace rx::detail;
+        expr_tree ast{ pattern };
+        tagged_nfa nfa{ ast, default_fsm_flags::full_match };
+        nfa.rewrite_assertions();
+
+        const rx::testing::tdfa_matcher dfa{ nfa };
+        const auto match_result{ dfa.match(str) };
         
         if (captures.empty())
             return match_result.has_value();
@@ -22,10 +25,13 @@ namespace
     template<typename CharT>
     consteval bool partial_match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        const rx::detail::expr_tree<CharT> ast{ pattern };
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::partial_match };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
-        auto match_result{ tdfa.partial_match(std::string_view{ str }) };
+        using namespace rx::detail;
+        expr_tree ast{ pattern };
+        tagged_nfa nfa{ ast, default_fsm_flags::partial_match };
+        nfa.rewrite_assertions();
+
+        const rx::testing::tdfa_matcher dfa{ nfa };
+        const auto match_result{ dfa.partial_match(str) };
 
         if (captures.empty())
             return match_result.has_value();
@@ -38,11 +44,14 @@ namespace
     template<typename CharT>
     consteval bool search(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        rx::detail::expr_tree<CharT> ast{ pattern };
+        using namespace rx::detail;
+        expr_tree ast{ pattern };
         ast.insert_search_prefix();
-        const rx::detail::tagged_nfa<CharT> tnfa{ ast, rx::detail::default_fsm_flags::search_single };
-        const rx::testing::tdfa_matcher<CharT> tdfa{ tnfa };
-        auto match_result{ tdfa.partial_match(std::string_view{ str }) };
+        tagged_nfa nfa{ ast, default_fsm_flags::search_single };
+        nfa.rewrite_assertions();
+
+        const rx::testing::tdfa_matcher dfa{ nfa };
+        const auto match_result{ dfa.partial_match(str) };
 
         if (captures.empty())
             return match_result.has_value();

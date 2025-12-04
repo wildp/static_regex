@@ -99,6 +99,7 @@ namespace
             if constexpr (Flags.stage >= 1)
             {
                 tnfa_type tnfa{ tree, Flags.fsm };
+                tnfa.rewrite_assertions();
 
                 if constexpr (Flags.stage >= 2)
                 {

@@ -3,6 +3,7 @@
 #include <optional>
 #include <ranges>
 #include <stdexcept>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -35,6 +36,11 @@ namespace rx::testing
             return match(std::ranges::begin(r), std::ranges::end(r));
         }
 
+        [[nodiscard]] constexpr std::optional<tag_result> match(const CharT* cstr) const
+        {
+            return match(std::basic_string_view{ cstr });
+        }
+
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
         [[nodiscard]] constexpr std::optional<tag_result> partial_match(I first, I last) const
@@ -49,6 +55,11 @@ namespace rx::testing
             return partial_match(std::ranges::begin(r), std::ranges::end(r));
         }
 
+        [[nodiscard]] constexpr std::optional<tag_result> partial_match(const CharT* cstr) const
+        {
+            return partial_match(std::basic_string_view{ cstr });
+        }
+
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
 
@@ -61,6 +72,10 @@ namespace rx::testing
         constexpr void regops_implementation(I it, std::size_t op_index, std::vector<I>& registers, std::vector<bool>& registers_enabled) const;
         
     };
+
+    template<typename CharT>
+    tdfa_matcher(const detail::tagged_nfa<CharT>&) -> tdfa_matcher<CharT>;
+    
     
     /* tagged dfa simulation */
 

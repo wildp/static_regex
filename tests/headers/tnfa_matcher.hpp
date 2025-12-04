@@ -32,6 +32,9 @@ namespace rx::testing
         [[nodiscard]] constexpr closure_t step(const closure_t& closure, CharT a) const;
         [[nodiscard]] constexpr tag_result make_submatch_results(const tag_vector& v, std::size_t size) const;
     };
+
+    template<typename CharT>
+    tnfa_matcher(const detail::expr_tree<CharT>&, detail::fsm_flags) -> tnfa_matcher<CharT>;
     
 
     /* tagged nfa simulation */

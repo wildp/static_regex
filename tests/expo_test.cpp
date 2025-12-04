@@ -8,8 +8,8 @@ namespace
     template<typename CharT>
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        const rx::testing::tree_matcher<CharT> tree{ pattern, expo_test_flags };
-        auto match_result{ tree.match(std::string_view{ str }) };
+        const rx::testing::tree_matcher ast{ pattern, expo_test_flags };
+        const auto match_result{ ast.match(str) };
 
         if (captures.empty())
             return match_result.has_value();
