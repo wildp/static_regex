@@ -214,13 +214,16 @@ namespace rx::testing
                 continue;
 
             std::string label{ tr.type.visit(detail::overloads(
-                [] (std::monostate) {
+                [] (std::monostate)
+                {
                     return std::string{};
                 },
-                [](const tnfa::normal_tr<CharT>& t) {
+                [](const tnfa::normal_tr<CharT>& t)
+                {
                     return make_pretty_charset_string(t.cs);
                 },
-                [](const tnfa::epsilon_tr& t) {
+                [](const tnfa::epsilon_tr& t)
+                {
                     if (t.tag == 0)
                         return std::format("{}/ϵ", t.priority);
                     else if (t.tag > 0)
@@ -228,16 +231,20 @@ namespace rx::testing
                     else
                         return std::format("{}/-t{}", t.priority, -t.tag);
                 },
-                [](const tnfa::sof_anchor_tr&) {
+                [](const tnfa::sof_anchor_tr&)
+                {
                     return std::string{ "^" };
                 },
-                [](const tnfa::eof_anchor_tr&) {
+                [](const tnfa::eof_anchor_tr&)
+                {
                     return std::string{ "$" };
                 },
-                [](const tnfa::lookahead_1_tr<CharT>& t) {
+                [](const tnfa::lookahead_1_tr<CharT>& t)
+                {
                     return std::format("(?={})", make_pretty_charset_string(t.cs));
                 },
-                [](const tnfa::lookbehind_1_tr<CharT>& t) {
+                [](const tnfa::lookbehind_1_tr<CharT>& t)
+                {
                     return std::format("(?<={})", make_pretty_charset_string(t.cs));
                 }
             )) };

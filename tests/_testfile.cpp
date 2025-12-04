@@ -3,8 +3,9 @@
 
 #include <rx/regex.hpp>
 
-#include "headers/printable_tree.hpp"
-#include "headers/printable_tdfa.hpp"
+#include "headers/dump_tdfa.hpp"
+#include "headers/graph_export.hpp"
+#include "headers/pattern_to_string.hpp"
 #include "headers/tdfa_matcher.hpp"
 #include "headers/tnfa_matcher.hpp"
 #include "headers/tree_matcher.hpp"
@@ -71,22 +72,19 @@ namespace
     {
         using test_type = void;
 
-        using tree_base = std::conditional_t<(Flags.stage == 0), tree_matcher<char>, rx::detail::expr_tree<char>>;
-        using tnfa_base = std::conditional_t<(Flags.stage == 1), tnfa_matcher<char>, rx::detail::tagged_nfa<char>>;
-        using tdfa_base = std::conditional_t<(Flags.stage >= 2), tdfa_matcher<char>, rx::detail::tagged_dfa<char>>;
-        using tree_type = std::conditional_t<(Flags.ptree), printable<tree_base>, tree_base>;
-        using tnfa_type = tnfa_base;
-        using tdfa_type = std::conditional_t<(Flags.ptdfa or Flags.pdfao or Flags.pdfam), printable<tdfa_base>, tdfa_base>;
+        using tree_type = std::conditional_t<(Flags.stage == 0), tree_matcher<char>, rx::detail::expr_tree<char>>;
+        using tnfa_type = std::conditional_t<(Flags.stage == 1), tnfa_matcher<char>, rx::detail::tagged_nfa<char>>;
+        using tdfa_type = std::conditional_t<(Flags.stage >= 2), tdfa_matcher<char>, rx::detail::tagged_dfa<char>>;
 
         void operator()(std::string_view pat, const std::vector<std::string_view>& test) const
         {
-            namespace rdt = rx::detail::tdfa;
+            using namespace rx::testing;
 
             tree_type tree{ pat, Flags.parse };
             
             if constexpr (Flags.fsm.is_search) tree.insert_search_prefix();
 
-            if constexpr (Flags.ptree) std::println("Pattern: {}", tree.to_pattern());
+            if constexpr (Flags.ptree) std::println("Pattern: {}", to_string(tree));
 
             if constexpr (Flags.ptags) print_capture_info(tree.get_capture_info());
 
@@ -106,21 +104,22 @@ namespace
                     tdfa_type tdfa{ tnfa };
 
                     if constexpr (Flags.dbgok) std::println("Pattern ok\n"); 
-                    if constexpr (Flags.ptdfa) { tdfa.print(); std::println("\n"); } 
+                    if constexpr (Flags.ptdfa) { dump_tdfa(tdfa); std::println("\n"); } 
 
                     if constexpr (Flags.stage >= 3)
                     {
                         tdfa.optimise_registers();
 
                         if constexpr (Flags.dbgok) std::println("Opt ok\n");
-                        if constexpr (Flags.pdfao) { tdfa.print(); std::println("\n"); } 
+                        if constexpr (Flags.pdfao) { dump_tdfa(tdfa); std::println("\n"); } 
 
                         if constexpr (Flags.stage == 4)
                         {
+                            namespace rdt = rx::detail::tdfa;
                             rdt::min<char>::compact_regop_blocks(tdfa);
 
                             if constexpr (Flags.dbgok) std::println("Regcompact ok\n");
-                            if constexpr (Flags.pdfam) { tdfa.print(); std::println("\n"); }
+                            if constexpr (Flags.pdfam) { dump_tdfa(tdfa); std::println("\n"); }
 
                             if constexpr (Flags.dbghc) { std::println("{}", rdt::min<char>::dry_run(tdfa)); }
                         }
@@ -129,7 +128,7 @@ namespace
                             tdfa.minimise_states();
                             
                             if constexpr (Flags.dbgok) std::println("Min ok\n");
-                            if constexpr (Flags.pdfam) { tdfa.print(); std::println("\n"); }
+                            if constexpr (Flags.pdfam) { dump_tdfa(tdfa); std::println("\n"); }
                         }
                     }
 

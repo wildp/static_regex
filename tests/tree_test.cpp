@@ -1,40 +1,41 @@
-#include "headers/printable_tree.hpp"
+#include "headers/pattern_to_string.hpp"
 
 
 namespace 
 {
-    template<typename CharT>
-    using printable_expr_tree = rx::testing::printable<rx::detail::expr_tree<CharT>>;
-
     constexpr rx::detail::parser_flags tree_test_flags{ .enable_alttocc=false };
 
     template<typename CharT>
     consteval bool parse(const CharT* str)
     {
-        const printable_expr_tree<CharT> ast{ str, tree_test_flags };
-        return (ast.to_pattern() == str);
+        using namespace rx::detail;
+        const expr_tree ast{ str, tree_test_flags };
+        return (rx::testing::to_basic_string(ast) == str);
     }
 
     template<typename CharT>
     consteval bool parse(const CharT* str, const CharT* result)
     {
-        const printable_expr_tree<CharT> ast{ str, tree_test_flags };
-        return (ast.to_pattern() == result);
+        using namespace rx::detail;
+        const expr_tree ast{ str, tree_test_flags };
+        return (rx::testing::to_basic_string(ast) == result);
     }
 
     template<typename CharT>
     consteval bool alt_to_cc(const CharT* str, const CharT* result)
     {
-        const printable_expr_tree<CharT> ast{ str };
-        return (ast.to_pattern() == result);
+        using namespace rx::detail;
+        const expr_tree ast{ str };
+        return (rx::testing::to_basic_string(ast) == result);
     }
 
     template<typename CharT>
     consteval bool equal_to(const CharT* str1, const CharT* str2)
     {
-        const printable_expr_tree<CharT> ast1{ str1, tree_test_flags };
-        const printable_expr_tree<CharT> ast2{ str2, tree_test_flags };
-        return (ast1.to_pattern() == ast2.to_pattern());
+        using namespace rx::detail;
+        const expr_tree ast1{ str1, tree_test_flags };
+        const expr_tree ast2{ str2, tree_test_flags };
+        return (rx::testing::to_basic_string(ast1) == rx::testing::to_basic_string(ast2));
     }
 
     template<typename CharT>
@@ -42,7 +43,8 @@ namespace
     {
         try
         {
-            const rx::detail::expr_tree<CharT> ast{ str, tree_test_flags };
+            using namespace rx::detail;
+            const expr_tree ast{ str, tree_test_flags };
             return false;
         }
         catch (const rx::pattern_error&)
@@ -54,7 +56,8 @@ namespace
     template<typename CharT>
     consteval bool test(const CharT* str)
     {
-        const rx::detail::expr_tree<CharT> ast{ str };
+        using namespace rx::detail;
+        const expr_tree ast{ str };
         return true;
     }
 }
