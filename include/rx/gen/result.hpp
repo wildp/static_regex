@@ -9,8 +9,8 @@
 
 #include <rx/api/submatch.hpp>
 #include <rx/etc/string_literal.hpp>
-#include <rx/gen/compile.hpp>
 #include <rx/fsm/flags.hpp>
+#include <rx/gen/compile.hpp>
 
 
 namespace rx::detail
@@ -49,7 +49,7 @@ namespace rx
 
         [[nodiscard]] constexpr submatch_type operator[](size_type n) const noexcept
         {
-            template for (constexpr size_type N: std::define_static_array(detail::make_iota(submatch_count)))
+            template for (constexpr size_type N: std::views::iota(0uz, submatch_count))
             {
                 if (n == N) return this->get<N>();
             }

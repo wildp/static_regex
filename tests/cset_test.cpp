@@ -77,7 +77,7 @@ namespace
     consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
     {
         const auto input{ make_cs_vec(arg) };
-        std::vector refs{ std::from_range, input | std::views::transform([](const auto& b){ return std::cref(b); }) };
+        const std::vector refs{ std::from_range, input | std::views::transform([](const auto& b){ return std::cref(b); }) };
         return rx::detail::charset<char>::partition(refs) == make_cs_vec(result);
     }
 }

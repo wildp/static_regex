@@ -16,7 +16,7 @@ namespace rx::detail::tdfa
 {
     /* regops sorting */
 
-    inline constexpr bool toposort_regops(const regops_t::iterator beg, const regops_t::iterator end, const reg_t regcount)
+    constexpr bool toposort_regops(const regops_t::iterator beg, const regops_t::iterator end, const reg_t regcount)
     {
         std::vector<std::size_t> indeg(regcount, 0);
 
@@ -477,8 +477,8 @@ namespace rx::detail::tdfa
                     *       not a total function, making a fallback possible from every non-final state */
 
                     if (liveness.block_valid(tr.op_index))
-                        for (std::size_t i{ 0 }; i < liveness.reg_count(); ++i)
-                            liveness[tr.op_index, i] = liveness[tr.op_index, i] or current_row[i];
+                        for (std::size_t j{ 0 }; j < liveness.reg_count(); ++j)
+                            liveness[tr.op_index, j] = liveness[tr.op_index, j] or current_row[j];
 
                     ++i;
                     if (not added.at(tr.next))

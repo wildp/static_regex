@@ -169,8 +169,8 @@ namespace rx::detail
     constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
     {
         using namespace tok;
-        using char_str = tok::char_str<CharT>;
-        using char_class = tok::char_class<CharT>;
+        using char_str = char_str<CharT>;
+        using char_class = char_class<CharT>;
 
         if (it_ == end_)
             return end_of_input{};

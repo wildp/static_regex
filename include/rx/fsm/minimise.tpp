@@ -6,8 +6,6 @@
 #include <optional>
 #include <vector>
 
-#include <rx/etc/partition.hpp>
-
 
 namespace rx::detail::tdfa
 {
@@ -29,7 +27,7 @@ namespace rx::detail::tdfa
         // TODO: maybe switch to using unordered_set or flat_set?
         using partition_t = std::vector<bitset_t>;
 
-        static constexpr partition_t init_hopcroft_partiton(const tdfa_t& dfa);
+        static constexpr partition_t init_hopcroft_partition(const tdfa_t& dfa);
         static constexpr partition_t hopcroft(const tdfa_t& dfa);
     };
 
@@ -66,7 +64,7 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr auto min<CharT>::init_hopcroft_partiton(const tdfa_t& dfa) -> partition_t
+    constexpr auto min<CharT>::init_hopcroft_partition(const tdfa_t& dfa) -> partition_t
     {
         const std::size_t bitset_size{ dfa.node_count() };
 
@@ -114,12 +112,12 @@ namespace rx::detail::tdfa
         const std::size_t bitset_size{ dfa.node_count() };
 
         /* set initial partitions; let work = partition  */
-        partition_t partitions{ init_hopcroft_partiton(dfa) };
+        partition_t partitions{ init_hopcroft_partition(dfa) };
         partition_t work(partitions);
 
         while (not work.empty())
         {
-            bitset_t transitions_to{ std::move(work.back()) };
+            const bitset_t transitions_to{ std::move(work.back()) };
             
             work.pop_back();
 

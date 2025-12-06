@@ -9,9 +9,9 @@ namespace rx::testing
 {
     template<typename T, typename CharT>
     requires requires (T t) { std::println(t); } 
-    void dump_tdfa(T target, const rx::detail::tagged_dfa<CharT>& dfa)
+    void dump_tdfa(T target, const detail::tagged_dfa<CharT>& dfa)
     {
-        using namespace rx::detail::tdfa;
+        using namespace detail::tdfa;
 
         auto print_regop = [](T target, const regop& op, std::string_view indent = "")
         {
@@ -83,7 +83,7 @@ namespace rx::testing
     }
 
     template<typename CharT>
-    void dump_tdfa(const rx::detail::tagged_dfa<CharT>& dfa)
+    void dump_tdfa(const detail::tagged_dfa<CharT>& dfa)
     {
         return dump_tdfa(stdout, dfa);
     }

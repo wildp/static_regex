@@ -7,8 +7,8 @@
 #include <vector>
 
 #include <rx/api/regex_error.hpp>
-#include <rx/etc/cdarray.hpp>
 #include <rx/ast/tree.hpp>
+#include <rx/etc/cdarray.hpp>
 #include <rx/fsm/tnfa.hpp>
 
 
@@ -61,12 +61,12 @@ namespace rx::testing
             stack.pop_back();
             const auto& [q, m]{ new_closure.back() };
             
-            using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
+            using epsilon_t = std::pair<state_t, epsilon_tr>;
             std::vector et{ std::from_range,
                             this->get_node(q).out_tr
                             | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
-                            | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
-                            | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; }) };
+                            | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t.type); })
+                            | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<epsilon_tr>(t.type) }; }) };
             
             std::ranges::sort(et, std::ranges::greater{}, compose(&epsilon_tr::priority, &epsilon_t::second));
 

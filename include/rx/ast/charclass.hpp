@@ -205,7 +205,7 @@ namespace rx::detail
     constexpr void narrow_char_class_impl::insert(named_character_class ncc) noexcept
     {
         using bcs = bitcharset<char>;
-        using p = typename bcs::char_interval;
+        using p = bcs::char_interval;
 
         switch (ncc)
         {

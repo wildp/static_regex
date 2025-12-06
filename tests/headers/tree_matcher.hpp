@@ -63,7 +63,7 @@ namespace rx::testing
         constexpr explicit cont_val(std::size_t i, rep_t r) : pos_{ i }, reps_{ r } {}
         constexpr explicit cont_val(std::size_t i, rep_t r, rep_t amt) : pos_{ i }, reps_{ std::add_sat(r, amt) } {}
 
-        [[nodiscard]] constexpr std::size_t pos() const noexcept { return static_cast<std::size_t>(pos_); }
+        [[nodiscard]] constexpr std::size_t pos() const noexcept { return pos_; }
         [[nodiscard]] constexpr rep_t reps() const noexcept { return reps_; }
 
     private:
@@ -105,7 +105,6 @@ namespace rx::testing
     requires (std::convertible_to<std::iter_value_t<I>, CharT>)
     [[nodiscard]] constexpr auto tree_matcher<CharT>::match(const I first, const I last) const -> std::optional<tag_result>
     {
-        using expr_tree_t = tree_matcher<CharT>;
         using state_t = matcher_state<I>;
 
         const auto& ci{ this->get_capture_info() };
@@ -121,7 +120,7 @@ namespace rx::testing
                 const std::size_t pos{ raw_data.pos() };
 
                 const rc result = this->get_expr(pos).visit(detail::overloads{
-                    [&](const expr_tree_t::assertion& asr) -> rc
+                    [&](const tree_matcher::assertion& asr) -> rc
                     {
                         using detail::assert_type;
                         switch (asr.type)
@@ -129,26 +128,30 @@ namespace rx::testing
                         case assert_type::text_start:
                             if (s.it == first)
                                 return rc::match_continue;
+                            break;
                         case assert_type::text_end:
                             if (s.it == last)
                                 return rc::match_continue;
+                            break;
                         case assert_type::line_start:
                             if (s.it == first or *std::ranges::prev(s.it) == '\n')
                                 return rc::match_continue;
+                            break;
                         case assert_type::line_end:
                             if (s.it == last or *s.it == '\n')
-                                return rc::match_continue; 
+                                return rc::match_continue;
+                            break;
                         default:
                             throw tree_error("Encountered unimplemented assertion while matching");
                         }
                         return rc::match_failure;
                     },
-                    [&](const expr_tree_t::concat& cat) -> rc
+                    [&](const tree_matcher::concat& cat) -> rc
                     {
                         s.cont.append_range(cat.idxs | std::views::reverse);
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::alt& alt) -> rc
+                    [&](const tree_matcher::alt& alt) -> rc
                     {
                         if (alt.idxs.empty())
                             return rc::match_failure;
@@ -168,27 +171,27 @@ namespace rx::testing
                         s.cont.push_back(alt.idxs.back());
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::tag& tag) -> rc
+                    [&](const tree_matcher::tag& tag) -> rc
                     {
                         s.tags.at(tag.number) = s.it;
                             
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::backref& bref) -> rc
+                    [&](const tree_matcher::backref& bref) -> rc
                     {
                         if (bref.number >= capture_count)
                             throw pattern_error("Backreference to non-existent submatch");
 
-                        auto f = [&](const rx::detail::capture_info::tag_pair_t& p) -> bool {
+                        auto f = [&](const detail::capture_info::tag_pair_t& p) -> bool {
                             return not ((p.first.tag_number >= 0 and not s.tags.at(p.first.tag_number).has_value())
                                             or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
                         };
 
-                        auto t = [&](const rx::detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
+                        auto t = [&](const detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
                             return{ std::next((p.first.tag_number >= 0) ? *s.tags.at(p.first.tag_number)
-                                                : ((p.first.tag_number == rx::detail::start_of_input_tag) ? first : last), p.first.offset),
+                                                : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
                                     std::next((p.second.tag_number >= 0) ? *s.tags.at(p.second.tag_number)
-                                                : ((p.second.tag_number == rx::detail::start_of_input_tag) ? first : last), p.second.offset) };
+                                                : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset) };
                         };
 
                         const auto [beg, end]{ ci.lookup(bref.number) };
@@ -209,7 +212,7 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::repeat& rep) -> rc
+                    [&](const tree_matcher::repeat& rep) -> rc
                     {
                         using detail::repeater_mode;
 
@@ -287,7 +290,7 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::char_str& lit) -> rc
+                    [&](const tree_matcher::char_str& lit) -> rc
                     {
                         for (const auto c : lit.data)
                         {
@@ -298,14 +301,14 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const expr_tree_t::char_class& cla) -> rc
+                    [&](const tree_matcher::char_class& cla) -> rc
                     {
                         if (s.it == last)
                         {
                             return rc::match_failure;
                         }
 
-                        using uct = typename expr_tree_t::char_class::underlying_char_type;
+                        using uct = tree_matcher::char_class::underlying_char_type;
 
                         uct input{};
 
@@ -348,16 +351,16 @@ namespace rx::testing
 
         tag_result res{};
 
-        auto f = [&](const rx::detail::capture_info::tag_pair_t& p) -> bool {
+        auto f = [&](const detail::capture_info::tag_pair_t& p) -> bool {
             return not ((p.first.tag_number >= 0 and not s.tags.at(p.first.tag_number).has_value())
                             or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
         };
 
-        auto t = [&](const rx::detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
+        auto t = [&](const detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
             return { std::next((p.first.tag_number >= 0) ? *s.tags.at(p.first.tag_number)
-                                : ((p.first.tag_number == rx::detail::start_of_input_tag) ? first : last), p.first.offset),
+                                : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
                      std::next((p.second.tag_number >= 0) ? *s.tags.at(p.second.tag_number)
-                                : ((p.second.tag_number == rx::detail::start_of_input_tag) ? first : last), p.second.offset) };
+                                : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset) };
         };
 
         for (std::size_t i{ 0 }; i < capture_count; ++i)

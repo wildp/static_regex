@@ -9,6 +9,7 @@
 
 #include <rx/api/submatch.hpp>
 #include <rx/etc/string_literal.hpp>
+#include <rx/fsm/tdfa.hpp>
 #include <rx/gen/compile.hpp>
 #include <rx/gen/result.hpp>
 
@@ -18,7 +19,7 @@ namespace rx::detail
     /* p1306 matcher implementation */
 
     template<typename CharT, CharT Lower, CharT Upper>
-    [[clang::always_inline]] inline constexpr bool tr_possible_interval_impl(CharT c)
+    [[clang::always_inline]] constexpr bool tr_possible_interval_impl(CharT c)
     {
         if constexpr (Lower == Upper)
             return (c == Lower);
@@ -27,7 +28,7 @@ namespace rx::detail
     }
 
     template<typename CharT, std::pair<CharT, CharT>... Intervals>
-    [[clang::always_inline]] inline constexpr bool tr_possible_impl(CharT c)
+    [[clang::always_inline]] constexpr bool tr_possible_impl(CharT c)
     {
         return (tr_possible_interval_impl<CharT, Intervals.first, Intervals.second>(c)  or ...);
     }
@@ -44,7 +45,7 @@ namespace rx::detail
 
 
     template<static_transition Tr, typename CharT>
-    [[clang::always_inline]] inline constexpr bool tr_possible(CharT c)
+    [[clang::always_inline]] constexpr bool tr_possible(CharT c)
     {
         constexpr auto func{ std::meta::substitute(^^tr_possible_impl, tr_possible_make_refl(Tr)) };
         return [: func :](c);
@@ -54,7 +55,7 @@ namespace rx::detail
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher
     {
-        using dfa_t = detail::compiled_dfa<Pattern, Flags>;
+        using dfa_t = compiled_dfa<Pattern, Flags>;
         using char_type = decltype(Pattern)::char_type;
 
         template<typename I>
@@ -92,14 +93,16 @@ namespace rx::detail
             if (fallback_state == fallback_disabled)
                 return;
 
-            template for (constexpr std::size_t i : std::define_static_array(make_iota(dfa_t::value.fallback_nodes.size())))
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
             {
                 if (fallback_state == dfa_t::value.fallback_nodes[i])
                 {
-                    register_operations<dfa_t::value.fallback_node_regops.at(i)>(fallback_it, res);
+                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(i) };
 
-                    if constexpr (constexpr auto offset{ dfa_t::value.final_node_regops.at(i) }; offset != 0)
-                        res.match_end() = fallback_it - offset;
+                    register_operations<fni.op_index>(fallback_it, res);
+
+                    if constexpr (fni.final_offset != 0)
+                        res.match_end() = fallback_it - fni.final_offset;
                     else
                         res.match_end() = fallback_it;
 
@@ -122,10 +125,12 @@ namespace rx::detail
                 if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
                               key != dfa_t::value.final_nodes.end() and *key == DFAState)
                 {
-                    register_operations<dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()).Z>(it, res);
+                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
+
+                    register_operations<fni.op_index>(it, res);
                     
-                    if constexpr (constexpr auto offset{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) }; offset != 0)
-                        res.match_end() = it - offset;
+                    if constexpr (fni.final_offset != 0)
+                        res.match_end() = it - fni.final_offset;
                     else
                         res.match_end() = it;
                     
@@ -162,8 +167,15 @@ namespace rx::detail
                 if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
                               key != dfa_t::value.final_nodes.end() and *key == DFAState)
                 {
-                    register_operations<dfa_t::value.final_node_regops[key - dfa_t::value.final_nodes.begin()]>(ptr, res);
-                    res.match_end() = ptr;
+                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
+
+                    register_operations<fni.op_index>(ptr, res);
+
+                    if constexpr (fni.final_offset != 0)
+                        res.match_end() = ptr - fni.final_offset;
+                    else
+                        res.match_end() = ptr;
+
                     return;
                 }
             }

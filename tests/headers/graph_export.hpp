@@ -21,7 +21,7 @@ namespace rx::testing
     template<typename CharSetType>
     constexpr std::string make_pretty_charset_string(const CharSetType& cs)
     {
-        using char_type = typename CharSetType::char_type;
+        using char_type = CharSetType::char_type;
         static_assert(std::same_as<char_type, char>); // Unicode transcoding unsupported
 
         static constexpr std::size_t byte_bits{ std::numeric_limits<unsigned char>::digits };
@@ -70,11 +70,11 @@ namespace rx::testing
     }
 
     template<print_destination T, typename CharT>
-    constexpr void graph_export(T target, const rx::detail::expr_tree<CharT>& ast)
+    constexpr void graph_export(T target, const detail::expr_tree<CharT>& ast)
     {
         static_assert(std::same_as<CharT, char>); // Unicode transcoding unsupported
 
-        using ast_t = rx::detail::expr_tree<CharT>;
+        using ast_t = detail::expr_tree<CharT>;
         
         std::println(target, "digraph {{");
         std::println(target, "    rankdir=\"TB\";");
@@ -175,11 +175,11 @@ namespace rx::testing
     }
 
     template<print_destination T, typename CharT>
-    void graph_export(T target, const rx::detail::tagged_nfa<CharT>& nfa)
+    void graph_export(T target, const detail::tagged_nfa<CharT>& nfa)
     {
         static_assert(std::same_as<CharT, char>); // Unicode transcoding unsupported
 
-        namespace tnfa = rx::detail::tnfa;
+        namespace tnfa = detail::tnfa;
 
         std::println(target, "digraph {{");
         std::println(target, "    rankdir=\"LR\";");

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <concepts>
-#include <cstddef>
 #include <ranges>
 
 #include <rx/etc/string_literal.hpp>
@@ -17,7 +16,7 @@ namespace rx
         using char_type = decltype(Pattern)::char_type;
 
         template<std::bidirectional_iterator I>
-        requires std::convertible_to<std::iter_value_t<I>, char_type>
+        requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] constexpr auto match(const I first, const I last) const
         {
             using namespace detail;
@@ -26,14 +25,14 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::convertible_to<std::ranges::range_value_t<R>, char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] constexpr auto match(R&& r) const
         {
             return match(std::ranges::cbegin(r), std::ranges::cend(r));
         }
 
         template<typename CharT>
-        requires std::convertible_to<CharT, char_type>
+        requires std::same_as<CharT, char_type>
         [[nodiscard]] constexpr auto match(const CharT* cstr) const
         {
             using namespace detail;
@@ -42,7 +41,7 @@ namespace rx
         }
 
         template<std::bidirectional_iterator I>
-        requires std::convertible_to<std::iter_value_t<I>, char_type>
+        requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] constexpr auto starts_with(const I first, const I last) const
         {
             using namespace detail;
@@ -51,14 +50,14 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::convertible_to<std::ranges::range_value_t<R>, char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] constexpr auto starts_with(R&& r) const
         {
             return starts_with(std::ranges::cbegin(r), std::ranges::cend(r));
         }
 
         template<typename CharT>
-        requires std::convertible_to<CharT, char_type>
+        requires std::same_as<CharT, char_type>
         [[nodiscard]] constexpr auto starts_with(const CharT* cstr) const
         {
             using namespace detail;
@@ -67,7 +66,7 @@ namespace rx
         }
 
         template<std::bidirectional_iterator I>
-        requires std::convertible_to<std::iter_value_t<I>, char_type>
+        requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] constexpr auto search(const I first, const I last) const
         {
             using namespace detail;
@@ -76,14 +75,14 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::convertible_to<std::ranges::range_value_t<R>, char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] constexpr auto search(R&& r) const
         {
             return search(std::ranges::cbegin(r), std::ranges::cend(r));
         }
 
         template<typename CharT>
-        requires std::convertible_to<CharT, char_type>
+        requires std::same_as<CharT, char_type>
         [[nodiscard]] constexpr auto search(const CharT* cstr) const
         {
             using namespace detail;

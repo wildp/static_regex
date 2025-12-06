@@ -7,7 +7,7 @@ namespace
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         using namespace rx::detail;
-        expr_tree ast{ pattern };
+        const expr_tree ast{ pattern };
         tagged_nfa nfa{ ast, default_fsm_flags::full_match };
         nfa.rewrite_assertions();
 
@@ -26,7 +26,7 @@ namespace
     consteval bool partial_match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         using namespace rx::detail;
-        expr_tree ast{ pattern };
+        const expr_tree ast{ pattern };
         tagged_nfa nfa{ ast, default_fsm_flags::partial_match };
         nfa.rewrite_assertions();
 

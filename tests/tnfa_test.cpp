@@ -7,7 +7,7 @@ namespace
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
         using namespace rx::detail;
-        expr_tree ast{ pattern };
+        const expr_tree ast{ pattern };
 
         const rx::testing::tnfa_matcher nfa{ ast, default_fsm_flags::full_match };
         const auto match_result{ nfa.match(str) };

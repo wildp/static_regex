@@ -239,8 +239,6 @@ namespace rx::detail
 
         constexpr void make_ascii_case_insensitive() noexcept requires std::same_as<char_type, char>
         {
-            using integer_t = std::uint64_t;
-
             static constexpr auto uppercase_beg{ static_cast<int>('a') - std::numeric_limits<char>::min() };
             static constexpr auto uppercase_end{ static_cast<int>('z') - std::numeric_limits<char>::min() + 1 }; 
             static constexpr auto lowercase_beg{ static_cast<int>('A') - std::numeric_limits<char>::min() };
@@ -258,8 +256,8 @@ namespace rx::detail
             static constexpr int uppercase_offset{ std::countr_zero(uppercase_mask) };
             static constexpr int lowercase_offset{ std::countr_zero(lowercase_mask) };
 
-            integer_t mask1{ (data_[index] & lowercase_mask) >> lowercase_offset };
-            integer_t mask2{ (data_[index] & uppercase_mask) >> uppercase_offset };
+            const integer_t mask1{ (data_[index] & lowercase_mask) >> lowercase_offset };
+            const integer_t mask2{ (data_[index] & uppercase_mask) >> uppercase_offset };
 
             data_[index] |= (mask1 << uppercase_offset);
             data_[index] |= (mask2 << lowercase_offset);
@@ -304,12 +302,12 @@ namespace rx::detail
         /* note: partitions.size() >= 1 is always true, since for each iteration we insert
          *       at least one element into next_gen per element in partitions, since at
          *       most one of partitions[i] & val and partitions[i] & ~val will be empty */
-        std::vector<bitcharset<CharT>> partitions(1);
+        std::vector<bitcharset> partitions(1);
         partitions.back().negate();
 
         for (const bitcharset& val : input)
         {
-            std::vector<bitcharset<CharT>> next_gen;
+            std::vector<bitcharset> next_gen;
             next_gen.reserve(partitions.size() * 2);
 
             for (std::size_t i{ 0 }; i < partitions.size(); ++i)

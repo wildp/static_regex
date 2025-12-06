@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <format>
-#include <iterator>
 #include <iosfwd>
+#include <iterator>
 #include <numeric>
 #include <string>
 #include <string_view>
@@ -43,7 +43,7 @@ namespace rx
         [[nodiscard]] constexpr explicit operator bool() const noexcept { return this->matched(); }
         [[nodiscard]] constexpr bool empty() const noexcept { return this->matched() ? first_ == last_ : true; };
         [[nodiscard]] constexpr size_type size() const { return this->matched() ? std::saturate_cast<size_type>(std::ranges::distance(first_, last_)) : 0; };
-        [[nodiscard]] constexpr size_type length() const { return this->size(); };
+        [[nodiscard]] constexpr size_type length() const { return this->size(); }
 
         /* iterators */
 

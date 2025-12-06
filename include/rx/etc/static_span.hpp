@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iterator>
-#include <meta>
 #include <span>
 #include <stdexcept>
 

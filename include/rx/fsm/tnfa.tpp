@@ -377,7 +377,7 @@ namespace rx::detail
                 {
                     const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
 
-                    using p = typename char_set_type::char_interval;
+                    using p = char_set_type::char_interval;
 
                     /* note: these are not Unicode-aware; TODO: FIX */
                     static constexpr char_set_type newline_cs{ '\n' };

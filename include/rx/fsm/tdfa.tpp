@@ -128,7 +128,6 @@ namespace rx::detail::tdfa
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o);
         [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
-        [[nodiscard]] constexpr multistep_closures_t<char_type> multistep_v2(std::size_t state) const;
         [[nodiscard]] constexpr regops_t transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const;
         [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
         [[nodiscard]] constexpr regop::op_t regop_rhs(const std::vector<bool>& hist) const;

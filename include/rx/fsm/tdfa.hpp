@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdlib>
 #include <flat_map>
-#include <vector>
 #include <variant>
+#include <vector>
 
 #include <rx/etc/captures.hpp>
 #include <rx/fsm/flags.hpp>
@@ -117,6 +117,9 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
+
+        template<typename>
+        friend class tdfa_info;
 
     private:
         using data_t = std::vector<tdfa::node<char_type>>;

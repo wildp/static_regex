@@ -305,7 +305,7 @@ int main()
     // std::println("{::?}",  m.match(std::set<char>{ 'H', 'e', 'l', 'l', 'o' }));
     
     // std::vector<char> vec{ 'V', 'n', 'q', 'k', 'c' };
-    // auto res = m.match(vec | std::views::transform([](char c){ return c + 1; }));
+    // auto res = m.match(vec | std::views::transform([](char c) -> char { return c + 1; }));
     // std::println("{::?}", res);
 
     // // auto res = m.match(std::vector<char>{ 'W', 'o', 'r', 'l', 'd' });

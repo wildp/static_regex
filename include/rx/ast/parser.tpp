@@ -45,19 +45,20 @@ namespace rx::detail::parser
         [[nodiscard]] constexpr std::size_t sa_make_plus(std::size_t child_idx, repeater_mode mode);
         [[nodiscard]] constexpr std::size_t sa_make_quest(std::size_t child_idx, repeater_mode mode);
         [[nodiscard]] constexpr std::size_t sa_make_repeat(std::size_t child_idx, tok::repeat_n_m rep, repeater_mode mode);
-        [[nodiscard]] constexpr repeater_mode sa_rep_greedy();
-        [[nodiscard]] constexpr repeater_mode sa_rep_lazy();
-        [[nodiscard]] constexpr repeater_mode sa_rep_possessive();
+        [[nodiscard]] constexpr repeater_mode sa_rep_greedy() const;
+        [[nodiscard]] constexpr repeater_mode sa_rep_lazy() const;
+        [[nodiscard]] constexpr repeater_mode sa_rep_possessive() const;
         [[nodiscard]] constexpr std::size_t sa_cap_pop(std::size_t child_idx);
         constexpr void sa_cap_push();
         constexpr void sa_cap_parse_flag();
         constexpr void sa_begin_alt();
 
-        constexpr parser_flags& flags() { return ref_.get().flags_; }
-        constexpr type& get_expr(std::size_t idx) { return ref_.get().expressions_.at(idx); }
-        constexpr std::size_t& root_idx() { return ref_.get().root_idx_; }
-        constexpr capture_info& get_capture_info() { return ref_.get().capture_info_; }
-        constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
+        [[nodiscard]] constexpr parser_flags& flags() { return ref_.get().flags_; }
+        [[nodiscard]] constexpr const parser_flags& flags() const { return ref_.get().flags_; }
+        [[nodiscard]] constexpr type& get_expr(std::size_t idx) { return ref_.get().expressions_.at(idx); }
+        [[nodiscard]] constexpr std::size_t& root_idx() { return ref_.get().root_idx_; }
+        [[nodiscard]] constexpr capture_info& get_capture_info() { return ref_.get().capture_info_; }
+        [[nodiscard]] constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
         template<in_variant<typename lexer<char_type>::token_t> T>
         static constexpr std::size_t tok_index{ index_of_impl<typename lexer<char_type>::token_t, T>::value };
@@ -183,7 +184,7 @@ namespace rx::detail::parser
 
     template<typename CharT>
     constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv) : 
-        ref_{ ast }, lex_{ sv }, capstack_{}
+        ref_{ ast }, lex_{ sv }
     {
         using terminal = ll1_stack<char_type>::terminal;
 
@@ -204,22 +205,6 @@ namespace rx::detail::parser
             if (stack.empty())
                 throw pattern_error("Invalid pattern");
 
-            #if RX_TREE_DEBUG_PARSER
-            if not consteval
-            {
-                std::println("-------------------------");
-                std::print("stack = ");
-                for (const auto& elem : stack | std::views::reverse)
-                    std::print(" {}", pretty_print_2(elem));
-                std::println();
-                std::print("semstack = ");
-                for (const auto& elem : semstack | std::views::reverse)
-                    std::print(" {}", pretty_print_2(elem));
-                std::println();
-            }
-            #endif // RX_TREE_DEBUG_PARSER
-
-
             const auto top{ std::move(stack.root()) };
             stack.pop();
 
@@ -232,13 +217,6 @@ namespace rx::detail::parser
                 }
                 else if (term->index() == token.index())
                 {
-                    #if RX_TREE_DEBUG_PARSER
-                    if not consteval
-                    {
-                        std::println("matched: {}", variant_alternative_name(token));
-                    }
-                    #endif // RX_TREE_DEBUG_PARSER
-
                     /* match */
                     semstack.push(std::move(token));
                     token = lex_.nexttok();
@@ -256,13 +234,6 @@ namespace rx::detail::parser
                 using nt = nonterminal;
                 using sa = semantic_action;
                 using namespace tok;
-
-                #if RX_TREE_DEBUG_PARSER
-                if not consteval
-                {
-                    std::println("lookup[{}, {}]", enum_to_string(*nonterm), variant_alternative_name(token));
-                }
-                #endif // RX_TREE_DEBUG_PARSER
 
                 switch (*nonterm)
                 {
@@ -1056,7 +1027,7 @@ namespace rx::detail::parser
     }
     
     template<typename CharT>
-    constexpr repeater_mode ll1<CharT>::sa_rep_greedy()
+    constexpr repeater_mode ll1<CharT>::sa_rep_greedy() const
     {
         /* swap greedy and lazy quantifiers if 'ungreedy' flag is set */
         if (capstack_.ungreedy())
@@ -1066,7 +1037,7 @@ namespace rx::detail::parser
     }
     
     template<typename CharT>
-    constexpr repeater_mode ll1<CharT>::sa_rep_lazy()
+    constexpr repeater_mode ll1<CharT>::sa_rep_lazy() const
     {
         /* swap greedy and lazy quantifiers if 'ungreedy' flag is set */
         if (capstack_.ungreedy())
@@ -1076,7 +1047,7 @@ namespace rx::detail::parser
     }
     
     template<typename CharT>
-    constexpr repeater_mode ll1<CharT>::sa_rep_possessive()
+    constexpr repeater_mode ll1<CharT>::sa_rep_possessive() const
     {
         if (flags().enable_possessive)
             return repeater_mode::possessive;
