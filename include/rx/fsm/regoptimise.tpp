@@ -748,15 +748,15 @@ namespace rx::detail::tdfa
             return;
 
         make_cfg(dfa);
-        auto w{ compact_registers(dfa) };
+        const auto w{ compact_registers(dfa) };
         rename_registers(dfa, w);
 
         for (std::size_t count{ 0 }; count < iterations_; ++count)
         {
-            auto l{ liveness(dfa) };
+            const auto l{ liveness(dfa) };
             deadcode_elim(dfa, l);
-            auto i{ interference(dfa, l) };
-            auto v{ allocate_registers(dfa, i) };
+            const auto i{ interference(dfa, l) };
+            const auto v{ allocate_registers(dfa, i) };
             rename_registers(dfa, v);
             normalise(dfa);
         }

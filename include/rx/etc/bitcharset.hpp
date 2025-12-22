@@ -16,9 +16,9 @@ namespace rx::detail
     template<typename CharT>
     class bitcharset
     {
-        using integer_t = std::uint64_t;
+        using integer_type = std::uint64_t;
         static constexpr std::size_t byte_bits{ std::numeric_limits<unsigned char>::digits }; 
-        static constexpr std::size_t integer_bits{ std::numeric_limits<integer_t>::digits };
+        static constexpr std::size_t integer_bits{ std::numeric_limits<integer_type>::digits };
         static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
         static constexpr std::size_t array_size{ total_size / integer_bits };
 
@@ -50,7 +50,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr bool empty() const noexcept
         {
-            integer_t result{ 0uz };
+            integer_type result{ 0uz };
             for (std::size_t i{ 0 }; i < array_size; ++i)
                 result |= data_[i];
             return (result == 0); 
@@ -83,7 +83,7 @@ namespace rx::detail
 
             for (std::size_t i{ 0 }; i < array_size; ++i)
             {
-                integer_t tmp{ data_[i] };
+                integer_type tmp{ data_[i] };
                 int offset{ 0 };
 
                 while (true)
@@ -148,10 +148,10 @@ namespace rx::detail
             const auto beg{ static_cast<int>(first) - std::numeric_limits<char_type>::min() };
             const auto end{ static_cast<int>(last) - std::numeric_limits<char_type>::min() + 1 }; 
 
-            const integer_t select1{ (beg / integer_bits) };
-            const integer_t select2{ (end / integer_bits) };
-            const integer_t mask1{ (0b1uz << (beg % integer_bits)) - 1 };
-            const integer_t mask2{ (0b1uz << (end % integer_bits)) - 1 };
+            const std::size_t select1{ (beg / integer_bits) };
+            const std::size_t select2{ (end / integer_bits) };
+            const integer_type mask1{ (0b1uz << (beg % integer_bits)) - 1 };
+            const integer_type mask2{ (0b1uz << (end % integer_bits)) - 1 };
 
             for (std::size_t i{ 0 }; i < array_size; ++i)
             {
@@ -251,13 +251,13 @@ namespace rx::detail
             static_assert(lowercase_beg / integer_bits == index);
             static_assert(lowercase_end / integer_bits == index);
 
-            static constexpr integer_t uppercase_mask{ ((0b1uz << (uppercase_beg % integer_bits)) - 1) ^ ((0b1uz << (uppercase_end % integer_bits)) - 1) };
-            static constexpr integer_t lowercase_mask{ ((0b1uz << (lowercase_beg % integer_bits)) - 1) ^ ((0b1uz << (lowercase_end % integer_bits)) - 1) };
+            static constexpr integer_type uppercase_mask{ ((0b1uz << (uppercase_beg % integer_bits)) - 1) ^ ((0b1uz << (uppercase_end % integer_bits)) - 1) };
+            static constexpr integer_type lowercase_mask{ ((0b1uz << (lowercase_beg % integer_bits)) - 1) ^ ((0b1uz << (lowercase_end % integer_bits)) - 1) };
             static constexpr int uppercase_offset{ std::countr_zero(uppercase_mask) };
             static constexpr int lowercase_offset{ std::countr_zero(lowercase_mask) };
 
-            const integer_t mask1{ (data_[index] & lowercase_mask) >> lowercase_offset };
-            const integer_t mask2{ (data_[index] & uppercase_mask) >> uppercase_offset };
+            const integer_type mask1{ (data_[index] & lowercase_mask) >> lowercase_offset };
+            const integer_type mask2{ (data_[index] & uppercase_mask) >> uppercase_offset };
 
             data_[index] |= (mask1 << uppercase_offset);
             data_[index] |= (mask2 << lowercase_offset);
@@ -288,7 +288,7 @@ namespace rx::detail
         [[nodiscard]] static constexpr auto partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>;
 
     private:
-        std::array<integer_t, array_size> data_{};
+        std::array<integer_type, array_size> data_{};
     };
 
     template<typename CharT>

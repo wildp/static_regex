@@ -64,6 +64,7 @@ namespace rx::detail
         template<typename I>
         struct result : result_type<I>
         {
+            constexpr result() = delete;
             friend struct p1306_matcher;
         };
 
