@@ -28,10 +28,6 @@ namespace rx::detail::tnfa
     template<assert_category Value>
     struct ac {};
 
-    enum class ec_mode : std::int8_t
-    {
-        ec, aec, reach
-    };
 
     /* tnfa transitions */
 
@@ -118,7 +114,40 @@ namespace rx::detail::tnfa
         using sub_e_closure = std::optional<std::vector<state_t>>;
 
         state_t         value;
-        sub_e_closure   sub_ec;
+        // sub_e_closure   sub_ec;
+    };
+
+
+    /* predicates for variations of e-closure */
+
+    struct reach_pred
+    {
+        template<typename CharT>
+        static constexpr bool operator()(const transition<CharT>& /* tr */)
+        {
+            /* count everything */
+            return true;
+        }
+    };
+
+    struct ec_pred
+    {
+        template<typename CharT>
+        static constexpr bool operator()(const transition<CharT>& tr)
+        {
+            /* only count e-transitions */
+            return std::holds_alternative<tnfa::epsilon_tr>(tr.type);
+        }
+    };
+
+    struct aec_pred
+    {
+        template<typename CharT>
+        static constexpr bool operator()(const transition<CharT>& tr)
+        {
+             /* allow assertions as e-transitions */
+            return not std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type);
+        }
     };
 }
 
@@ -148,6 +177,7 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
         [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
         [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
+        [[nodiscard]] constexpr const auto& get_cont_info() const { return cont_info_; }
 
     private:
         using ast_t = expr_tree<char_type>;
@@ -191,14 +221,14 @@ namespace rx::detail
         
         constexpr void thompson(const expr_tree<char_type>& ast);
 
-        template<bool RetBitVec>
-        using ec_result = std::conditional_t<RetBitVec, std::vector<bool>, std::vector<state_t>>;
+        template<bool B, typename Vec, typename Pred, typename NodeProj, typename TrProj>
+        [[nodiscard]] constexpr auto closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const;
 
-        template<tnfa::ec_mode Mode, bool RetBitVec = false>
-        [[nodiscard]] constexpr ec_result<RetBitVec> epsilon_closure(std::vector<state_t>&& qs) const;
+        template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::ec_pred>
+        [[nodiscard]] constexpr auto epsilon_closure(Vec&& qs, Pred pred = {}) const;
 
-        template<tnfa::ec_mode Mode, bool RetBitVec = false>
-        [[nodiscard]] constexpr ec_result<RetBitVec> backwards_epsilon_closure(std::vector<state_t>&& qs) const;
+        template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::ec_pred>
+        [[nodiscard]] constexpr auto backwards_epsilon_closure(Vec&& qs, Pred pred = {}) const;
 
         constexpr std::flat_map<state_t, state_t> copy_subgraph(const std::vector<state_t>& qs);
 
