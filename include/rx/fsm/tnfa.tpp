@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <rx/api/regex_error.hpp>
+#include <rx/etc/static_charset.hpp>
 
 
 namespace rx::detail
@@ -377,12 +378,13 @@ namespace rx::detail
                 {
                     const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
 
-                    using p = char_set_type::char_interval;
+                    using cs = nontransient_constexpr_version_of_t<charset_type>;
+                    using p = cs::char_interval;
 
                     /* note: these are not Unicode-aware; TODO: FIX */
-                    static constexpr char_set_type newline_cs{ '\n' };
-                    static constexpr char_set_type word_cs{ p{ '0', '9'}, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
-                    [[maybe_unused]] static constexpr char_set_type not_word_cs{ ~word_cs };
+                    static constexpr cs newline_cs{ '\n' };
+                    static constexpr cs word_cs{ p{ '0', '9'}, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
+                    [[maybe_unused]] static constexpr cs not_word_cs{ ~word_cs };
 
                     switch (assertion.type)
                     {

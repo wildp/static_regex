@@ -67,8 +67,8 @@ namespace rx::detail
         template<typename CharT>
         struct char_class
         {
-            using underlying_char_type = std::conditional_t<std::same_as<char, CharT>, char, char32_t>;
-            using impl_type = std::conditional_t<std::same_as<char, CharT>, narrow_char_class_impl, wide_char_class_impl>;
+            using impl_type = char_class_impl<std::same_as<char, CharT>>;
+            using underlying_char_type = typename impl_type::char_type;
 
             impl_type data;
 

@@ -44,19 +44,19 @@ namespace rx::detail
 
         /* size observers */
         [[nodiscard]] constexpr size_type size() const noexcept { return size_; }
-        [[nodiscard]] constexpr size_type size_bytes() const noexcept { return size() * sizeof(element_type); }
-        [[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
+        [[nodiscard]] constexpr size_type size_bytes() const noexcept { return this->size() * sizeof(element_type); }
+        [[nodiscard]] constexpr bool empty() const noexcept { return this->size() == 0; }
 
         /* element access */
         [[nodiscard]] constexpr const_reference operator[](size_type idx) const { return data_[idx]; }
         [[nodiscard]] constexpr const_reference at(size_type idx) const { this->range_check(idx); return this->operator[](idx); }
         [[nodiscard]] constexpr const_reference front() const { return data_[0]; }
-        [[nodiscard]] constexpr const_reference back() const { return data_[size_ - 1]; }
+        [[nodiscard]] constexpr const_reference back() const { return data_[this->size() - 1]; }
         [[nodiscard]] constexpr const_pointer data() const noexcept { return data_; }
 
         /* iterators */
         [[nodiscard]] constexpr const_iterator begin() const noexcept { return data_; }
-        [[nodiscard]] constexpr const_iterator end() const noexcept { return data_ + size_; }
+        [[nodiscard]] constexpr const_iterator end() const noexcept { return data_ + this->size() ; }
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return this->begin(); }
         [[nodiscard]] constexpr const_iterator cend() const noexcept { return this->end(); }
         [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(this->begin()); }

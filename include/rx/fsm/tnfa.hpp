@@ -7,8 +7,8 @@
 #include <vector>
 
 #include <rx/ast/tree.hpp>
-#include <rx/etc/charset.hpp>
 #include <rx/etc/bitcharset.hpp>
+#include <rx/etc/charset.hpp>
 #include <rx/fsm/flags.hpp>
 
 

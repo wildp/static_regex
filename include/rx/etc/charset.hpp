@@ -13,6 +13,10 @@
 
 namespace rx::detail
 {
+    template<typename T, typename CharT>
+    concept charset_interval_range = std::ranges::contiguous_range<T>
+                                     and std::same_as<std::ranges::range_value_t<T>, std::pair<CharT, CharT>>;
+
     template<typename CharT>
     class charset
     {
@@ -21,19 +25,6 @@ namespace rx::detail
         using char_interval = std::pair<char_type, char_type>;
         
         consteval charset() noexcept = default;
-
-        template<typename... Args>
-        requires (sizeof...(Args) >= 1 and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...))
-        constexpr explicit charset(Args... args)
-        {
-            template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-            {
-                if constexpr (std::convertible_to<Args...[i], char_type>  )
-                    insert(args...[i]);
-                else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                    insert(args...[i].first, args...[i].second);
-            }
-        }
 
 
         /* observers */
@@ -79,12 +70,12 @@ namespace rx::detail
 
         constexpr void insert(char_type c)
         {
-            insert_single(c);
+            this->insert_single(c);
         }
 
         constexpr void insert(char_type first, char_type last)
         {
-            merge_into(insert_single(first), last);
+            this->merge_into(this->insert_single(first), last);
         }
 
 
@@ -139,7 +130,7 @@ namespace rx::detail
         friend constexpr charset operator^(const charset& lhs, const charset& rhs)
         {
             if (&lhs == &rhs)
-                return charset{};
+                return lhs;
             return charset{ make_symmetric_difference(lhs.data_, rhs.data_) };
         }
 
@@ -156,7 +147,7 @@ namespace rx::detail
         }
 
         friend constexpr bool operator==(const charset&, const charset&) = default;
-        friend constexpr auto operator<=>(const charset&, const charset&) = default; /* largely meaningless but */
+        friend constexpr auto operator<=>(const charset&, const charset&) = default; /* largely meaningless but necessary */
 
 
         /* partition functions and type aliases */
@@ -182,6 +173,12 @@ namespace rx::detail
         template<typename T>
         [[nodiscard]] static constexpr auto partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>;
 
+
+        /* friends :) */
+
+        template<typename CT>
+        friend class static_charset;
+
     private:
         using underlying_t = std::vector<char_interval>;
         using partition_entry = std::pair<char_interval, std::vector<bool>>;
@@ -192,11 +189,11 @@ namespace rx::detail
         constexpr underlying_t::iterator insert_single(char_type c);
         constexpr underlying_t::iterator merge_into(underlying_t::iterator inserted, char_type c);
 
-        static constexpr underlying_t make_intersection(const underlying_t& lhs, const underlying_t& rhs);
-        static constexpr underlying_t make_union(const underlying_t& lhs, const underlying_t& rhs);
-        static constexpr underlying_t make_symmetric_difference(const underlying_t& lhs, const underlying_t& rhs);
-        static constexpr underlying_t make_relative_complement(const underlying_t& lhs, const underlying_t& rhs);
-        static constexpr underlying_t make_absolute_complement(const underlying_t& und);
+        static constexpr underlying_t make_intersection(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs);
+        static constexpr underlying_t make_union(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs);
+        static constexpr underlying_t make_symmetric_difference(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs);
+        static constexpr underlying_t make_relative_complement(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs);
+        static constexpr underlying_t make_absolute_complement(const charset_interval_range<char_type> auto& und);
 
         static constexpr void part_sort_lookahead(partitioned_intervals& part, std::size_t current_idx);
         static constexpr void part_sort_lookahead_and_insert(partitioned_intervals& part, std::size_t current_idx, partition_entry&& to_insert);
@@ -206,6 +203,7 @@ namespace rx::detail
 
         underlying_t data_;
     };
+
 
     template<typename CharT>
     constexpr auto charset<CharT>::insert_single(const char_type c) -> underlying_t::iterator
@@ -333,14 +331,14 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::make_intersection(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    constexpr auto charset<CharT>::make_intersection(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
     {
         underlying_t result;
 
-        auto lit{ lhs.cbegin() };
-        auto rit{ rhs.cbegin() };
-        const auto lend{ lhs.cend() };
-        const auto rend{ rhs.cend() };
+        auto lit{ std::ranges::cbegin(lhs) };
+        auto rit{ std::ranges::cbegin(rhs) };
+        const auto lend{ std::ranges::cend(lhs) };
+        const auto rend{ std::ranges::cend(rhs) };
 
         while (lit != lend and rit != rend)
         {
@@ -378,7 +376,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::make_union(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    constexpr auto charset<CharT>::make_union(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
     {
         underlying_t result;
 
@@ -405,19 +403,19 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::make_symmetric_difference(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    constexpr auto charset<CharT>::make_symmetric_difference(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
     {
         if (lhs.empty())
-            return rhs;
+            return underlying_t{ std::from_range, rhs };
         if (rhs.empty())
-            return lhs;
+            return underlying_t{ std::from_range, lhs };
 
         underlying_t result;
 
-        auto lit{ lhs.cbegin() };
-        auto rit{ rhs.cbegin() };
-        const auto lend{ lhs.cend() };
-        const auto rend{ rhs.cend() };
+        auto lit{ std::ranges::cbegin(lhs) };
+        auto rit{ std::ranges::cbegin(rhs) };
+        const auto lend{ std::ranges::cend(lhs) };
+        const auto rend{ std::ranges::cend(rhs) };
 
         std::optional<char_type> tmp;
 
@@ -438,7 +436,7 @@ namespace rx::detail
                     result.emplace_back(min_first_or_tmp, min_second);
 
                 tmp.reset();
-                ++smaller_it;
+                std::ranges::advance(smaller_it, 1);
             }
             else 
             {
@@ -455,13 +453,13 @@ namespace rx::detail
                 if (min_second < max_second)
                 {
                     tmp = min_second + 1; /* tmp <= max_second on next iteration */
-                    ++smaller_it;
+                    std::ranges::advance(smaller_it, 1);
                 }
                 else /* (min_second == max_second) */
                 {
                     tmp.reset();
-                    ++lit;
-                    ++rit;
+                    std::ranges::advance(lit, 1);
+                    std::ranges::advance(rit, 1);
                 }
             }
         }
@@ -477,12 +475,12 @@ namespace rx::detail
             else
                 result.emplace_back(min_first_or_tmp, it->second);
 
-            ++it;
+            std::ranges::advance(it, 1);
 
             while (it != end)
             {
                 result.emplace_back(it->first, it->second);
-                ++it;
+                std::ranges::advance(it, 1);
             }
         }
 
@@ -490,10 +488,10 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::make_relative_complement(const underlying_t& lhs, const underlying_t& rhs) -> underlying_t
+    constexpr auto charset<CharT>::make_relative_complement(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
     {
         if (rhs.empty())
-            return lhs;
+            return underlying_t{ std::from_range, lhs };
 
         underlying_t result;
 
@@ -571,7 +569,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::make_absolute_complement(const underlying_t& und) -> underlying_t
+    constexpr auto charset<CharT>::make_absolute_complement(const charset_interval_range<char_type> auto& und) -> underlying_t
     {
         underlying_t result;
         char_type tmp{ std::numeric_limits<char_type>::min() };
@@ -585,7 +583,7 @@ namespace rx::detail
             tmp = static_cast<char_type>(static_cast<std::make_unsigned_t<char_type>>(upper) + 1);
         }
 
-        if (tmp != std::numeric_limits<char_type>::min() or und.empty())
+        if (tmp != std::numeric_limits<char_type>::min() or std::ranges::empty(und))
             result.emplace_back(tmp, std::numeric_limits<char_type>::max());
 
         return result;

@@ -162,7 +162,7 @@ namespace rx::testing
                 [&](const ast_t::char_class& cla)
                 {
                     using pair_t = typename ast_t::char_class::impl_type::underlying_type::char_interval;
-                    const auto dn{ make_denormalised(cla.data) };
+                    const auto dn{ cla.data.denormalise() };
                     const auto ci{ dn.intervals() };
 
                     if (dn.is_negated() and ((ci.empty()) or (ci.size() == 1 and ci.front() == pair_t{ '\n', '\n' })))
