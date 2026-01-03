@@ -7,6 +7,7 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <numeric>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -882,9 +883,14 @@ namespace rx::detail
             for (const tr_index i : tr_vec)
             {
                 auto& tr{ transitions_.at(i) };
+
+                /* assign lowest priority to avoid clashes with eof_anchor */
+                using priority_t = decltype(epsilon_tr::priority);
+                const auto p{ std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz)) };
+
                 std::erase(nodes_.at(tr.dst).in_tr, i);
                 tr.dst = mapped_states.at(tr.dst);
-                tr.type = tnfa::epsilon_tr{};
+                tr.type = tnfa::epsilon_tr{ .priority = p, .tag = 0 }; 
                 nodes_.at(tr.dst).in_tr.emplace_back(i);
             }
         }
