@@ -98,12 +98,12 @@ namespace rx::detail
             {
                 if (fallback_state == dfa_t::value.fallback_nodes[i])
                 {
-                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(i) };
+                    static constexpr auto fbni{ dfa_t::value.fallback_node_regops.at(i) };
 
-                    register_operations<fni.op_index>(fallback_it, res);
+                    register_operations<fbni.op_index>(fallback_it, res);
 
-                    if constexpr (fni.final_offset != 0)
-                        res.match_end() = fallback_it - fni.final_offset;
+                    if constexpr (fbni.final_offset != 0)
+                        res.match_end() = fallback_it - fbni.final_offset;
                     else
                         res.match_end() = fallback_it;
 

@@ -295,8 +295,8 @@ namespace rx::testing
             if (const auto it{ dfa.fallback_nodes().find(i) }; it != dfa.fallback_nodes().end())
             {
                 label += 'f';
-                if (it->second != tdfa::no_transition_regops)
-                    xlabel += std::format("{}({})", (xlabel.empty() ? "/" : "") , it->second);
+                if (it->second.op_index != tdfa::no_transition_regops)
+                    xlabel += std::format("{}({})", (xlabel.empty() ? "/" : "") , it->second.op_index);
             }
 
             std::println(target, "     q{} [shape=doublecircle,label={:?},xlabel={:?}];", i, label, xlabel);

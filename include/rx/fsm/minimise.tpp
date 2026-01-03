@@ -58,7 +58,7 @@ namespace rx::detail::tdfa
             it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : no_transition_regops;
 
         for (auto it{ dfa.fallback_nodes_.begin() }, last{ dfa.fallback_nodes_.end() }; it != last; ++it)
-            it->second = (it->second < regop_block_map.size()) ? regop_block_map[it->second] : no_transition_regops;
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : no_transition_regops;
 
         dfa.regops_ = std::move(new_regops);
     }
@@ -80,12 +80,12 @@ namespace rx::detail::tdfa
 
         /* add separate partitions of final states for each different regops block */
 
-        using key_type = std::pair<std::size_t, std::optional<std::size_t>>;
+        using key_type = std::pair<final_node_info, std::optional<fallback_node_info>>;
         std::flat_map<key_type, bitset_t> final_node_map;
 
         for (const auto& [state, fni] : dfa.final_nodes_)
         {
-            key_type key{ fni.op_index, std::nullopt };
+            key_type key{ fni, std::nullopt };
 
             /* assume fallback states are a subset of final states */
             if (const auto it{ dfa.fallback_nodes_.find(state) }; it != dfa.fallback_nodes_.end())

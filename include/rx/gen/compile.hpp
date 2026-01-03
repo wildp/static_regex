@@ -122,6 +122,7 @@ namespace rx::detail
         explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa) : 
             nodes{ std::define_static_array(dfa.nodes_ | std::views::transform(make_node_transitions)) },
             regops{ std::define_static_array(dfa.regops_ | std::views::transform(make_register_operations)) },
+            continue_nodes{ std::define_static_array(dfa.continue_nodes()) },
             final_nodes{ std::define_static_array(dfa.final_nodes().keys()) },
             final_node_regops{ std::define_static_array(dfa.final_nodes().values()) },
             fallback_nodes{ std::define_static_array(dfa.fallback_nodes().keys()) },
@@ -136,10 +137,11 @@ namespace rx::detail
         /* data members (public so that tdfa_info is structural) */
         static_span<const static_span<const static_transition<char_type>>> nodes;
         static_span<const static_span<const register_operation>> regops;
+        static_span<const std::size_t> continue_nodes;
         static_span<const std::size_t> final_nodes;
         static_span<const tdfa::final_node_info> final_node_regops;
         static_span<const std::size_t> fallback_nodes;
-        static_span<const std::size_t> fallback_node_regops;
+        static_span<const tdfa::fallback_node_info> fallback_node_regops;
         static_span<const tdfa::reg_t> final_registers;
         
         std::size_t register_count{ 0 };

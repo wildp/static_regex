@@ -46,15 +46,13 @@ namespace rx::testing
             if (dfa.final_nodes().contains(i))
             {
                 const auto& fni{ dfa.final_nodes().at(i) };
-                if (fni.final_offset == 0)
-                    std::print(target, "\t'' -> ACCEPT:");
-                else
-                    std::print(target, "\t'' -> ACCEPT: [Offset {}]", fni.final_offset);
 
+                std::print(target, "\t'' -> ACCEPT:");
+                if (fni.final_offset != 0)
+                    std::print(target, " [Offset {}]", fni.final_offset);
                 if (fni.op_index != no_transition_regops)
-                    std::println(target, " [Block {}]", fni.op_index);
-                else
-                    std::println(target);
+                    std::print(target, " [Block {}]", fni.op_index);
+                std::println(target);
 
                 for (const auto& op : dfa.get_regops(fni.op_index))
                     print_regop(target, op, "\t\t");
@@ -62,23 +60,24 @@ namespace rx::testing
 
             if (dfa.fallback_nodes().contains(i))
             {
-                const auto& fin{ dfa.final_nodes().at(i) };
-                if (fin.final_offset == 0)
-                    std::print(target, "\tFALLBACK -> ACCEPT:");
-                else
-                    std::print(target, "\tFALLBACK -> ACCEPT: [Offset {}]", fin.final_offset);
+                const auto& fni{ dfa.final_nodes().at(i) };
+                const auto& fbni{ dfa.fallback_nodes().at(i) };
 
-                if (dfa.fallback_nodes().at(i) != no_transition_regops)
-                    std::println(target, " [Block {}]", dfa.fallback_nodes().at(i));
-                else
-                    std::println(target);
+                std::print(target, "\tFALLBACK -> ACCEPT:");
+                if (fni.final_offset != 0)
+                    std::print(target, " [Offset {}]", fni.final_offset);
+                if (fbni.continue_at != detail::tdfa::no_continue)
+                    std::print(target, " [Continue {}]", fbni.continue_at);
+                if (fbni.op_index != no_transition_regops)
+                    std::print(target, " [Block {}]", fbni.op_index);
+                std::println(target);
 
-
-                for (const auto& op : dfa.get_regops(dfa.fallback_nodes().at(i)))
+                for (const auto& op : dfa.get_regops(fbni.op_index))
                     print_regop(target, op, "\t\t");
             }
         }
 
+        std::println(target, "Continue states: {}", dfa.continue_nodes());
         std::println(target, "Final Registers: {}", dfa.final_registers());
     }
 

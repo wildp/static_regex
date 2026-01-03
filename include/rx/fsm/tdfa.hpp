@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <flat_map>
+#include <limits>
 #include <variant>
 #include <vector>
 
@@ -61,13 +62,26 @@ namespace rx::detail::tdfa
     {
         std::size_t op_index;
         std::uint16_t final_offset;
-        /* todo: add continuation index? */
+
+        friend constexpr bool operator==(const final_node_info&, const final_node_info&) noexcept = default;
+        friend constexpr auto operator<=>(const final_node_info&, const final_node_info&) noexcept = default;
     };
 
+    struct fallback_node_info
+    {
+        std::size_t op_index;
+        std::uint16_t continue_at;
+
+        friend constexpr bool operator==(const fallback_node_info&, const fallback_node_info&) noexcept = default;
+        friend constexpr auto operator<=>(const fallback_node_info&, const fallback_node_info&) noexcept = default;
+    };
+
+    using continue_nodes_t = std::vector<std::size_t>;
     using final_nodes_t = std::flat_map<std::size_t, final_node_info>;
-    using fallback_nodes_t = std::flat_map<std::size_t, std::size_t>;
+    using fallback_nodes_t = std::flat_map<std::size_t, fallback_node_info>;
     using final_regs_t = std::vector<reg_t>;
 
+    inline constexpr std::uint16_t no_continue{ std::numeric_limits<std::uint16_t>::max() };
     inline constexpr std::size_t no_transition_regops{ std::numeric_limits<std::size_t>::max() };
 
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
@@ -94,9 +108,9 @@ namespace rx::detail
     {
     public:
         using char_type = CharT;
-        using tnfa_t = tagged_nfa<char_type>;
+        using tagged_nfa = tagged_nfa<char_type>;
 
-        explicit constexpr tagged_dfa(const tnfa_t& tnfa);
+        explicit constexpr tagged_dfa(const tagged_nfa& tnfa);
         constexpr void optimise_registers();
         constexpr void minimise_states();
 
@@ -110,9 +124,11 @@ namespace rx::detail
 
         [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
         [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { if (i == tdfa::no_transition_regops) return tdfa::empty_regops; else return regops_.at(i); }
+        [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const { return continue_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
         [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
+        [[nodiscard]] constexpr std::size_t start_node() const { return 0uz; }
         [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
         [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
@@ -126,6 +142,7 @@ namespace rx::detail
         using regop_data_t = std::vector<tdfa::regops_t>;
 
         data_t                  nodes_;
+        tdfa::continue_nodes_t  continue_nodes_;
         tdfa::final_nodes_t     final_nodes_;
         tdfa::fallback_nodes_t  fallback_nodes_;
         tdfa::final_regs_t      final_registers_;

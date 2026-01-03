@@ -428,11 +428,11 @@ namespace rx::detail::tdfa
             }
         }
 
-        for (const auto [fallback_state, block_idx] : dfa.fallback_nodes_)
+        for (const auto [fallback_state, fbni] : dfa.fallback_nodes_)
         {
             std::vector<bool> current_row;
 
-            if (block_idx == no_transition_regops)
+            if (fbni.op_index == no_transition_regops)
             {
                 current_row.assign(liveness.reg_count(), false);
 
@@ -442,14 +442,14 @@ namespace rx::detail::tdfa
             else
             {
                 for (const std::size_t final_reg : dfa.final_registers_)
-                    liveness.at(block_idx, final_reg) = true;
+                    liveness.at(fbni.op_index, final_reg) = true;
 
-                current_row.assign(liveness.row_begin(block_idx), liveness.row_end(block_idx));
+                current_row.assign(liveness.row_begin(fbni.op_index), liveness.row_end(fbni.op_index));
 
-                for (const auto& op : dfa.regops_.at(block_idx))
+                for (const auto& op : dfa.regops_.at(fbni.op_index))
                     current_row.at(op.dst) = false;
 
-                for (const auto& op : dfa.regops_.at(block_idx))
+                for (const auto& op : dfa.regops_.at(fbni.op_index))
                     if (auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         current_row.at(cpy->src) = false;
             }

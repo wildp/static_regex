@@ -136,7 +136,7 @@ namespace rx::testing
                 return {}; /* skip converting tag registers to captures */
             
             it = fallback_it;
-            regops_implementation(it, this->fallback_nodes().at(fallback_state), registers, registers_enabled);
+            regops_implementation(it, this->fallback_nodes().at(fallback_state).op_index, registers, registers_enabled);
             it -= this->final_nodes().at(fallback_state).final_offset;
             break; /* outer */
         }
