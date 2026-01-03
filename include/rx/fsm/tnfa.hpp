@@ -120,7 +120,7 @@ namespace rx::detail::tnfa
 
     /* predicates for variations of e-closure */
 
-    struct reach_pred
+    struct reachable_predicate
     {
         template<typename CharT>
         static constexpr bool operator()(const transition<CharT>& /* tr */)
@@ -130,7 +130,7 @@ namespace rx::detail::tnfa
         }
     };
 
-    struct ec_pred
+    struct e_closure_predicate
     {
         template<typename CharT>
         static constexpr bool operator()(const transition<CharT>& tr)
@@ -139,17 +139,8 @@ namespace rx::detail::tnfa
             return std::holds_alternative<tnfa::epsilon_tr>(tr.type);
         }
     };
-
-    struct aec_pred
-    {
-        template<typename CharT>
-        static constexpr bool operator()(const transition<CharT>& tr)
-        {
-             /* allow assertions as e-transitions */
-            return not std::holds_alternative<tnfa::normal_tr<CharT>>(tr.type);
-        }
-    };
 }
+
 
 namespace rx::detail
 {
@@ -162,7 +153,14 @@ namespace rx::detail
         using char_type = CharT;
         using state_t = tnfa::state_t;
         using tr_index = tnfa::tr_index;
-        using char_set_type = tnfa::charset_t<char_type>;
+        using charset_type = tnfa::charset_t<char_type>;
+
+        using normal_tr = tnfa::normal_tr<char_type>;
+        using epsilon_tr = tnfa::epsilon_tr;
+        using sof_anchor_tr = tnfa::sof_anchor_tr;
+        using eof_anchor_tr = tnfa::eof_anchor_tr;
+        using lookbehind_1_tr = tnfa::lookbehind_1_tr<char_type>;
+        using lookahead_1_tr = tnfa::lookahead_1_tr<char_type>;
 
         explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
         constexpr void rewrite_assertions();
@@ -202,14 +200,14 @@ namespace rx::detail
         constexpr void make_transition(state_t q0, state_t qf, char_type c);
 
         template<typename CharSet>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, char_set_type>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
         constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
 
         template<acat_t V>
         constexpr void make_assert(state_t q0, state_t qf, tnfa::ac<V> category);
 
         template<typename CharSet, acat_t V>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, char_set_type>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
         constexpr void make_assert(state_t q0, state_t qf, CharSet&& cs, tnfa::ac<V> category);
 
         // template<acat_t V>
@@ -224,10 +222,10 @@ namespace rx::detail
         template<bool B, typename Vec, typename Pred, typename NodeProj, typename TrProj>
         [[nodiscard]] constexpr auto closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const;
 
-        template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::ec_pred>
+        template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::e_closure_predicate>
         [[nodiscard]] constexpr auto epsilon_closure(Vec&& qs, Pred pred = {}) const;
 
-        template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::ec_pred>
+        template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::e_closure_predicate>
         [[nodiscard]] constexpr auto backwards_epsilon_closure(Vec&& qs, Pred pred = {}) const;
 
         constexpr std::flat_map<state_t, state_t> copy_subgraph(const std::vector<state_t>& qs);

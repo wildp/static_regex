@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <ranges>
@@ -39,11 +40,13 @@ namespace rx::detail
         const state_t tmp{ nodes_.size() };
         nodes_.emplace_back();
 
-        const auto& n{ nodes_.at(q) };
-        nodes_[tmp].is_final = n.is_final;
-        nodes_[tmp].is_fallback = n.is_fallback ;
-        nodes_[tmp].continue_at = n.continue_at;
-        nodes_[tmp].final_offset = n.final_offset;
+        const auto& old_n{ nodes_.at(q) };
+        auto& new_n{ nodes_[tmp] };
+
+        new_n.is_final = old_n.is_final;
+        new_n.is_fallback = old_n.is_fallback ;
+        new_n.final_offset = old_n.final_offset;
+        new_n.continue_at = old_n.continue_at;
 
         return tmp;
     }
@@ -64,13 +67,13 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_epsilon(const state_t q0, const state_t qf, const int priority, const int tag)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::epsilon_tr>, priority, tag);
+        transition_create(q0, qf, std::in_place_type<epsilon_tr>, priority, tag);
     }
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, char_type c)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<char_type>>, tnfa::charset_t<char_type>{ c });
+        transition_create(q0, qf, std::in_place_type<normal_tr>, charset_type{ c });
     }
 
     template<typename CharT>
@@ -78,15 +81,14 @@ namespace rx::detail
     requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharSet&& cs)
     {
-        transition_create(q0, qf, std::in_place_type<tnfa::normal_tr<char_type>>, std::forward<CharSet>(cs));
+        transition_create(q0, qf, std::in_place_type<normal_tr>, std::forward<CharSet>(cs));
     }
 
     template<typename CharT>
     template<tnfa::assert_category V>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, tnfa::ac<V> /* category */)
     {
-        using type = std::conditional_t<V == acat_t::eof, tnfa::eof_anchor_tr,
-                                        std::conditional_t<V == acat_t::sof, tnfa::sof_anchor_tr, void>>;
+        using type = std::conditional_t<V == acat_t::eof, eof_anchor_tr, std::conditional_t<V == acat_t::sof, sof_anchor_tr, void>>;
 
         transition_create(q0, qf, std::in_place_type<type>);
     }
@@ -96,8 +98,7 @@ namespace rx::detail
     requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, CharSet&& cs, tnfa::ac<V> /* category */)
     {
-        using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_1_tr<char_type>,
-                                std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_1_tr<char_type>, void>>;
+        using type = std::conditional_t<V == acat_t::lookahead, lookahead_1_tr, std::conditional_t<V == acat_t::lookbehind, lookbehind_1_tr, void>>;
 
         transition_create(q0, qf, std::in_place_type<type>, std::forward<CharSet>(cs));
     }
@@ -193,7 +194,7 @@ namespace rx::detail
                         // TODO: implement multibyte chars;
                         throw tnfa_error("UTF16 character classes are unimplemented");
                     }
-                    else if constexpr (std::same_as<tnfa::charset_t<char_type>, typename ast_t::char_class::impl_type::underlying_type>)
+                    else if constexpr (std::same_as<charset_type, typename ast_t::char_class::impl_type::underlying_type>)
                     {
                         make_transition(q0, qf, cla.data.get());
                     }
@@ -389,10 +390,9 @@ namespace rx::detail
                     switch (assertion.type)
                     {
                     case assert_type::line_start:
-                        throw tnfa_error("Non-trivial assertions are unimplemented");
-                        // TODO: implement
-                        // has_lookbehind_1_ = true;
-                        // [[fallthrough]];
+                        make_assert(q0, qf, newline_cs, tnfa::ac<acat_t::lookbehind>{});
+                        has_lookbehind_1_ = true;
+                        [[fallthrough]];
                     
                     case assert_type::text_start:
                         make_assert(q0, qf, tnfa::ac<acat_t::sof>{});
@@ -457,11 +457,24 @@ namespace rx::detail
                 const auto& tr{ get_tr(i) };
                 const auto val{ std::invoke(tr_proj, tr) };
 
+                if constexpr (requires { { std::invoke(pred, tr, i) } -> std::convertible_to<bool>; })
+                {
+                    if (not std::invoke(pred, tr, i))
+                        continue;
+                }
+                else if constexpr (requires { { std::invoke(pred, tr) } -> std::convertible_to<bool>; })
+                {
+                    if (not std::invoke(pred, tr))
+                        continue;
+                }
+                else
+                {
+                    static_assert(false, "tagged_nfa::closure_impl: invalid predicate");
+                }
+
                 if (visited.at(val))
                     continue;
 
-                if (not std::invoke(pred, tr))
-                    continue;
 
                 visited[val] = true;
                 to_visit.emplace_back(val);
@@ -478,14 +491,14 @@ namespace rx::detail
     template<bool B, typename Vec, typename Pred>
     constexpr auto tagged_nfa<CharT>::epsilon_closure(Vec&& qs, Pred pred) const
     {
-        return closure_impl<B>(std::forward<Vec>(qs), std::forward<Pred>(pred), &tnfa::node::out_tr, &tnfa::transition<char_type>::dst);
+        return closure_impl<B>(std::forward<Vec>(qs), pred, &tnfa::node::out_tr, &tnfa::transition<char_type>::dst);
     } 
 
     template<typename CharT>
     template<bool B, typename Vec, typename Pred>
     constexpr auto tagged_nfa<CharT>::backwards_epsilon_closure(Vec&& qs, Pred pred) const
     {
-        return closure_impl<B>(std::forward<Vec>(qs), std::forward<Pred>(pred), &tnfa::node::in_tr, &tnfa::transition<char_type>::src);
+        return closure_impl<B>(std::forward<Vec>(qs), pred, &tnfa::node::in_tr, &tnfa::transition<char_type>::src);
     }
 
 
@@ -502,7 +515,7 @@ namespace rx::detail
             if (ci.value != start_node_)
                 initial_nodes.emplace_back(ci.value);
 
-        const auto reachable_nodes{ epsilon_closure<false>(std::move(initial_nodes), tnfa::reach_pred{}) };
+        const auto reachable_nodes{ epsilon_closure<false>(std::move(initial_nodes), tnfa::reachable_predicate{}) };
 
         /* determine live states */
 
@@ -512,7 +525,7 @@ namespace rx::detail
             if (nodes_[q].is_final)
                 final_nodes.emplace_back(q);
 
-        const auto live_nodes{ backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::reach_pred{}) };
+        const auto live_nodes{ backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::reachable_predicate{}) };
 
         /* remove transitions containing dead and unreachable nodes */
 
@@ -561,7 +574,11 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_sof_anchors() 
     {
-        const auto ec{ epsilon_closure({ start_node() }, tnfa::aec_pred{}) };
+        static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
+            return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookbehind_1_tr>(tr.type);
+        };
+
+        const auto ec{ epsilon_closure({ start_node() }, pred) };
 
         /* create a copy of the start node's e-closure */
 
@@ -585,17 +602,17 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(i) }; 
 
-                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
+                if (std::holds_alternative<normal_tr>(tr.type))
                 {
                     /* transition from copied e-closure to main graph */
                     make_copy(p, tr.dst, tr.type);
                 }
-                else if (std::holds_alternative<tnfa::sof_anchor_tr>(tr.type))
+                else if (std::holds_alternative<sof_anchor_tr>(tr.type))
                 {
                     /* replace sof anchor with e-transition in copied subgraph */
                     make_epsilon(p, mapped_states.at(tr.dst));
                 }
-                else
+                else if (not std::holds_alternative<lookbehind_1_tr>(tr.type))
                 {
                     /* transition within copied e-closure */
                     make_copy(p, mapped_states.at(tr.dst), tr.type);
@@ -609,7 +626,7 @@ namespace rx::detail
         {
             auto& tr{ transitions_[i] };
 
-            if (not std::holds_alternative<tnfa::sof_anchor_tr>(tr.type))
+            if (not std::holds_alternative<sof_anchor_tr>(tr.type))
                 continue;
 
             /* delete transition */
@@ -621,14 +638,19 @@ namespace rx::detail
 
         /* reassign start node */
 
-        start_node_ = mapped_states.at(start_node());
+        start_node_ = mapped_states.at(start_node_);
     }
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_eof_anchors() 
     {
         /* NOTE: this function must be called before any other function which adds final nodes */
-        std::vector<bool> bec{ backwards_epsilon_closure<false>({ default_final_node }, tnfa::aec_pred{}) };
+
+        static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
+            return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookahead_1_tr>(tr.type);
+        };
+
+        std::vector<bool> bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
 
         std::vector<state_t> initial;
         std::vector<tr_index> to_revisit;
@@ -637,7 +659,7 @@ namespace rx::detail
         {
             const auto& tr{ transitions_[i] };
 
-            if (not std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
+            if (not std::holds_alternative<eof_anchor_tr>(tr.type))
                 continue;
 
             to_revisit.emplace_back(i);
@@ -646,7 +668,7 @@ namespace rx::detail
                 initial.emplace_back(tr.dst);
         }
 
-        const auto ec{ epsilon_closure(std::move(initial), tnfa::aec_pred{}) };
+        const auto ec{ epsilon_closure(std::move(initial), pred) };
 
         /* create copy of the e-closures  */
 
@@ -685,11 +707,11 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(i) }; 
 
-                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
+                if (std::holds_alternative<normal_tr>(tr.type))
                 {
                     /* do not insert transition */
                 }
-                else if (std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
+                else if (std::holds_alternative<eof_anchor_tr>(tr.type))
                 {
                     /* replace eof anchor with e-transition in copied subgraph */
                     make_epsilon(p, mapped_states.at(tr.dst));
@@ -734,16 +756,16 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_sc_lookahead()
     {
-        using transition_map_t = std::flat_map<tnfa::charset_t<char_type>, std::vector<tr_index>>;
+        using transition_map_t = std::flat_map<charset_type, std::vector<tr_index>>;
         using state_map_t = std::flat_map<state_t, state_t>;
-        using all_states_map_t = std::flat_map<tnfa::charset_t<char_type>, state_map_t>;
+        using all_states_map_t = std::flat_map<charset_type, state_map_t>;
 
         transition_map_t sc_transitions; 
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
             const auto& tr{ transitions_[i] };
-            if (const auto* ptr{ std::get_if<tnfa::lookahead_1_tr<char_type>>(&tr.type) }; ptr != nullptr)
+            if (const auto* ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 sc_transitions[ptr->cs].emplace_back(i);
         }
 
@@ -751,7 +773,7 @@ namespace rx::detail
 
         all_states_map_t all_mapped_states;
 
-        std::vector<std::pair<char_set_type, std::vector<state_t>>> outer_visit;
+        std::vector<std::pair<charset_type, std::vector<state_t>>> outer_visit;
         
         for (const auto& [edge, tr_vec] : sc_transitions)
         {
@@ -769,12 +791,12 @@ namespace rx::detail
 
             /* perform a modified epsilon closure */
 
-            auto pred = [&]<typename CT>(const tnfa::transition<CT>& tr){
+            auto pred = [&](const tnfa::transition<char_type>& tr) {
                 /* skip normal transitions and eof anchors */
-                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type) or std::holds_alternative<tnfa::eof_anchor_tr>(tr.type) )
+                if (std::holds_alternative<normal_tr>(tr.type) or std::holds_alternative<eof_anchor_tr>(tr.type) )
                     return false;
 
-                if (const auto* const ptr{ std::get_if<tnfa::lookahead_1_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 {
                     if (auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
                     {
@@ -814,12 +836,13 @@ namespace rx::detail
                     if (not offset_end.has_value())
                     {
                         /* create new offset end node */
+                        const auto saved_cont{ node.continue_at };
                         offset_end = node_create();
                         auto& n{ nodes_.at(*offset_end) };
                         n.is_final = true;
                         n.is_fallback = true;
                         n.final_offset = 1;
-                        n.continue_at = node.continue_at;
+                        n.continue_at = saved_cont;
                     }
 
                     make_transition(p, *offset_end, edge);
@@ -830,19 +853,19 @@ namespace rx::detail
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                     const auto& tr{ get_tr(i) };
 
-                    if (const auto* const ptr{ std::get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                    if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally transition from copied e-closure to main graph */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                             make_transition(p, tr.dst, std::move(new_edge));
                     }
-                    else if (const auto* const ptr{ std::get_if<tnfa::lookahead_1_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                    else if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally e-transition between copied subgraphs */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                             make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));                            
                     }
-                    else if (not std::holds_alternative<tnfa::eof_anchor_tr>(tr.type))
+                    else if (not std::holds_alternative<eof_anchor_tr>(tr.type))
                     {
                         /* transition within copied e-closure */
                         make_copy(p, mapped_states.at(tr.dst), tr.type);
@@ -867,13 +890,418 @@ namespace rx::detail
         }
     }
 
-
-
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_sc_lookbehind()
     {
+        if (cont_info_.size() > 1)
+            throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: cont_info_.size() > 1");
 
-    } 
+        using transition_map_t = std::flat_map<charset_type, std::vector<tr_index>>;
+        using state_map_t = std::flat_map<state_t, state_t>;
+        using all_states_map_t = std::flat_map<charset_type, state_map_t>;
+
+        using charset_set_t = std::flat_map<charset_type, std::monostate>;
+        using start_tr_map_t = std::flat_map<tr_index, charset_set_t>;
+
+        // consider narrow -> wide -> narrow combination of lookbehinds
+
+        /* find fallback and continuation states */
+
+        std::optional<state_t> continue_state;
+        if (cont_info_.size() >= 1)
+            continue_state = cont_info_.front().value;
+
+        std::vector<state_t> fallback_states;
+        for (state_t q{ 0 }; q < nodes_.size(); ++q)
+            if (const auto& node{ nodes_[q] }; node.is_final and node.is_fallback and not node.in_tr.empty())
+                fallback_states.emplace_back(q);
+
+
+        /* setup for finding transitions leading into backwards e-closures */
+
+        struct lb_info
+        {
+            std::vector<tr_index> tr_into;
+            std::vector<tr_index> tr_between;
+        };
+
+        static constexpr auto search_predicate = [](lb_info& lb, const charset_type& edge, const tnfa::transition<char_type>& tr, const tr_index i) static {
+            /* assign results here instead of using the normal return value */
+            if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+            {
+                if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                    lb.tr_into.emplace_back(i);
+
+                return false;
+            }
+
+            /* skip sof anchors */
+            if (std::holds_alternative<sof_anchor_tr>(tr.type) )
+                return false;
+
+            /* intersection with lookbehind_1 transition requires cloned subgraph */
+            if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+            {
+                if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
+                    lb.tr_between.emplace_back(i);
+
+                return false;
+            }
+
+            return true;
+        };
+
+        static constexpr auto dedup_transitions_map = [](transition_map_t& map) static {
+            for (auto it{ map.begin() }, end{ map.end() }; it != end; ++it)
+            {
+                auto& vec{ it->second };
+                std::ranges::sort(vec);
+                const auto [first, last]{ std::ranges::unique(vec) };
+                vec.erase(first, last);
+            }
+        };
+
+
+        /* find lookbehind transitions and group by edge */
+
+        transition_map_t sc_transitions; 
+        std::flat_map<tr_index, lb_info> lb_closures;
+
+        std::vector<tr_index> wraparounds; /* sorted; i.e. flat_set */
+        charset_type wraparound_union;
+
+        for (tr_index i{ 0 }; i < transitions_.size(); ++i)
+        {
+            const auto& tr{ transitions_[i] };
+            const auto* ptr{ std::get_if<lookbehind_1_tr>(&tr.type) };
+
+            if (ptr == nullptr)
+                continue;
+
+            auto [it, _]{ lb_closures.try_emplace(i) };
+            auto& lb{ it->second };
+            std::vector bec{ backwards_epsilon_closure({ tr.src }, std::bind_front(search_predicate, std::ref(lb), std::cref(ptr->cs))) };
+            // TODO: replace with static bind_front;
+
+            std::ranges::sort(lb.tr_into);
+            std::ranges::sort(lb.tr_between);
+
+            /* check if backwards e-closure includes any continue states */
+            if (continue_state.has_value() /* and bec.at(continue_state.value()) */)
+            {
+                wraparounds.emplace_back(i);
+                wraparound_union |= ptr->cs;
+            }
+
+            sc_transitions[ptr->cs].emplace_back(i);
+        }
+
+        dedup_transitions_map(sc_transitions);
+
+        /* find wraparound transitions */
+
+        std::optional<lb_info> wraparound_lb_closure;
+
+        if (continue_state.has_value() and not fallback_states.empty())
+        {
+            wraparound_lb_closure.emplace();
+            std::ignore = backwards_epsilon_closure<false>(fallback_states, std::bind_front(search_predicate, std::ref(*wraparound_lb_closure), std::cref(wraparound_union)));
+            // TODO: replace with static bind_front;
+
+            std::ranges::sort(wraparound_lb_closure->tr_into);
+            std::ranges::sort(wraparound_lb_closure->tr_between);
+        }
+
+        /* determine closure start bitvec */
+
+        std::vector<bool> is_closure_start(transitions_.size(), false);
+
+        for (const auto& [_, lb] : lb_closures)
+            for (const tr_index i : lb.tr_into)
+                is_closure_start.at(i) = true;
+
+        if (wraparound_lb_closure.has_value())
+            for (const tr_index i : wraparound_lb_closure->tr_into)
+                is_closure_start.at(i) = true;
+
+
+        /* partition wraparound starts */
+
+        /* always empty if there are no continue states */
+        std::vector<charset_type> wrap_starts;
+
+        if (wraparound_lb_closure.has_value())
+        {
+            const auto fn = [this](const tr_index i) {
+                const auto& tr{ get_tr(i) }; 
+                return std::cref(std::get<lookbehind_1_tr>(tr.type).cs);
+            };
+
+            const std::vector refs{ std::from_range, wraparounds | std::views::transform(fn) };
+            wrap_starts = charset_type::partition(refs);
+            std::ranges::sort(wrap_starts);
+        }
+
+
+        /* determine starts transitions */ 
+
+        start_tr_map_t start_transitions;
+        std::vector to_visit{ std::from_range, sc_transitions };
+
+        if (wraparound_lb_closure.has_value())
+        {
+            /* insert wraparound edges */
+            transition_map_t to_insert;
+
+            for (const auto& edge : wrap_starts)
+            {
+                for (const tr_index i : wraparound_lb_closure->tr_into)
+                    if (auto new_edge{ edge & std::get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                        start_transitions[i].try_emplace(std::move(new_edge));
+
+                for (const tr_index i : wraparound_lb_closure->tr_between)
+                    if (auto new_edge{ edge & std::get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                        to_insert[std::move(new_edge)].emplace_back(i);
+            }
+
+            dedup_transitions_map(to_insert);
+            to_visit.append_range(std::move(to_insert));
+        }
+
+        while (not to_visit.empty())
+        {
+            using visit_type = typename transition_map_t::value_type;
+            const visit_type current{ std::move(to_visit.back()) };
+            to_visit.pop_back();
+
+            const auto& [edge, idxs]{ current };
+            transition_map_t to_insert;
+
+            for (const tr_index lb_tr_index : idxs)
+            {
+                const auto& lb{ lb_closures.at(lb_tr_index) };
+
+                for (const tr_index i : lb.tr_into)
+                    if (auto new_edge{ edge & std::get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                        start_transitions[i].try_emplace(std::move(new_edge));
+
+                for (const tr_index i : lb.tr_between)
+                    if (auto new_edge{ edge & std::get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                        to_insert[std::move(new_edge)].emplace_back(i);
+            }
+
+            dedup_transitions_map(to_insert);
+            to_visit.append_range(std::move(to_insert));
+        }
+
+
+        /* partition closure starts */
+
+        using wraparound_index = std::size_t;
+        std::flat_map<charset_type, wraparound_index> closure_wraparounds;
+
+        std::flat_map<charset_type, std::vector<state_t>> closure_starts;
+
+        for (const auto& edge : wrap_starts)
+            closure_starts[edge].emplace_back(continue_state.value());
+
+        for (const auto& [i, edges] : start_transitions)
+        {
+            if (edges.empty())
+                continue;
+
+            const auto fn = [&](const charset_type& edge) {
+                std::size_t cont_index{ std::numeric_limits<wraparound_index>::max() };
+                if (const auto it{ std::ranges::lower_bound(wrap_starts, edge) }; it != wrap_starts.end() and edge == *it)
+                    cont_index = static_cast<wraparound_index>(std::distance(wrap_starts.begin(), it));
+                return std::pair{ std::cref(edge), cont_index };
+            };
+            
+            const std::vector ref_pairs{ std::from_range, edges.keys() | std::views::transform(fn) };
+
+            for (auto&& [new_edge, vec] : charset_type::partition_ext(ref_pairs))
+            {
+                std::erase(vec, std::numeric_limits<std::size_t>::max());
+                if (vec.size() > 1)
+                    throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: vec.size() > 1");
+
+                if (vec.size() == 1)
+                    if (const auto [it, success]{ closure_wraparounds.try_emplace(new_edge, vec.front()) }; not success and it->second != vec.front())
+                        throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: new_edge already exists in closure_wraparounds with different value");
+
+                closure_starts[std::move(new_edge)].emplace_back(transitions_.at(i).dst);
+            }
+        }
+
+
+        /* create copies of e-closures leading to lookbehind_1 transitions */
+
+        all_states_map_t all_mapped_states;
+
+        for (auto&& [edge, initial_states] : closure_starts)
+        {
+            auto& mapped_states{ all_mapped_states[edge] };
+
+            auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr) {
+                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
+                    return false;
+
+                if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+                    return (e | ptr->cs) == ptr->cs;
+
+                return true;
+            };
+
+            std::vector ec{ epsilon_closure(std::move(initial_states), pred) };
+
+            /* set ec to be keys */
+            std::ranges::sort(ec, mapped_states.key_comp());
+            const auto [first, last]{ std::ranges::unique(ec) };
+            ec.erase(first, last);
+
+            /* create new state for each state in ec; defer making nodes fallback to later */
+            std::vector new_states{ std::from_range, ec | std::views::transform([this](auto&&) { return node_create(); }) };
+            mapped_states.replace(std::move(ec), std::move(new_states));
+        }
+
+        closure_starts.clear();
+
+
+        /* set continue info and make nodes fallback */
+
+        using continue_at_type = decltype(tnfa::node::continue_at);
+        std::vector<continue_at_type> continue_ats;
+
+        for (const auto& edge: wrap_starts)
+        {
+            const auto& mapped_states{ all_mapped_states.at(edge) };
+            const auto mapped_cont{ mapped_states.at(continue_state.value()) };
+
+            if (cont_info_.size() >= std::numeric_limits<continue_at_type>::max())
+                throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
+
+            continue_ats.emplace_back(std::saturate_cast<continue_at_type>(cont_info_.size()));
+            cont_info_.emplace_back(mapped_cont);
+        }
+
+        if (continue_state.has_value())
+        {
+            for (const auto& [edge, mapped_states] : all_mapped_states) 
+            {
+                auto it{ closure_wraparounds.find(edge) };
+
+                if (it == closure_wraparounds.end())
+                    continue;
+
+                const continue_at_type continue_at{ continue_ats.at(it->second) };
+
+                for (const state_t qf : fallback_states)
+                {
+                    auto it2{ mapped_states.find(qf) };
+
+                    if (it2 == mapped_states.end())
+                        continue;
+
+                    const auto& old_n{ nodes_.at(qf) };
+                    auto& new_n{ nodes_.at(it2->second) };
+
+                    new_n.is_final = old_n.is_final;
+                    new_n.is_fallback = old_n.is_fallback ;
+                    new_n.final_offset = old_n.final_offset;
+                    new_n.continue_at = continue_at;
+                }
+            }
+        }
+
+        
+
+        /* duplicate transitions inside and leaving copied closures */
+
+        std::vector<tr_index> to_remove{ lb_closures.keys() };
+
+        for (const auto& [edge, mapped_states] : all_mapped_states) 
+        {
+            for (const auto [q, p] : mapped_states)
+            {
+                for (const tr_index i : nodes_.at(q).out_tr)
+                {
+                    /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
+                    const auto& tr{ get_tr(i) }; 
+
+                    if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+                    {
+                        /* this should be valid since in our tnfa, nodes by construction either only have outgoing
+                         * normal transitions, or have outgoing e-transitions (or assertions), but never both */
+                        make_epsilon(p, q);
+                    }
+                    else if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+                    {
+                        if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                        {
+                            if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
+                                make_epsilon(p, it->second); /* continue within copied subgraph if possible  */
+                            else
+                                make_epsilon(p, tr.dst);  /* transition from copied subgraph back to main graph */
+                        }
+                    }
+                    else if (not std::holds_alternative<sof_anchor_tr>(tr.type))
+                    {
+                        /* transition within copied e-closure (if necessary) */
+                        if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
+                            make_copy(p, it->second, tr.type);
+                    }
+                }
+            }
+        }
+
+
+        /* add transitions leading into copied e-closures */
+
+        is_closure_start.resize(transitions_.size(), false);
+
+        for (const auto& [edge, mapped_states] : all_mapped_states) 
+        {
+            for (const auto [q, p] : mapped_states)
+            {
+                for (const tr_index i : nodes_.at(q).in_tr)
+                {
+                    if (not is_closure_start.at(i))
+                        continue;
+
+                    auto& tr{ transitions_.at(i) };
+                    auto* const ptr{ std::get_if<normal_tr>(&tr.type) };
+
+                    if (ptr == nullptr)
+                        continue;
+
+                    auto new_edge{ edge & ptr->cs };
+
+                    /* remove edge from existing transition */
+                    ptr->cs -= edge;
+                    if (ptr->cs.empty())
+                        to_remove.emplace_back(i);
+
+                    /* transition from main graph to copied e-closure */
+                    if (not new_edge.empty())
+                        make_transition(tr.src, p, std::move(new_edge));
+                }
+            }
+        }
+                     
+
+        /* remove lookbehind_1 transitions and empty regular transitions */
+
+        for (const tr_index i : to_remove)
+        {
+            auto& tr{ transitions_.at(i) };
+
+            /* delete transition */
+            std::erase(nodes_.at(tr.src).out_tr, i);
+            std::erase(nodes_.at(tr.dst).in_tr, i);
+            tr.unset();
+        }
+
+    }
 
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::rewrite_assertions() 

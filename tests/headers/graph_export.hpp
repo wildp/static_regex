@@ -254,7 +254,11 @@ namespace rx::testing
 
         std::println(target);
 
-        std::println(target, "    {{ rank=min; q{} }}", nfa.start_node());
+        std::print(target, "    {{ rank=min; q{};", nfa.start_node());
+        for (const auto& cont : nfa.get_cont_info())
+            if (cont.value != nfa.start_node())
+                std::print(target, " q{};", cont.value);
+        std::println(target, " }}");
 
         std::print(target, "    {{ rank=max;");
         for (const tnfa::state_t q : final_nodes)

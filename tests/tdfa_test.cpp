@@ -226,6 +226,7 @@ static_assert(not search("^ab", "bab"));
 static_assert(search("^ab", "aba", { 0, 2 }));
 static_assert(search("ab", "bab", { 1, 3 }));
 static_assert(search("ab", "aba", { 0, 2 }));
+// static_assert(search("(abc)|(^abc)", "abc", { 0, 3, 0, 3, no_tag, no_tag}));
 
 /* eol anchor tests */
 static_assert(partial_match("(?m)a$", "a", { 0, 1 }));
