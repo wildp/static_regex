@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -26,7 +27,7 @@ namespace rx::testing
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
         [[nodiscard]] constexpr std::optional<tag_result> match(I first, I last) const
         {
-            return match_implementation(first, last, false);
+            return match_implementation(first, last, false, this->match_start).first;
         }
 
         template<std::ranges::random_access_range R>
@@ -45,7 +46,7 @@ namespace rx::testing
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
         [[nodiscard]] constexpr std::optional<tag_result> partial_match(I first, I last) const
         {
-            return match_implementation(first, last, true);
+            return match_implementation(first, last, true, this->match_start).first;
         }
 
         template<std::ranges::random_access_range R>
@@ -60,12 +61,50 @@ namespace rx::testing
             return partial_match(std::basic_string_view{ cstr });
         }
 
+        template<std::random_access_iterator I>
+        requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+        [[nodiscard]] constexpr std::vector<tag_result> match_all(I first, I last) const
+        {
+            std::vector<tag_result> result;
+            auto it{ first };
+            auto prev_it{ first };
+            auto ret{ match_implementation(it, last, true, this->match_start) };
+
+            while (ret.first.has_value())
+            {
+                std::advance(it, ret.first->at(1));
+                result.emplace_back(std::move(*ret.first));
+                std::ranges::for_each(result.back(), [x = std::distance(first, prev_it)](auto& v) { v += x; });
+                if (ret.second == detail::tdfa::no_continue)
+                    break;
+                ret = match_implementation(it, last, true, this->continue_nodes().at(ret.second));
+                prev_it = it;
+            }
+
+            return result;
+        }
+
+        template<std::ranges::random_access_range R>
+        requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
+        [[nodiscard]] constexpr std::vector<tag_result> match_all(R&& r) const
+        {
+            return match_all(std::ranges::begin(r), std::ranges::end(r));
+        }
+
+        [[nodiscard]] constexpr std::vector<tag_result> match_all(const CharT* cstr) const
+        {
+            return match_all(std::basic_string_view{ cstr });
+        }
+
+
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
 
+        using impl_ret_type = std::pair<std::optional<tag_result>, std::uint16_t>;
+
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-        [[nodiscard]] constexpr std::optional<tag_result> match_implementation(I first, I last, bool enable_fallback) const;
+        [[nodiscard]] constexpr impl_ret_type match_implementation(I first, I last, bool enable_fallback, std::size_t start) const;
 
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
@@ -82,18 +121,20 @@ namespace rx::testing
     template<typename CharT>
     template<std::random_access_iterator I>
     requires (std::convertible_to<std::iter_value_t<I>, CharT>)
-    constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I last, const bool enable_fallback) const -> std::optional<tag_result>
+    constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I last, const bool enable_fallback, const std::size_t start) const -> impl_ret_type
     {
         using namespace rx::detail;
 
         std::vector<I> registers(this->reg_count());
         std::vector<bool> registers_enabled(this->reg_count(), false);
 
-        std::size_t next_state{ this->match_start };
+        std::size_t next_state{ start };
         std::size_t fallback_state{ fallback_disabled };
 
         I it{ first };
         I fallback_it{ last };
+
+        std::uint16_t continue_at{ tdfa::no_continue };
         
         while (true)
         {
@@ -107,8 +148,9 @@ namespace rx::testing
             {
                 if (this->final_nodes().contains(next_state))
                 {
-                    regops_implementation(it, this->final_nodes().at(next_state).op_index, registers, registers_enabled);
-                    it -= this->final_nodes().at(next_state).final_offset;
+                    const auto& fni{ this->final_nodes().at(next_state) };
+                    regops_implementation(it, fni.op_index, registers, registers_enabled);
+                    it -= fni.final_offset;
                     break;  /* outer */
                 }
             }
@@ -133,17 +175,21 @@ namespace rx::testing
             }
 
             if (not enable_fallback or fallback_state == fallback_disabled)
-                return {}; /* skip converting tag registers to captures */
+                return { std::nullopt, continue_at }; /* skip converting tag registers to captures */
             
+            const auto& fni{ this->final_nodes().at(fallback_state) };
+            const auto& fbni{ this->fallback_nodes().at(fallback_state) };
+
             it = fallback_it;
-            regops_implementation(it, this->fallback_nodes().at(fallback_state).op_index, registers, registers_enabled);
-            it -= this->final_nodes().at(fallback_state).final_offset;
+            regops_implementation(it, fbni.op_index, registers, registers_enabled);
+            continue_at = fbni.continue_at;
+            it -= fni.final_offset;
             break; /* outer */
         }
         
         /* convert from tag registers to captures */
 
-        std::vector<std::size_t> res;
+        tag_result res;
         const capture_info& ci{ this->get_capture_info() };
         const auto& final_reg{ this->final_registers() };
 
@@ -180,7 +226,7 @@ namespace rx::testing
             res.push_back(std::distance(first, blast));
         }
 
-        return res;
+        return { res, continue_at };
     }
 
     template<typename CharT>

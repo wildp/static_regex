@@ -1,4 +1,5 @@
 #include "headers/tdfa_matcher.hpp"
+#include "rx/fsm/flags.hpp"
 
 
 namespace
@@ -59,6 +60,26 @@ namespace
             return false;
         else
             return std::ranges::equal(match_result.value(), captures);
+    }
+
+    template<typename CharT>
+    consteval bool search_all(const CharT* pattern, const CharT* str, const std::vector<std::vector<std::size_t>>& captures = {})
+    {
+        using namespace rx::detail;
+        expr_tree ast{ pattern };
+        ast.insert_search_prefix();
+        tagged_nfa nfa{ ast, default_fsm_flags::search_all };
+        nfa.rewrite_assertions();
+
+        const rx::testing::tdfa_matcher dfa{ nfa };
+        const auto match_result{ dfa.match_all(str) };
+
+        if (captures.empty())
+            return not match_result.empty();
+        else if (match_result.empty())
+            return false;
+        else
+            return std::ranges::equal(match_result, captures);
     }
 }
 
@@ -138,13 +159,17 @@ static_assert(match("(a)+?a?", "aa", { 0, 1 }));
 static_assert(match("(a)+a?", "aa", { 1, 2 }));
 static_assert(match("(a){2,3}?a?", "aaa", { 1, 2 }));
 static_assert(match("(a){2,3}a?", "aaa", { 2, 3 }));
-// static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
-// static_assert(match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 3, 7, 7, 10 }));
+#if EXTENDED_TESTS
+static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
+static_assert(match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 3, 7, 7, 10 }));
+#endif // EXTENDED_TESTS
 
 /* submatch disambiguation tests */
-// static_assert(match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 6, 7 }));     /* [perl]: a bcdef g */
-// static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 4, 7 })); /* [posix]: ab c d efg */
-// static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 5, 7 })); /* [incorrect]: ab c d e fg */
+#if EXTENDED_TESTS
+static_assert(match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 6, 7 }));     /* [perl]: a bcdef g */
+static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 4, 7 })); /* [posix]: ab c d efg */
+static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*", "abcdefg", { 5, 7 })); /* [incorrect]: ab c d e fg */
+#endif // EXTENDED_TESTS
 
 /* capture location tests */
 static_assert(match("(a)", "a", { 0, 1 }));
@@ -189,15 +214,27 @@ static_assert(partial_match("(abc)+?a", "abcabc", { 0, 4, 0, 3 }));
 static_assert(partial_match("(abc)+?a", "abcabca", { 0, 4, 0, 3 }));
 
 /* additional capture location tests */
-// static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
-// static_assert(partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
-// static_assert(partial_match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 0, 10, 3, 7, 7, 10 }));
-// static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10}));
-// static_assert(search("([ad]b+c)+([ad])", "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
-
+#if EXTENDED_TESTS
+static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
+static_assert(partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
+static_assert(partial_match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 0, 10, 3, 7, 7, 10 }));
+static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10}));
+static_assert(search("([ad]b+c)+([ad])", "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
+#endif // EXTENDED_TESTS
 
 /* search tests */
-// TODO: add some tests
+static_assert(search("a", "abcd", { 0, 1 }));
+static_assert(search("b", "abcd", { 1, 2 }));
+static_assert(search("d", "abcd", { 3, 4 }));
+static_assert(not search("e", "abcd"));
+static_assert(search("aa", "abaab", { 2, 4 }));
+static_assert(search("ab", "abaab", { 0, 2 }));
+static_assert(search("bc", "abcd", { 1, 3 }));
+static_assert(search_all("a", "a", { { 0, 1 } }));
+static_assert(search_all("a", "aaa", { { 0, 1 }, { 1, 2 }, { 2, 3 } }));
+static_assert(search_all("ab", "abab", { { 0, 2 }, { 2, 4 } }));
+static_assert(search_all("ab", "abaab", { { 0, 2 }, { 3, 5 } }));
+// TODO: add more tests
 
 /* sof+eof anchor tests */
 static_assert(match("a$", "a"));
@@ -226,17 +263,26 @@ static_assert(not search("^ab", "bab"));
 static_assert(search("^ab", "aba", { 0, 2 }));
 static_assert(search("ab", "bab", { 1, 3 }));
 static_assert(search("ab", "aba", { 0, 2 }));
-// static_assert(search("(abc)|(^abc)", "abc", { 0, 3, 0, 3, no_tag, no_tag}));
+#if EXTENDED_TESTS
+static_assert(search("(abc)|(^abc)", "abc", { 0, 3, 0, 3, no_tag, no_tag}));
+#endif // EXTENDED_TESTS
 
-/* eol anchor tests */
-static_assert(partial_match("(?m)a$", "a", { 0, 1 }));
-static_assert(partial_match("(?m)a$", "a\na", { 0, 1 }));
-static_assert(partial_match("(?m)a$\na", "a\na", { 0, 3 }));
-static_assert(partial_match("(?m)a$\na", "a\na", { 0, 3 }));
+/* sol+eol anchor tests */
+static_assert(partial_match("(?m:a$)", "a", { 0, 1 }));
+static_assert(partial_match("(?m:a$)", "a\na", { 0, 1 }));
+static_assert(partial_match("(?m:a$\na)", "a\na", { 0, 3 }));
+static_assert(partial_match("(?m:a$\na)", "a\na", { 0, 3 }));
 static_assert(partial_match("(?m)($\na)+", "\na", { 0, 2, 0, 2 }));
 static_assert(partial_match("(?m)($\na)+", "\na\na", { 0, 4, 2, 4 }));
 static_assert(partial_match("(?m)(\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(partial_match("(?m)(a$)", "a\na", { 0, 1, 0, 1 }));
+static_assert(search("(?m:^a)", "a", { 0, 1 }));
+static_assert(search("(?m:^a)", "\na", { 1, 2 }));
+static_assert(search("(?ms)(^a.?)*", "a\na", { 0, 3, 2, 3 }));
+static_assert(search("(?m:^\n*$)", "\n\n\n\n", { 0, 4 }));
+static_assert(search("(?m:^\n*?$)", "\n\n\n\n", { 0, 0 }));
+// static_assert(partial_match("(?m)(\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
+// static_assert(search("(?m)(^\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
 
 /* other tests */
 // "R(est)|(Res)T" -> hopcroft

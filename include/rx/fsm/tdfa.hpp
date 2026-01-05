@@ -128,7 +128,6 @@ namespace rx::detail
         [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
         [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
-        [[nodiscard]] constexpr std::size_t start_node() const { return 0uz; }
         [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
         [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
