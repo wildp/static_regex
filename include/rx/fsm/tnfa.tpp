@@ -1229,6 +1229,9 @@ namespace rx::detail
         {
             for (const auto [q, p] : mapped_states)
             {
+                if (nodes_.at(q).is_final and not nodes_.at(p).is_final)
+                    make_epsilon(p, q); /* a quick hack to make (^\n) work? */
+
                 for (const tr_index i : nodes_.at(q).out_tr)
                 {
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */

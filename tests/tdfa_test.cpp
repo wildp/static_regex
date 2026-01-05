@@ -281,8 +281,10 @@ static_assert(search("(?m:^a)", "\na", { 1, 2 }));
 static_assert(search("(?ms)(^a.?)*", "a\na", { 0, 3, 2, 3 }));
 static_assert(search("(?m:^\n*$)", "\n\n\n\n", { 0, 4 }));
 static_assert(search("(?m:^\n*?$)", "\n\n\n\n", { 0, 0 }));
-// static_assert(partial_match("(?m)(\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
-// static_assert(search("(?m)(^\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(partial_match("(?m)(\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(search("(?m)(^\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(search("(?m)($\n^)+", "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(search("(?m)(^a\n)+", "a\na\na", { 0, 4, 2, 4 }));
 
 /* other tests */
 // "R(est)|(Res)T" -> hopcroft
