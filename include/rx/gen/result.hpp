@@ -32,17 +32,20 @@ namespace rx
     public:
         using size_type                 = std::size_t;
         using char_type                 = std::remove_cv_t<std::iter_value_t<Iter>>;
-        using submatch_type             = const submatch<Iter>;
+        using submatch_type             = submatch<Iter>;
         using const_iterator            = proxy_submatch_iterator;
         using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
         using iterator                  = const_iterator;
         using reverse_iterator          = const_reverse_iterator;
 
         static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
+
+        constexpr static_regex_match_result() noexcept = default;
         
         /* observers */
 
         [[nodiscard]] constexpr explicit(false) operator bool() const { return this->has_value(); }
+        [[nodiscard]] constexpr bool has_value() const { return match_end_ != iterator_type{}; }
         [[nodiscard]] constexpr size_type size() const { return (this->has_value()) ? submatch_count : 0; }
 
         /* array-like access */
@@ -56,9 +59,10 @@ namespace rx
             std::unreachable();
         }
 
-        [[nodiscard]] constexpr submatch_type at(size_type i) const noexcept
+        [[nodiscard]] constexpr submatch_type at(size_type i) const
         {
-            this->range_check(i); return this->operator[](i);
+            this->range_check(i);
+            return this->operator[](i);
         }
 
         /* iterator support */
@@ -114,6 +118,9 @@ namespace rx
         }
 
         friend struct detail::p1306_matcher<Pattern, Flags>;
+
+        template<string_literal Pattern2, typename T>
+        friend class static_regex_iterator;
     
     private:
          /* iterator implementation */
@@ -126,8 +133,11 @@ namespace rx
             using parent_type       = static_regex_match_result;
 
         public:
-            using difference_type   = std::ptrdiff_t;
+            using iterator_concept  = std::random_access_iterator_tag;
             using value_type        = submatch_type;
+            using difference_type   = std::ptrdiff_t;
+            using pointer           = void;
+            using reference         = value_type;
 
             constexpr proxy_submatch_iterator() = default;
             
@@ -135,9 +145,9 @@ namespace rx
             constexpr value_type operator[](difference_type n) const { return (*ptr_)[pos_ + n]; }
 
             constexpr it& operator++() { ++pos_; return *this; }
-            constexpr it operator++(int) { auto tmp{ *this }; ++(*this); return tmp; }
+            constexpr it  operator++(int) { auto tmp{ *this }; ++(*this); return tmp; }
             constexpr it& operator--() { --pos_; return *this; }
-            constexpr it operator--(int) { auto tmp{ *this }; --(*this); return tmp; }
+            constexpr it  operator--(int) { auto tmp{ *this }; --(*this); return tmp; }
             constexpr it& operator+=(difference_type n) { pos_ += n; return *this; }
             constexpr it& operator-=(difference_type n) { pos_ -= n; return *this; }
 
@@ -192,12 +202,7 @@ namespace rx
         constexpr void range_check(size_type n) const
         {
             if (n >= this->size())
-                throw std::out_of_range("compile_time_match_result::range_check: n >= this->size()");
-        }
-
-        [[nodiscard]] constexpr bool has_value() const
-        {
-            return match_end_ != iterator_type{};
+                throw std::out_of_range("static_regex_match_result::range_check: n >= this->size()");
         }
 
         
@@ -205,15 +210,18 @@ namespace rx
 
         using registers_type = std::conditional_t<dfa_t::value.register_count == 0, std::monostate, std::array<iterator_type, dfa_t::value.register_count>>;
         using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
+        using continue_type = std::conditional_t<Flags.is_iterator, std::uint16_t, std::monostate>;
 
     protected:
         [[clang::always_inline]] constexpr registers_type& reg() noexcept { return reg_; }
         [[clang::always_inline]] constexpr iterator_type& match_end() noexcept { return match_end_; }
+        [[clang::always_inline]] constexpr continue_type& continue_at() noexcept requires (Flags.is_iterator) { return continue_at_; }
 
     private:
-        [[no_unique_address]] registers_type reg_;
-        [[no_unique_address]] match_start_type match_start_;
-        iterator_type match_end_{};
+        [[no_unique_address]] registers_type    reg_{};
+        [[no_unique_address]] match_start_type  match_start_{};
+                              iterator_type     match_end_{};
+        [[no_unique_address]] continue_type     continue_at_{ detail::tdfa::no_continue };
     };
 }
 

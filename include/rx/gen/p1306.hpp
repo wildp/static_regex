@@ -96,16 +96,23 @@ namespace rx::detail
 
             template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
             {
-                if (fallback_state == dfa_t::value.fallback_nodes[i])
+                static constexpr auto state{ dfa_t::value.fallback_nodes[i] };
+                if (fallback_state == state)
                 {
+                    static constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, state) };
+                    static_assert(key != dfa_t::value.final_nodes.end() and *key == state);
+                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
                     static constexpr auto fbni{ dfa_t::value.fallback_node_regops.at(i) };
 
                     register_operations<fbni.op_index>(fallback_it, res);
 
-                    if constexpr (fbni.final_offset != 0)
-                        res.match_end() = fallback_it - fbni.final_offset;
+                    if constexpr (fni.final_offset != 0)
+                        res.match_end() = fallback_it - fni.final_offset;
                     else
                         res.match_end() = fallback_it;
+
+                    if constexpr (Flags.is_iterator and fbni.continue_at != tdfa::no_continue)
+                        res.continue_at() = fbni.continue_at;
 
                     return;
                 }
@@ -212,6 +219,36 @@ namespace rx::detail
         {
             result_type<const CharT*> res{ cstr };
             state<dfa_t::value.match_start>(cstr, static_cast<result<const CharT*>&>(res), fallback_disabled, cstr);
+            return res;
+        }
+
+        template<std::bidirectional_iterator I>
+        requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>)
+        [[nodiscard]] static constexpr auto operator()(const I first, const I last, const std::uint16_t continue_at) requires (Flags.is_iterator)
+        {
+            result_type<I> res{ first };
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.continue_nodes.size()))
+            {
+                if (i == continue_at)
+                    state<dfa_t::value.continue_nodes[i]>(first, static_cast<result<I>&>(res), last, fallback_disabled, first);
+            }
+
+            return res;
+        }
+
+        template<typename CharT>
+        requires (std::is_nothrow_convertible_v<CharT, char_type>)  
+        [[nodiscard]] static constexpr auto operator()(const CharT* cstr, const std::uint16_t continue_at) requires (Flags.is_iterator)
+        {
+            result_type<const CharT*> res{ cstr };
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.continue_nodes.size()))
+            {
+                if (i == continue_at)
+                    state<dfa_t::value.continue_nodes[i]>(cstr, static_cast<result<const CharT*>&>(res), fallback_disabled, cstr);
+            }
+
             return res;
         }
     };
