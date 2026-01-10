@@ -100,7 +100,7 @@ namespace rx::testing
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
 
-        using impl_ret_type = std::pair<std::optional<tag_result>, std::uint16_t>;
+        using impl_ret_type = std::pair<std::optional<tag_result>, detail::tdfa::continue_at_t>;
 
         template<std::random_access_iterator I>
         requires (std::convertible_to<std::iter_value_t<I>, CharT>)
@@ -134,7 +134,7 @@ namespace rx::testing
         I it{ first };
         I fallback_it{ last };
 
-        std::uint16_t continue_at{ tdfa::no_continue };
+        auto continue_at{ tdfa::no_continue };
         
         while (true)
         {

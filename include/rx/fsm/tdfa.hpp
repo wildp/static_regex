@@ -22,6 +22,7 @@ namespace rx::detail::tdfa
     template<typename CharT> class min;
 
     using reg_t = std::uint_least32_t;
+    using continue_at_t = tnfa::continue_at_t;
 
     struct regop
     {
@@ -60,8 +61,8 @@ namespace rx::detail::tdfa
 
     struct final_node_info
     {
-        std::size_t op_index;
-        std::uint16_t final_offset;
+        std::size_t         op_index;
+        std::uint_least16_t final_offset;
 
         friend constexpr bool operator==(const final_node_info&, const final_node_info&) noexcept = default;
         friend constexpr auto operator<=>(const final_node_info&, const final_node_info&) noexcept = default;
@@ -69,20 +70,20 @@ namespace rx::detail::tdfa
 
     struct fallback_node_info
     {
-        std::size_t op_index;
-        std::uint16_t continue_at;
+        std::size_t     op_index;
+        continue_at_t   continue_at;
 
         friend constexpr bool operator==(const fallback_node_info&, const fallback_node_info&) noexcept = default;
         friend constexpr auto operator<=>(const fallback_node_info&, const fallback_node_info&) noexcept = default;
     };
 
-    using continue_nodes_t = std::vector<std::size_t>;
-    using final_nodes_t = std::flat_map<std::size_t, final_node_info>;
-    using fallback_nodes_t = std::flat_map<std::size_t, fallback_node_info>;
-    using final_regs_t = std::vector<reg_t>;
+    using continue_nodes_t  = std::vector<std::size_t>;
+    using final_nodes_t     = std::flat_map<std::size_t, final_node_info>;
+    using fallback_nodes_t  = std::flat_map<std::size_t, fallback_node_info>;
+    using final_regs_t      = std::vector<reg_t>;
 
-    inline constexpr std::uint16_t no_continue{ std::numeric_limits<std::uint16_t>::max() };
-    inline constexpr std::size_t no_transition_regops{ std::numeric_limits<std::size_t>::max() };
+    inline constexpr continue_at_t  no_continue{ std::numeric_limits<continue_at_t>::max() };
+    inline constexpr std::size_t    no_transition_regops{ std::numeric_limits<std::size_t>::max() };
 
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
 

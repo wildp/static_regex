@@ -28,8 +28,8 @@ namespace rx::detail
         line_start,
         line_end,
         // text_end_or_newline_before,
-        // word_boundary,
-        // not_word_boundary,
+        word_boundary,
+        not_word_boundary,
     };
 
     namespace parser
@@ -245,8 +245,8 @@ namespace rx::detail
                     /* assertions */
 
                 case 'A': return assertion{ assert_type::text_start };
-                case 'b': throw parser_error("Word boundary lookaround (\\b) is not implemented");
-                case 'B': throw parser_error("Non-word boundary lookaround (\\B) is not implemented");
+                case 'b': return assertion{ assert_type::word_boundary };
+                case 'B': return assertion{ assert_type::not_word_boundary };
                 case 'G': throw parser_error("Assertion (\\G) is not implemented");
                 case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
                 case 'z': return assertion{ assert_type::text_end };

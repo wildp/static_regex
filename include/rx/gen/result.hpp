@@ -210,7 +210,7 @@ namespace rx
 
         using registers_type = std::conditional_t<dfa_t::value.register_count == 0, std::monostate, std::array<iterator_type, dfa_t::value.register_count>>;
         using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
-        using continue_type = std::conditional_t<Flags.is_iterator, std::uint16_t, std::monostate>;
+        using continue_type = std::conditional_t<Flags.is_iterator, detail::tdfa::continue_at_t, std::monostate>;
 
     protected:
         [[clang::always_inline]] constexpr registers_type& reg() noexcept { return reg_; }

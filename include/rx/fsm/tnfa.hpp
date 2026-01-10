@@ -16,18 +16,23 @@ namespace rx::detail::tnfa
 {
     using state_t = std::size_t;
     using tr_index = std::size_t;
+    using continue_at_t = std::uint_least16_t;
 
     template<typename CharT>
     using charset_t = std::conditional_t<sizeof(CharT) == 1, bitcharset<CharT>, charset<CharT>>;
 
-    enum class assert_category : std::int8_t
+    namespace assert_category
     {
-        eof, sof, lookahead, lookbehind
-    };
+        struct eof_tag_t { explicit eof_tag_t() = default; };
+        struct sof_tag_t { explicit sof_tag_t() = default; };
+        struct lookahead1_tag_t { explicit lookahead1_tag_t() = default; };
+        struct lookbehind1_tag_t { explicit lookbehind1_tag_t() = default; };
 
-    template<assert_category Value>
-    struct ac {};
-
+        inline constexpr eof_tag_t          eof_tag{};
+        inline constexpr sof_tag_t          sof_tag{};
+        inline constexpr lookahead1_tag_t   lookahead1_tag{};
+        inline constexpr lookbehind1_tag_t  lookbehind1_tag{};
+    }
 
     /* tnfa transitions */
 
@@ -104,9 +109,9 @@ namespace rx::detail::tnfa
         std::vector<tr_index> out_tr;
 
         bool is_final{ false };
-        bool is_fallback{ false };          /* must equal false if not is_final */
-        std::uint16_t final_offset{ 0 };    /* only meaningful if is_final */
-        std::uint16_t continue_at{ 0 };     /* only meaningful if is_final */
+        bool is_fallback{ false };              /* must equal false if not is_final */
+        std::uint_least16_t final_offset{ 0 };  /* only meaningful if is_final */
+        continue_at_t continue_at{ 0 };         /* only meaningful if is_final */
     };
 
     struct continue_info
@@ -179,7 +184,6 @@ namespace rx::detail
 
     private:
         using ast_t = expr_tree<char_type>;
-        using acat_t = tnfa::assert_category;
         using transition_info = tnfa::transition<char_type>::transition_type;
 
         template<in_variant<typename ast_t::type> T>
@@ -203,15 +207,13 @@ namespace rx::detail
         requires std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
         constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
 
-        template<acat_t V>
-        constexpr void make_assert(state_t q0, state_t qf, tnfa::ac<V> category);
+        template<typename T>
+        requires (one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>)
+        constexpr void make_assert(state_t q0, state_t qf, T category);
 
-        template<typename CharSet, acat_t V>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
-        constexpr void make_assert(state_t q0, state_t qf, CharSet&& cs, tnfa::ac<V> category);
-
-        // template<acat_t V>
-        // constexpr void make_assert(state_t q0, state_t qf, state_t p0, state_t pf, tnfa::ac<V> category);
+        template<typename T, typename CharSet>
+        requires (one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t> and std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>)
+        constexpr void make_assert(state_t q0, state_t qf, T category, CharSet&& cs);
 
         constexpr void make_copy(state_t q0, state_t qf, const transition_info& type);
 
@@ -256,7 +258,6 @@ namespace rx::detail
         bool has_sof_anchor_    : 1 { false };
         bool has_lookahead_1_   : 1 { false };
         bool has_lookbehind_1_  : 1 { false };
-        bool has_lookahead_n_   : 1 { false };
     };
 }
 

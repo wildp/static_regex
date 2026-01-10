@@ -11,8 +11,6 @@
 #include <variant>
 
 
-// TODO: fix implementation 
-
 namespace rx::detail::tdfa
 {
     /* tnfa -> tdfa conversion */
@@ -250,7 +248,7 @@ namespace rx::detail::tdfa
         const auto& current_cfg = state_info_.back().config;
         const auto is_final = [this](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
         const auto it{ std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state) };
-        std::optional<std::uint16_t> continue_at;
+        std::optional<continue_at_t> continue_at;
         if (it != std::ranges::end(current_cfg))
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };

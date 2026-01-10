@@ -286,6 +286,17 @@ static_assert(search("(?m)(^\n$)+", "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)($\n^)+", "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)(^a\n)+", "a\na\na", { 0, 4, 2, 4 }));
 
+/* word boundary tests */
+static_assert(not search(R"(\b)", ""));
+static_assert(search(R"(\B)", "", { 0, 0 }));
+static_assert(search_all(R"(\b)", "ab+-cd", { { 0, 0 }, { 2, 2 }, { 4, 4 }, { 6, 6 } }));
+static_assert(search_all(R"(\B)", "ab<>cd", { { 1, 1 }, { 3, 3 }, { 5, 5 } }));
+static_assert(search(R"(\B)", "a_", { 1, 1 }));
+static_assert(search(R"(a\b)", "a+", { 0, 1 }));
+static_assert(search(R"(a\b)", "a.", { 0, 1 }));
+static_assert(not search(R"(a\b)", "a_"));
+
+
 /* other tests */
 // "R(est)|(Res)T" -> hopcroft
 

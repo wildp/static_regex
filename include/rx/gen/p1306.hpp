@@ -224,7 +224,7 @@ namespace rx::detail
 
         template<std::bidirectional_iterator I>
         requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>)
-        [[nodiscard]] static constexpr auto operator()(const I first, const I last, const std::uint16_t continue_at) requires (Flags.is_iterator)
+        [[nodiscard]] static constexpr auto operator()(const I first, const I last, const tdfa::continue_at_t continue_at) requires (Flags.is_iterator)
         {
             result_type<I> res{ first };
 
@@ -239,7 +239,7 @@ namespace rx::detail
 
         template<typename CharT>
         requires (std::is_nothrow_convertible_v<CharT, char_type>)  
-        [[nodiscard]] static constexpr auto operator()(const CharT* cstr, const std::uint16_t continue_at) requires (Flags.is_iterator)
+        [[nodiscard]] static constexpr auto operator()(const CharT* cstr, const tdfa::continue_at_t continue_at) requires (Flags.is_iterator)
         {
             result_type<const CharT*> res{ cstr };
 

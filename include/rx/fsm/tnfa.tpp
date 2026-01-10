@@ -86,34 +86,25 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    template<tnfa::assert_category V>
-    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, tnfa::ac<V> /* category */)
+    template<typename T>
+    requires (one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>)
+    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */)
     {
-        using type = std::conditional_t<V == acat_t::eof, eof_anchor_tr, std::conditional_t<V == acat_t::sof, sof_anchor_tr, void>>;
+        using type = std::conditional_t<std::same_as<T, tnfa::assert_category::eof_tag_t>, eof_anchor_tr, sof_anchor_tr>;
 
         transition_create(q0, qf, std::in_place_type<type>);
     }
 
     template<typename CharT>
-    template<typename CharSet, tnfa::assert_category V>
-    requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
-    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, CharSet&& cs, tnfa::ac<V> /* category */)
+    template<typename T, typename CharSet>
+    requires (one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t> and std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>)
+    constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */, CharSet&& cs)
     {
-        using type = std::conditional_t<V == acat_t::lookahead, lookahead_1_tr, std::conditional_t<V == acat_t::lookbehind, lookbehind_1_tr, void>>;
+        using type = std::conditional_t<std::same_as<T, tnfa::assert_category::lookahead1_tag_t>, lookahead_1_tr, lookbehind_1_tr>;
 
         transition_create(q0, qf, std::in_place_type<type>, std::forward<CharSet>(cs));
     }
 
-    // template<typename CharT>
-    // template<tnfa::assert_category V>
-    // constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, const state_t p0, const state_t pf, tnfa::ac<V> /* category */)
-    // {
-    //     using type = std::conditional_t<V == acat_t::lookahead, tnfa::lookahead_tr,
-    //                             std::conditional_t<V == acat_t::lookbehind, tnfa::lookbehind_tr, void>>;
-
-    //     transition_create(q0, qf, std::in_place_type<type>, p0, pf);
-    // }
-    
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::make_copy(const state_t q0, const state_t qf, const transition_info& type)
     {
@@ -382,33 +373,74 @@ namespace rx::detail
 
                     using cs = nontransient_constexpr_version_of_t<charset_type>;
                     using p = cs::char_interval;
+                    namespace ac = tnfa::assert_category;
 
                     /* note: these are not Unicode-aware; TODO: FIX */
                     static constexpr cs newline_cs{ '\n' };
                     static constexpr cs word_cs{ p{ '0', '9'}, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
-                    [[maybe_unused]] static constexpr cs not_word_cs{ ~word_cs };
+                    static constexpr cs not_word_cs{ ~word_cs };
 
                     switch (assertion.type)
                     {
                     case assert_type::line_start:
-                        make_assert(q0, qf, newline_cs, tnfa::ac<acat_t::lookbehind>{});
+                        make_assert(q0, qf, ac::lookbehind1_tag, newline_cs);
                         has_lookbehind_1_ = true;
                         [[fallthrough]];
                     
                     case assert_type::text_start:
-                        make_assert(q0, qf, tnfa::ac<acat_t::sof>{});
+                        make_assert(q0, qf, ac::sof_tag);
                         has_sof_anchor_ = true;
                         break;
                     
                     case assert_type::line_end:
-                        make_assert(q0, qf, newline_cs, tnfa::ac<acat_t::lookahead>{});
+                        make_assert(q0, qf, ac::lookahead1_tag, newline_cs);
                         has_lookahead_1_ = true;
                         [[fallthrough]];
                     
                     case assert_type::text_end:
-                        make_assert(q0, qf, tnfa::ac<acat_t::eof>{});
+                        make_assert(q0, qf, ac::eof_tag);
                         has_eof_anchor_ = true;
                         break;
+
+                    case assert_type::word_boundary:
+                        {
+                            const state_t q1{ node_create() };
+                            const state_t q2{ node_create() };
+
+                            make_assert(q0, q1, ac::sof_tag);
+                            make_assert(q0, q1, ac::lookbehind1_tag, not_word_cs);
+                            make_assert(q1, qf, ac::lookahead1_tag, word_cs);
+
+                            make_assert(q0, q2, ac::lookbehind1_tag, word_cs);
+                            make_assert(q2, qf, ac::lookahead1_tag, not_word_cs);
+                            make_assert(q2, qf, ac::eof_tag);
+
+                            has_eof_anchor_ = true;
+                            has_sof_anchor_ = true;
+                            has_lookahead_1_ = true;
+                            has_lookbehind_1_ = true;
+                            break;
+                        }
+
+                    case assert_type::not_word_boundary:
+                        {
+                            const state_t q1{ node_create() };
+                            const state_t q2{ node_create() };
+
+                            make_assert(q0, q1, ac::sof_tag);
+                            make_assert(q0, q1, ac::lookbehind1_tag, not_word_cs);
+                            make_assert(q1, qf, ac::lookahead1_tag, not_word_cs);
+                            make_assert(q1, qf, ac::eof_tag);
+
+                            make_assert(q0, q2, ac::lookbehind1_tag, word_cs);
+                            make_assert(q2, qf, ac::lookahead1_tag, word_cs);
+                           
+                            has_eof_anchor_ = true;
+                            has_sof_anchor_ = true;
+                            has_lookahead_1_ = true;
+                            has_lookbehind_1_ = true;
+                            break;
+                        }
 
                     default:
                         throw tnfa_error("Non-trivial assertions are unimplemented");
@@ -418,7 +450,7 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::backref>:
-                throw tnfa_error("Backreferences are unimplemented");
+                throw tnfa_error("Backreferences are unsupported");
 
             default:
                 throw tree_error("Invalid tree");
@@ -1175,18 +1207,17 @@ namespace rx::detail
 
         /* set continue info and make nodes fallback */
 
-        using continue_at_type = decltype(tnfa::node::continue_at);
-        std::vector<continue_at_type> continue_ats;
+        std::vector<tnfa::continue_at_t> continue_ats;
 
         for (const auto& edge: wrap_starts)
         {
             const auto& mapped_states{ all_mapped_states.at(edge) };
             const auto mapped_cont{ mapped_states.at(continue_state.value()) };
 
-            if (cont_info_.size() >= std::numeric_limits<continue_at_type>::max())
+            if (cont_info_.size() >= std::numeric_limits<tnfa::continue_at_t>::max())
                 throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
 
-            continue_ats.emplace_back(std::saturate_cast<continue_at_type>(cont_info_.size()));
+            continue_ats.emplace_back(std::saturate_cast<tnfa::continue_at_t>(cont_info_.size()));
             cont_info_.emplace_back(mapped_cont);
         }
 
@@ -1199,7 +1230,7 @@ namespace rx::detail
                 if (it == closure_wraparounds.end())
                     continue;
 
-                const continue_at_type continue_at{ continue_ats.at(it->second) };
+                const auto continue_at{ continue_ats.at(it->second) };
 
                 for (const state_t qf : fallback_states)
                 {
@@ -1320,7 +1351,7 @@ namespace rx::detail
         if (has_lookbehind_1_) rewrite_sc_lookbehind();
         if (has_lookahead_1_) rewrite_sc_lookahead();
 
-        if (has_sof_anchor_ or has_eof_anchor_ or has_lookbehind_1_ or has_lookahead_1_ or has_lookahead_n_) remove_dead_and_unreachable_states();
+        if (has_sof_anchor_ or has_eof_anchor_ or has_lookbehind_1_ or has_lookahead_1_) remove_dead_and_unreachable_states();
     }
 
     
