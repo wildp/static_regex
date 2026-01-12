@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <cstddef>
@@ -103,12 +109,12 @@ namespace rx::detail
                     to_insert.emplace_back(std::max<char_type>(lower, 'a') - offset, std::min<char_type>(upper, 'a') - offset);
                 }
             }
-            
+
             for (const auto [lower, upper] : to_insert)
                 insert(lower, upper);
         }
     }
-    
+
     template<bool IsNarrow>
     constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noexcept(IsNarrow)
     {
@@ -126,28 +132,28 @@ namespace rx::detail
         static constexpr cs print{ p{ ' ', '~' } };
         static constexpr cs punct{ p{ '!', '/' }, p{ ':', '@' }, p{ '[', '`' }, p{ '{', '~' } };
         static constexpr cs space{ '\v', '\t', '\n', '\f', '\r', ' ' };
-        static constexpr cs perls{ '\t', '\n', '\f', '\r', ' '};
+        static constexpr cs perls{ '\t', '\n', '\f', '\r', ' ' };
         static constexpr cs upper{ p{ 'A', 'Z' } };
         static constexpr cs word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
         static constexpr cs xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
-        
+
         switch (ncc)
         {
-        case named_character_class::alphanumeric:       data_ |= alnum;  break;
-        case named_character_class::alphabetic:         data_ |= alpha;  break;
-        case named_character_class::ascii:              data_ |= ascii;  break;
-        case named_character_class::blank:              data_ |= blank;  break;
-        case named_character_class::control:            data_ |= cntrl;  break;
-        case named_character_class::digits:             data_ |= digit;  break;
-        case named_character_class::graphical:          data_ |= graph;  break;
-        case named_character_class::lowercase:          data_ |= lower;  break;
-        case named_character_class::printable:          data_ |= print;  break;
-        case named_character_class::punctuation:        data_ |= punct;  break;
-        case named_character_class::posix_whitespace:   data_ |= space;  break;
-        case named_character_class::perl_whitespace:    data_ |= perls;  break;
-        case named_character_class::uppercase:          data_ |= upper;  break;
-        case named_character_class::word:               data_ |= word;   break;
-        case named_character_class::hexdigits:          data_ |= xdigit; break;
+        case named_character_class::alphanumeric:     data_ |= alnum;  break;
+        case named_character_class::alphabetic:       data_ |= alpha;  break;
+        case named_character_class::ascii:            data_ |= ascii;  break;
+        case named_character_class::blank:            data_ |= blank;  break;
+        case named_character_class::control:          data_ |= cntrl;  break;
+        case named_character_class::digits:           data_ |= digit;  break;
+        case named_character_class::graphical:        data_ |= graph;  break;
+        case named_character_class::lowercase:        data_ |= lower;  break;
+        case named_character_class::printable:        data_ |= print;  break;
+        case named_character_class::punctuation:      data_ |= punct;  break;
+        case named_character_class::posix_whitespace: data_ |= space;  break;
+        case named_character_class::perl_whitespace:  data_ |= perls;  break;
+        case named_character_class::uppercase:        data_ |= upper;  break;
+        case named_character_class::word:             data_ |= word;   break;
+        case named_character_class::hexdigits:        data_ |= xdigit; break;
         }
     }
 

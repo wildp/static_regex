@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <deque>
@@ -9,8 +15,8 @@
 #include <variant>
 
 #include <rx/etc/util.hpp>
-#include <rx/fsm/tnfa.hpp>
 #include <rx/fsm/tdfa.hpp>
+#include <rx/fsm/tnfa.hpp>
 
 
 namespace rx::testing
@@ -75,7 +81,7 @@ namespace rx::testing
         static_assert(std::same_as<CharT, char>); // Unicode transcoding unsupported
 
         using ast_t = detail::expr_tree<CharT>;
-        
+
         std::println(target, "digraph {{");
         std::println(target, "    rankdir=\"TB\";");
         std::println(target, "    fontsize=10;");
@@ -89,10 +95,9 @@ namespace rx::testing
         {
             const std::size_t current_idx{ to_visit.front() };
             to_visit.pop_front();
-            
+
             std::string label = ast.get_expr(current_idx).visit(detail::overloads{
-                [&](const ast_t::assertion& asr) -> std::string
-                {
+                [&](const ast_t::assertion& asr) -> std::string {
                     switch (asr.type)
                     {
                     case detail::assert_type::text_start:
@@ -105,31 +110,26 @@ namespace rx::testing
                         throw std::runtime_error("unrecognised assert_type");
                     }
                 },
-                [&](const ast_t::concat& cat) -> std::string
-                {
+                [&](const ast_t::concat& cat) -> std::string {
                     to_visit.append_range(cat.idxs);
-                    edges.append_range(cat.idxs | std::views::transform([&](std::size_t dst) -> std::pair<std::size_t, std::size_t>{ return { current_idx, dst }; }));
+                    edges.append_range(cat.idxs | std::views::transform([&](std::size_t dst) -> std::pair<std::size_t, std::size_t> { return { current_idx, dst }; }));
                     return "";
                 },
-                [&](const ast_t::alt& alt) -> std::string
-                {
+                [&](const ast_t::alt& alt) -> std::string {
                     to_visit.append_range(alt.idxs);
-                    edges.append_range(alt.idxs | std::views::transform([&](std::size_t dst) -> std::pair<std::size_t, std::size_t>{ return { current_idx, dst }; }));
+                    edges.append_range(alt.idxs | std::views::transform([&](std::size_t dst) -> std::pair<std::size_t, std::size_t> { return { current_idx, dst }; }));
                     return "|";
                 },
-                [&](const ast_t::tag& tag) -> std::string
-                {
+                [&](const ast_t::tag& tag) -> std::string {
                     const auto [is_lhs, is_rhs]{ ci.capture_side(tag.number) };
                     if (is_lhs) return "(";
                     if (is_rhs) return ")";
                     return "()";
                 },
-                [&](const ast_t::backref& bref) -> std::string
-                {
+                [&](const ast_t::backref& bref) -> std::string {
                     return std::format("\\{}", bref.number);
                 },
-                [&](const ast_t::repeat& rep) -> std::string
-                {
+                [&](const ast_t::repeat& rep) -> std::string {
                     to_visit.emplace_back(rep.idx);
                     edges.emplace_back(current_idx, rep.idx);
 
@@ -150,12 +150,10 @@ namespace rx::testing
                     else
                         return std::format("{{{},{}}}{}", rep.min, rep.max, qualifier);
                 },
-                [&](const ast_t::char_str& lit) -> std::string
-                {
+                [&](const ast_t::char_str& lit) -> std::string {
                     return std::format("{:?}", lit.data);
                 },
-                [&](const ast_t::char_class& cla) -> std::string
-                {
+                [&](const ast_t::char_class& cla) -> std::string {
                     return make_pretty_charset_string(cla.data.get());
                 },
             });
@@ -210,20 +208,18 @@ namespace rx::testing
         {
             const auto& tr{ nfa.get_tr(i) };
 
-            if (std::holds_alternative<std::monostate>(tr.type))    
+            if (std::holds_alternative<std::monostate>(tr.type))
                 continue;
 
-            std::string label{ tr.type.visit(detail::overloads(
-                [] (std::monostate)
-                {
+            std::string label{
+                tr.type.visit(detail::overloads(
+                [](std::monostate) {
                     return std::string{};
                 },
-                [](const tnfa::normal_tr<CharT>& t)
-                {
+                [](const tnfa::normal_tr<CharT>& t) {
                     return make_pretty_charset_string(t.cs);
                 },
-                [](const tnfa::epsilon_tr& t)
-                {
+                [](const tnfa::epsilon_tr& t) {
                     if (t.tag == 0)
                         return std::format("{}/ϵ", t.priority);
                     else if (t.tag > 0)
@@ -231,23 +227,20 @@ namespace rx::testing
                     else
                         return std::format("{}/-t{}", t.priority, -t.tag);
                 },
-                [](const tnfa::sof_anchor_tr&)
-                {
+                [](const tnfa::sof_anchor_tr&) {
                     return std::string{ "^" };
                 },
-                [](const tnfa::eof_anchor_tr&)
-                {
+                [](const tnfa::eof_anchor_tr&) {
                     return std::string{ "$" };
                 },
-                [](const tnfa::lookahead_1_tr<CharT>& t)
-                {
+                [](const tnfa::lookahead_1_tr<CharT>& t) {
                     return std::format("(?={})", make_pretty_charset_string(t.cs));
                 },
-                [](const tnfa::lookbehind_1_tr<CharT>& t)
-                {
+                [](const tnfa::lookbehind_1_tr<CharT>& t) {
                     return std::format("(?<={})", make_pretty_charset_string(t.cs));
                 }
-            )) };
+               ))
+            };
 
             std::println(target, "    q{} -> q{} [label={:?}];", tr.src, tr.dst, label);
         }
@@ -270,11 +263,11 @@ namespace rx::testing
 
 
     template<print_destination T, typename CharT>
-    void graph_export(T target, const rx::detail::tagged_dfa<CharT>& dfa)
+    void graph_export(T target, const detail::tagged_dfa<CharT>& dfa)
     {
         static_assert(std::same_as<CharT, char>); // Unicode transcoding unsupported
 
-        namespace tdfa = rx::detail::tdfa;
+        namespace tdfa = detail::tdfa;
 
         std::println(target, "digraph {{");
         std::println(target, "    rankdir=\"LR\";");
@@ -296,7 +289,7 @@ namespace rx::testing
             {
                 label += 'f';
                 if (it->second.op_index != tdfa::no_transition_regops)
-                    xlabel += std::format("{}({})", (xlabel.empty() ? "/" : "") , it->second.op_index);
+                    xlabel += std::format("{}({})", (xlabel.empty() ? "/" : ""), it->second.op_index);
             }
 
             std::println(target, "     q{} [shape=doublecircle,label={:?},xlabel={:?}];", i, label, xlabel);

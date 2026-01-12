@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -52,11 +58,11 @@ namespace rx::detail
         struct star {};
         struct plus {};
         struct quest {};
-        
+
         struct repeat_n_m
         {
             std::int_least16_t min;
-            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */ 
+            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */
         };
 
         struct assertion
@@ -68,7 +74,7 @@ namespace rx::detail
         struct char_class
         {
             using impl_type = char_class_impl<std::same_as<char, CharT>>;
-            using underlying_char_type = typename impl_type::char_type;
+            using underlying_char_type = impl_type::char_type;
 
             impl_type data;
 
@@ -85,13 +91,9 @@ namespace rx::detail
             constexpr explicit char_str(CharT c) : data{ c } {}
 
             template<std::input_iterator I, std::sentinel_for<I> S>
-            requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+            requires std::convertible_to<std::iter_value_t<I>, CharT>
             constexpr explicit char_str(I first, S last) : data(first, last) {}
-    
-            // template<std::ranges::input_range R>
-            // requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
-            // constexpr explicit char_str(std::from_range_t, R&& r) : char_str(std::ranges::begin(r), std::ranges::end(r)) {}
-            
+
             constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
             {
                 data += c;
@@ -123,7 +125,7 @@ namespace rx::detail
         {
             std::uint_least16_t number;
         };
-    }        
+    }
 
 
     /* lexer class definition */
@@ -133,6 +135,7 @@ namespace rx::detail
     {
         using sv_type = std::basic_string_view<CharT>;
         using it_type = sv_type::const_iterator;
+
     public:
         using token_t = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
                                      tok::lparen, tok::rparen, tok::vert,
@@ -142,21 +145,21 @@ namespace rx::detail
 
         // TODO: rangify API?
 
-        constexpr explicit lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {} 
+        constexpr explicit lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}
         constexpr token_t nexttok();
 
         friend class parser::ll1<CharT>;
 
     private:
-        constexpr std::size_t               parse_hex(std::size_t fixed_amt);
-        constexpr std::size_t               parse_remaining_oct(std::size_t init);
-        constexpr std::size_t               parse_arbitrary_oct();
-        constexpr tok::backref              parse_bref();
-        constexpr tok::repeat_n_m           parse_repeat();
-        constexpr token_t                   parse_bref_or_octal(CharT init);
-        constexpr tok::char_str<CharT>      parse_literal_string(it_type begin);
-        constexpr tok::char_class<CharT>    parse_char_class();
-        constexpr named_character_class     parse_posix_char_class();
+        constexpr std::size_t            parse_hex(std::size_t fixed_amt);
+        constexpr std::size_t            parse_remaining_oct(std::size_t init);
+        constexpr std::size_t            parse_arbitrary_oct();
+        constexpr tok::backref           parse_bref();
+        constexpr tok::repeat_n_m        parse_repeat();
+        constexpr token_t                parse_bref_or_octal(CharT init);
+        constexpr tok::char_str<CharT>   parse_literal_string(it_type begin);
+        constexpr tok::char_class<CharT> parse_char_class();
+        constexpr named_character_class  parse_posix_char_class();
 
         it_type it_;
         it_type end_;
@@ -177,7 +180,7 @@ namespace rx::detail
 
         const auto current{ it_ };
 
-        switch (*it_++) 
+        switch (*it_++)
         {
         case '(': return lparen{};
         case ')': return rparen{};
@@ -190,78 +193,78 @@ namespace rx::detail
         case '|': return vert{};
 
         case '\\':
+        {
+            using ncc = named_character_class;
+
+            if (it_ == end_)
+                throw pattern_error("Pattern cannot end with '\\'");
+
+            const auto escaped{ *it_++ };
+
+            switch (escaped)
             {
-                using ncc = named_character_class;
+            /* standard escape sequences */
 
-                if (it_ == end_)
-                    throw pattern_error("Pattern cannot end with '\\'");
-                
-                const auto escaped{ *it_++ };
+            case 'a': return char_str{ '\a' };
+            // case 'b': return char_str{ '\b' }; /* use \010 instead */¬
+            case 'f': return char_str{ '\f' };
+            case 't': return char_str{ '\t' };
+            case 'n': return char_str{ '\n' };
+            case 'r': return char_str{ '\r' };
+            case 'v': return char_str{ '\v' };
 
-                switch (escaped)
-                {
-                    /* standard escape sequences */
+            /* numeric escape sequences */
 
-                case 'a': return char_str{ '\a' };
-                // case 'b': return char_str{ '\b' }; /* use \010 instead */¬
-                case 'f': return char_str{ '\f' };
-                case 't': return char_str{ '\t' };
-                case 'n': return char_str{ '\n' };
-                case 'r': return char_str{ '\r' };
-                case 'v': return char_str{ '\v' };
+            case 'o': return char_str{ parse_arbitrary_oct() };
+            case 'x': return char_str{ parse_hex(0) };
+            case 'u': return char_str{ parse_hex(4) };
+            case 'U': return char_str{ parse_hex(8) };
 
-                    /* numeric escape sequences */
-                
-                case 'o': return char_str{ parse_arbitrary_oct() };
-                case 'x': return char_str{ parse_hex(0) };
-                case 'u': return char_str{ parse_hex(4) };
-                case 'U': return char_str{ parse_hex(8) };
-                    
-                    /* perl character classes */
+            /* perl character classes */
 
-                case 'd': return char_class{ ncc::digits };
-                case 'D': return char_class{ ncc::digits, true };
-                case 's': return char_class{ ncc::perl_whitespace };
-                case 'S': return char_class{ ncc::perl_whitespace, true };
-                case 'w': return char_class{ ncc::word };
-                case 'W': return char_class{ ncc::word, true };
+            case 'd': return char_class{ ncc::digits };
+            case 'D': return char_class{ ncc::digits, true };
+            case 's': return char_class{ ncc::perl_whitespace };
+            case 'S': return char_class{ ncc::perl_whitespace, true };
+            case 'w': return char_class{ ncc::word };
+            case 'W': return char_class{ ncc::word, true };
 
-                    /* octal escape sequences and backreferences */
+            /* octal escape sequences and backreferences */
 
-                case '0':
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                case '5':
-                case '6':
-                case '7': return parse_bref_or_octal(escaped);
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7': return parse_bref_or_octal(escaped);
 
-                case '8':
-                case '9': return backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
+            case '8':
+            case '9': return backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
 
-                case 'g': return parse_bref();
+            case 'g': return parse_bref();
 
-                    /* assertions */
+            /* assertions */
 
-                case 'A': return assertion{ assert_type::text_start };
-                case 'b': return assertion{ assert_type::word_boundary };
-                case 'B': return assertion{ assert_type::not_word_boundary };
-                case 'G': throw parser_error("Assertion (\\G) is not implemented");
-                case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
-                case 'z': return assertion{ assert_type::text_end };
+            case 'A': return assertion{ assert_type::text_start };
+            case 'b': return assertion{ assert_type::word_boundary };
+            case 'B': return assertion{ assert_type::not_word_boundary };
+            case 'G': throw parser_error("Assertion (\\G) is not implemented");
+            case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
+            case 'z': return assertion{ assert_type::text_end };
 
-                    /* literal string */
+            /* literal string */
 
-                case 'Q': return parse_literal_string(current);
+            case 'Q': return parse_literal_string(current);
 
-                default:
-                    if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
-                        throw pattern_error("Invalid control character");
-                    else
-                        return char_str{ escaped }; /* TODO: extract multibyte character */
-                }
+            default:
+                if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
+                    throw pattern_error("Invalid control character");
+                else
+                    return char_str{ escaped }; /* TODO: extract multibyte character */
             }
+        }
 
         case '{': return parse_repeat();
         case '[': return parse_char_class();
@@ -283,7 +286,7 @@ namespace rx::detail
 
         std::size_t result{ 0 };
 
-        if (it_ == end_ )
+        if (it_ == end_)
             throw pattern_error("EOF in escape sequence");
 
         const auto lookahead{ *it_ };
@@ -291,7 +294,7 @@ namespace rx::detail
         if (lookahead == '{')
         {
             /* arbitrary number of digits contained in {} */
-            
+
             std::size_t digits{ 0 };
             ++it_;
 
@@ -343,7 +346,7 @@ namespace rx::detail
         else
         {
             std::size_t digits{ 0 };
-            
+
             while (true)
             {
                 if (it_ == end_)
@@ -377,7 +380,7 @@ namespace rx::detail
         static constexpr std::size_t octal_base{ 010 };
 
         std::size_t result{ init };
-       
+
         for (std::size_t i{ 0 }; i < 2; ++i)
         {
             if (it_ == end_)
@@ -392,7 +395,7 @@ namespace rx::detail
 
             ++it_;
         }
-     
+
         return result;
     }
 
@@ -403,7 +406,7 @@ namespace rx::detail
 
         std::size_t result{ 0 };
 
-        if (it_ == end_ )
+        if (it_ == end_)
             throw pattern_error("EOF in escape sequence");
 
         const auto lookahead{ *it_ };
@@ -412,7 +415,7 @@ namespace rx::detail
             throw pattern_error("Invalid escape sequence");
 
         /* arbitrary number of digits contained in {} */
-        
+
         std::size_t digits{ 0 };
         ++it_;
 
@@ -448,8 +451,8 @@ namespace rx::detail
         static constexpr std::size_t base{ 10 };
 
         backref bref{ 0 };
-        
-        if (it_ == end_ )
+
+        if (it_ == end_)
             throw pattern_error("Incomplete escape sequence");
 
         auto next{ *it_++ };
@@ -467,9 +470,10 @@ namespace rx::detail
 
                 if (next == '}')
                     break;
+                
                 if (not ('0' <= next and next <= '9'))
                     throw pattern_error("Incomplete escape sequence");;
-                
+
                 bref.number *= base;
                 bref.number += next - '0';
             }
@@ -483,7 +487,7 @@ namespace rx::detail
         {
             throw pattern_error("Incomplete escape sequence");
         }
-     
+
 
         if (bref.number == 0)
             throw pattern_error("Backreference to non-existent submatch");
@@ -503,7 +507,7 @@ namespace rx::detail
         bool parse_min{ true };
         bool parse_max{ true };
 
-        while  (parse_min)
+        while (parse_min)
         {
             if (it_ == end_)
                 throw pattern_error("Repeater is incomplete");
@@ -524,7 +528,7 @@ namespace rx::detail
             else if (c == '}')
             {
                 parse_min = false;
-                
+
                 /* skip parsing max */
                 max = min;
                 parse_max = false;
@@ -554,7 +558,7 @@ namespace rx::detail
                 if (max != -1 and max < min)
                     throw pattern_error("Invalid repeater (max is less than min)");
 
-                parse_max = false; 
+                parse_max = false;
             }
             else
             {
@@ -597,7 +601,7 @@ namespace rx::detail
                 break;
 
             bref.number = 0;
-            
+
             result *= base;
             result += lookahead - '0';
             ++it_;
@@ -653,7 +657,7 @@ namespace rx::detail
         std::optional<underlying_char_t> c{};
         bool is_range{ false };
 
-        for (bool loop{ true }; loop; )
+        for (bool loop{ true }; loop;)
         {
             if (it_ == end_)
                 throw pattern_error("EOF in character class");
@@ -680,58 +684,58 @@ namespace rx::detail
                 break;
 
             case '\\':
+            {
+                if (it_ == end_)
+                    throw pattern_error("Pattern cannot end with '\\'");
+
+                const auto escaped{ *it_++ };
+
+                switch (escaped)
                 {
-                    if (it_ == end_)
-                        throw pattern_error("Pattern cannot end with '\\'");
-                    
-                    const auto escaped{ *it_++ };
+                /* standard escape sequences */
 
-                    switch (escaped)
-                    {
-                        /* standard escape sequences */
+                case 'a': nc = '\a'; break;
+                case 'b': nc = '\b'; break;
+                case 'f': nc = '\f'; break;
+                case 't': nc = '\t'; break;
+                case 'n': nc = '\n'; break;
+                case 'r': nc = '\r'; break;
+                case 'v': nc = '\v'; break;
 
-                    case 'a': nc = '\a'; break;
-                    case 'b': nc = '\b'; break;
-                    case 'f': nc = '\f'; break;
-                    case 't': nc = '\t'; break;
-                    case 'n': nc = '\n'; break;
-                    case 'r': nc = '\r'; break;
-                    case 'v': nc = '\v'; break;
+                /* numeric escape sequences */
 
-                        /* numeric escape sequences */
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7': nc = parse_remaining_oct(escaped - '0'); break;
 
-                    case '0':
-                    case '1':
-                    case '2':
-                    case '3':
-                    case '4':
-                    case '5':
-                    case '6':
-                    case '7': nc = parse_remaining_oct(escaped - '0'); break;
-
-                    case 'o': nc = parse_arbitrary_oct(); break;
-                    case 'x': nc = parse_hex(0); break;
-                    case 'u': nc = parse_hex(4); break;
-                    case 'U': nc = parse_hex(8); break;
+                case 'o': nc = parse_arbitrary_oct(); break;
+                case 'x': nc = parse_hex(0); break;
+                case 'u': nc = parse_hex(4); break;
+                case 'U': nc = parse_hex(8); break;
                         
-                        /* perl character classes */
+                /* perl character classes */
 
-                    case 'd': selected_cc = { ncc::digits, false }; break;
-                    case 'D': selected_cc = { ncc::digits, true }; break;
-                    case 's': selected_cc = { ncc::perl_whitespace, false }; break;
-                    case 'S': selected_cc = { ncc::perl_whitespace, true }; break;
-                    case 'w': selected_cc = { ncc::word, false }; break;
-                    case 'W': selected_cc = { ncc::word, true }; break;
+                case 'd': selected_cc = { ncc::digits, false }; break;
+                case 'D': selected_cc = { ncc::digits, true }; break;
+                case 's': selected_cc = { ncc::perl_whitespace, false }; break;
+                case 'S': selected_cc = { ncc::perl_whitespace, true }; break;
+                case 'w': selected_cc = { ncc::word, false }; break;
+                case 'W': selected_cc = { ncc::word, true }; break;
 
-                    default:
-                        if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
-                            throw pattern_error("Invalid control character");
-                        else
-                            nc = escaped; /* TODO: extract multibyte character */
-                        break;
-                    }
+                default:
+                    if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
+                        throw pattern_error("Invalid control character");
+                    else
+                        nc = escaped; /* TODO: extract multibyte character */
+                    break;
                 }
                 break;
+            }
 
             case '[':
                 selected_cc = { parse_posix_char_class(), false };
@@ -820,7 +824,9 @@ namespace rx::detail
         };
 
 
-        if (it_ == end_ or *it_ != ':') throw pattern_error("Invalid POSIX Character Class");
+        if (it_ == end_ or *it_ != ':')
+            throw pattern_error("Invalid POSIX Character Class");
+        
         ++it_;
 
         if (it_ != end_)
@@ -839,37 +845,45 @@ namespace rx::detail
                     }
                     else if (*it_ == 'n')
                     {
-                        if (test(++it_, end_, "um:]")) return ncc::alphanumeric;
+                        if (test(++it_, end_, "um:]"))
+                            return ncc::alphanumeric;
                     }
                     else if (*it_ == 'p')
                     {
-                        if (test(++it_, end_, "ha:]")) return ncc::alphabetic;
+                        if (test(++it_, end_, "ha:]"))
+                            return ncc::alphabetic;
                     }
                 }
                 else if (*it_ == 's')
                 {
-                    if (test(++it_, end_, "cii:]")) return ncc::ascii;
+                    if (test(++it_, end_, "cii:]"))
+                        return ncc::ascii;
                 }
                 break;
 
             case 'b':
-                if (test(it_, end_, "lank:]")) return ncc::blank;
+                if (test(it_, end_, "lank:]"))
+                    return ncc::blank;
                 break;
 
             case 'c':
-                if (test(it_, end_, "ntrl:]")) return ncc::control;
+                if (test(it_, end_, "ntrl:]"))
+                    return ncc::control;
                 break;
 
             case 'd':
-                if (test(it_, end_, "igit:]")) return ncc::digits;
+                if (test(it_, end_, "igit:]"))
+                    return ncc::digits;
                 break;
 
             case 'g':
-                if (test(it_, end_, "raph:]")) return ncc::graphical;
+                if (test(it_, end_, "raph:]"))
+                    return ncc::graphical;
                 break;
 
             case 'l':
-                if (test(it_, end_, "ower:]")) return ncc::lowercase;
+                if (test(it_, end_, "ower:]"))
+                    return ncc::lowercase;
                 break;
 
             case 'p':
@@ -877,16 +891,19 @@ namespace rx::detail
                     break;
                 if (*it_ == 'r')
                 {
-                    if (test(++it_, end_, "int:]")) return ncc::printable;
+                    if (test(++it_, end_, "int:]"))
+                        return ncc::printable;
                 }
                 else if (*it_ == 'u')
                 {
-                    if (test(++it_, end_, "nct:]")) return ncc::punctuation;
+                    if (test(++it_, end_, "nct:]"))
+                        return ncc::punctuation;
                 }
                 break;
 
             case 's':
-                if (test(it_, end_, "pace:]")) return ncc::posix_whitespace;
+                if (test(it_, end_, "pace:]"))
+                    return ncc::posix_whitespace;
                 break;
 
             case 'u':
@@ -894,11 +911,13 @@ namespace rx::detail
                 break;
 
             case 'w':
-                if (test(it_, end_, "ord:]")) return ncc::word;
+                if (test(it_, end_, "ord:]"))
+                    return ncc::word;
                 break;
 
             case 'x':
-                if (test(it_, end_, "digit:]")) return ncc::hexdigits;
+                if (test(it_, end_, "digit:]"))
+                    return ncc::hexdigits;
                 break;
 
             default:

@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -17,7 +23,7 @@ namespace rx::detail
     class bitcharset
     {
         using integer_type = std::uint64_t;
-        static constexpr std::size_t byte_bits{ std::numeric_limits<unsigned char>::digits }; 
+        static constexpr std::size_t byte_bits{ std::numeric_limits<unsigned char>::digits };
         static constexpr std::size_t integer_bits{ std::numeric_limits<integer_type>::digits };
         static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
         static constexpr std::size_t array_size{ total_size / integer_bits };
@@ -33,12 +39,12 @@ namespace rx::detail
         consteval bitcharset() noexcept = default;
 
         template<typename... Args>
-        requires (sizeof...(Args) >= 1 and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...))
+        requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
         constexpr explicit bitcharset(Args... args)
         {
             template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
             {
-                if constexpr (std::convertible_to<Args...[i], char_type>  )
+                if constexpr (std::convertible_to<Args...[i], char_type>)
                     insert(args...[i]);
                 else if constexpr (std::convertible_to<Args...[i], char_interval>)
                     insert(args...[i].first, args...[i].second);
@@ -53,7 +59,7 @@ namespace rx::detail
             integer_type result{ 0uz };
             for (std::size_t i{ 0 }; i < array_size; ++i)
                 result |= data_[i];
-            return (result == 0); 
+            return (result == 0);
         }
 
         [[nodiscard]] constexpr std::size_t count() const noexcept
@@ -99,11 +105,11 @@ namespace rx::detail
                     tmp >>= zeros;
 
                     const int ones{ std::countr_one(tmp) }; /* note: ones >= 1 is always true */
-                    const auto prev_pos{ position }; 
-                    
+                    const auto prev_pos{ position };
+
                     position += ones;
                     offset += ones;
-                    
+
                     if (not result.empty() and result.back().second == prev_pos - 1)
                         result.back().second = position - 1;
                     else
@@ -146,7 +152,7 @@ namespace rx::detail
         {
             /* widen to accommodate signed chars and to ensure last + 1 > last */
             const auto beg{ static_cast<int>(first) - std::numeric_limits<char_type>::min() };
-            const auto end{ static_cast<int>(last) - std::numeric_limits<char_type>::min() + 1 }; 
+            const auto end{ static_cast<int>(last) - std::numeric_limits<char_type>::min() + 1 };
 
             const std::size_t select1{ (beg / integer_bits) };
             const std::size_t select2{ (end / integer_bits) };
@@ -156,7 +162,7 @@ namespace rx::detail
             for (std::size_t i{ 0 }; i < array_size; ++i)
             {
                 data_[i] |= (((i == select1) * mask1) | ((i < select1) * ~0uz))
-                            ^ (((i == select2) * mask2) | ((i < select2) * ~0uz));
+                    ^ (((i == select2) * mask2) | ((i < select2) * ~0uz));
             }
         }
 
@@ -240,9 +246,9 @@ namespace rx::detail
         constexpr void make_ascii_case_insensitive() noexcept requires std::same_as<char_type, char>
         {
             static constexpr auto uppercase_beg{ static_cast<int>('a') - std::numeric_limits<char>::min() };
-            static constexpr auto uppercase_end{ static_cast<int>('z') - std::numeric_limits<char>::min() + 1 }; 
+            static constexpr auto uppercase_end{ static_cast<int>('z') - std::numeric_limits<char>::min() + 1 };
             static constexpr auto lowercase_beg{ static_cast<int>('A') - std::numeric_limits<char>::min() };
-            static constexpr auto lowercase_end{ static_cast<int>('Z') - std::numeric_limits<char>::min() + 1 }; 
+            static constexpr auto lowercase_end{ static_cast<int>('Z') - std::numeric_limits<char>::min() + 1 };
 
             /* ensure that A-Za-z lies in the same integer_t in bitcharset<char> */
             static constexpr auto index{ uppercase_beg / integer_bits };
@@ -278,7 +284,7 @@ namespace rx::detail
 
         template<typename T>
         using partition_contents_result = std::vector<std::vector<T>>;
-     
+
         [[nodiscard]] static constexpr auto partition(const std::vector<ref>& input) -> partition_result;
 
         template<typename T>
@@ -326,7 +332,7 @@ namespace rx::detail
             partitions = std::move(next_gen);
         }
 
-        /* remove last element, which corresponds to intersection of all complements */ 
+        /* remove last element, which corresponds to intersection of all complements */
         partitions.pop_back();
 
         std::ranges::reverse(partitions); // TEMPORARY: TODO: Remove later
@@ -451,5 +457,4 @@ namespace rx::detail
 
         return result;
     }
-
 }

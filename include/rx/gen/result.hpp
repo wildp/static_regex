@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <cstddef>
@@ -24,24 +30,24 @@ namespace rx
     template<std::bidirectional_iterator Iter, string_literal Pattern, detail::fsm_flags Flags>
     class static_regex_match_result
     {
-        using factory                   = detail::submatch_factory<Iter>;
-        using dfa_t                     = detail::compiled_dfa<Pattern, Flags>;
+        using factory                = detail::submatch_factory<Iter>;
+        using dfa_t                  = detail::compiled_dfa<Pattern, Flags>;
 
         class proxy_submatch_iterator;
 
     public:
-        using size_type                 = std::size_t;
-        using char_type                 = std::remove_cv_t<std::iter_value_t<Iter>>;
-        using submatch_type             = submatch<Iter>;
-        using const_iterator            = proxy_submatch_iterator;
-        using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
-        using iterator                  = const_iterator;
-        using reverse_iterator          = const_reverse_iterator;
+        using size_type              = std::size_t;
+        using char_type              = std::remove_cv_t<std::iter_value_t<Iter>>;
+        using submatch_type          = submatch<Iter>;
+        using const_iterator         = proxy_submatch_iterator;
+        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using iterator               = const_iterator;
+        using reverse_iterator       = const_reverse_iterator;
 
         static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
 
         constexpr static_regex_match_result() noexcept = default;
-        
+
         /* observers */
 
         [[nodiscard]] constexpr explicit(false) operator bool() const { return this->has_value(); }
@@ -52,7 +58,7 @@ namespace rx
 
         [[nodiscard]] constexpr submatch_type operator[](size_type n) const noexcept
         {
-            template for (constexpr size_type N: std::views::iota(0uz, submatch_count))
+            template for (constexpr size_type N : std::views::iota(0uz, submatch_count))
             {
                 if (n == N) return this->get<N>();
             }
@@ -70,11 +76,11 @@ namespace rx
         [[nodiscard]] constexpr const_iterator begin() const { return (this->has_value()) ? const_iterator{ this, 0 } : this->end(); }
         [[nodiscard]] constexpr const_iterator end() const { return { this, this->size() }; }
         [[nodiscard]] constexpr const_iterator cbegin() const { return this->begin(); }
-        [[nodiscard]] constexpr const_iterator cend() const { return this->end(); } 
+        [[nodiscard]] constexpr const_iterator cend() const { return this->end(); }
         [[nodiscard]] constexpr const_reverse_iterator rbegin() const { return std::make_reverse_iterator(this->end()); }
         [[nodiscard]] constexpr const_reverse_iterator rend() const { return std::make_reverse_iterator(this->begin()); }
         [[nodiscard]] constexpr const_reverse_iterator crbegin() const { return this->rbegin(); }
-        [[nodiscard]] constexpr const_reverse_iterator crend() const { return this->rend(); } 
+        [[nodiscard]] constexpr const_reverse_iterator crend() const { return this->rend(); }
 
         /* tuple support */
 
@@ -93,7 +99,7 @@ namespace rx
             {
                 // TODO: make multi tag
                 throw std::logic_error("Branch reset not implemented");
-            } 
+            }
             else
             {
                 if constexpr (current.first.tag_number == current.second.tag_number)
@@ -121,26 +127,27 @@ namespace rx
 
         template<string_literal Pattern2, typename T>
         friend class static_regex_iterator;
-    
+
     private:
-         /* iterator implementation */
+        /* iterator implementation */
 
         class proxy_submatch_iterator
         {
             friend class static_regex_match_result;
-            
-            using it                = proxy_submatch_iterator;
-            using parent_type       = static_regex_match_result;
+
+            using it          = proxy_submatch_iterator;
+            using parent_type = static_regex_match_result;
 
         public:
             using iterator_concept  = std::random_access_iterator_tag;
+            using iterator_category = std::input_iterator_tag;
             using value_type        = submatch_type;
             using difference_type   = std::ptrdiff_t;
             using pointer           = void;
             using reference         = value_type;
 
             constexpr proxy_submatch_iterator() = default;
-            
+
             constexpr value_type operator*() const { return (*ptr_)[pos_]; }
             constexpr value_type operator[](difference_type n) const { return (*ptr_)[pos_ + n]; }
 
@@ -153,9 +160,9 @@ namespace rx
 
             constexpr friend bool operator==(const it&, const it&) = default;
             constexpr friend auto operator<=>(const it&, const it&) = default;
-            constexpr friend it operator+(const it& lhs , difference_type rhs) { return {  lhs.ptr_, lhs.pos_ + rhs }; }
-            constexpr friend it operator+(difference_type lhs , const it& rhs) { return {  rhs.ptr_, lhs + rhs.pos_ }; }
-            constexpr friend it operator-(const it& lhs, difference_type rhs) { return {  lhs.ptr_, lhs.pos_ - rhs };  }
+            constexpr friend it operator+(const it& lhs, difference_type rhs) { return { lhs.ptr_, lhs.pos_ + rhs }; }
+            constexpr friend it operator+(difference_type lhs, const it& rhs) { return { rhs.ptr_, lhs + rhs.pos_ }; }
+            constexpr friend it operator-(const it& lhs, difference_type rhs) { return { lhs.ptr_, lhs.pos_ - rhs }; }
             constexpr friend difference_type operator-(const it& lhs, const it& rhs) { return rhs.pos_ - lhs.pos_; }
 
         private:
@@ -164,7 +171,7 @@ namespace rx
             const parent_type* ptr_{ nullptr };
             std::size_t pos_{ 0 };
         };
-        
+
         static_assert(std::random_access_iterator<proxy_submatch_iterator>);
 
 
@@ -205,7 +212,7 @@ namespace rx
                 throw std::out_of_range("static_regex_match_result::range_check: n >= this->size()");
         }
 
-        
+
         /* data members and protected trivial accessors */
 
         using registers_type = std::conditional_t<dfa_t::value.register_count == 0, std::monostate, std::array<iterator_type, dfa_t::value.register_count>>;
@@ -218,10 +225,10 @@ namespace rx
         [[clang::always_inline]] constexpr continue_type& continue_at() noexcept requires (Flags.is_iterator) { return continue_at_; }
 
     private:
-        [[no_unique_address]] registers_type    reg_{};
-        [[no_unique_address]] match_start_type  match_start_{};
-                              iterator_type     match_end_{};
-        [[no_unique_address]] continue_type     continue_at_{ detail::tdfa::no_continue };
+        [[no_unique_address]] registers_type   reg_{};
+        [[no_unique_address]] match_start_type match_start_{};
+                              iterator_type    match_end_{};
+        [[no_unique_address]] continue_type    continue_at_{ detail::tdfa::no_continue };
     };
 }
 
@@ -229,8 +236,8 @@ namespace rx
 /* structured binding support for compile_time_match_result */
 
 template<std::bidirectional_iterator Iter, rx::string_literal Pattern, rx::detail::fsm_flags Flags>
-struct std::tuple_size<rx::static_regex_match_result<Iter, Pattern, Flags>> :
-    integral_constant<std::size_t, rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_count> {};
+struct std::tuple_size<rx::static_regex_match_result<Iter, Pattern, Flags>>
+    : integral_constant<std::size_t, rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_count> {};
 
 template<std::size_t N, std::bidirectional_iterator Iter, rx::string_literal Pattern, rx::detail::fsm_flags Flags>
 requires (N < rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_count)
@@ -238,4 +245,3 @@ struct std::tuple_element<N, rx::static_regex_match_result<Iter, Pattern, Flags>
 {
     using type = rx::static_regex_match_result<Iter, Pattern, Flags>::submatch_type;
 };
-

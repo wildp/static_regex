@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -8,7 +14,6 @@
 
 namespace rx::detail::parser
 {
-
     struct capture_flags
     {
         enum class flag_value : std::uint8_t
@@ -19,7 +24,7 @@ namespace rx::detail::parser
         };
 
         flag_value caseless  : 2;
-        flag_value multiline : 2;  /* not fully implemented -> need to implement in matcher */
+        flag_value multiline : 2; /* not fully implemented -> need to implement in matcher */
         flag_value dotall    : 2;
         flag_value ungreedy  : 2;
     };
@@ -43,21 +48,17 @@ namespace rx::detail::parser
             capture_flags flags;
             modes mode;
 
-            constexpr cse() noexcept :
-                number{ 1 },
-                number_end{ 1 },
-                flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
-                mode{ modes::non_capturing }
-            {
-            }
+            constexpr cse() noexcept
+                : number{ 1 },
+                  number_end{ 1 },
+                  flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
+                  mode{ modes::non_capturing } {}
 
-            constexpr explicit cse(std::uint_least16_t cur, std::uint_least16_t end) noexcept :
-                number{ cur },
-                number_end{ end },
-                flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit },
-                mode{ modes::normal }
-            {
-            }
+            constexpr explicit cse(std::uint_least16_t cur, std::uint_least16_t end) noexcept
+                : number{ cur },
+                  number_end{ end },
+                  flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit },
+                  mode{ modes::normal } {}
         };
 
     public:
@@ -127,7 +128,7 @@ namespace rx::detail::parser
             if (auto& elem{ elems_.back() }; elem.mode == cse::modes::branch_reset)
             {
                 auto& target{ (elems_.size() < 2) ? base_ : *(std::next(elems_.rbegin())) };
-                target.number_end = std::max(target.number_end, elem.number_end) ;
+                target.number_end = std::max(target.number_end, elem.number_end);
                 elem.number_end = elem.number;
             }
         }
@@ -148,7 +149,7 @@ namespace rx::detail::parser
             elems_.pop_back();
 
             auto& target{ elems_.empty() ? base_ : elems_.back() };
-            
+
             /* overwrite containing capturing group's flags when elem is an empty capturing group */
             if (elem.mode == cse::modes::flag_assigning)
             {
@@ -165,7 +166,7 @@ namespace rx::detail::parser
             }
 
             if (elem.mode == cse::modes::branch_reset)
-                target.number_end = std::max(target.number_end, elem.number_end) ;
+                target.number_end = std::max(target.number_end, elem.number_end);
             else
                 target.number_end = elem.number_end;
 
@@ -173,7 +174,7 @@ namespace rx::detail::parser
                 return elem.number;
             else
                 return {};
-    }
+        }
 
         // template<std::meta::info CaptureFlagReflection>
         // requires (std::ranges::contains(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked()), CaptureFlagReflection))
@@ -184,14 +185,14 @@ namespace rx::detail::parser
         //         if (elem.flags.[:CaptureFlagReflection:] != cf::inherit)
         //             return elem.flags.[:CaptureFlagReflection:] == cf::enabled;
         //     }
-            
+
         //     return base_.flags.[:CaptureFlagReflection:] == cf::enabled;
         // }
 
 
         [[nodiscard]] constexpr bool caseless() const
         {
-            for (const auto& elem : elems_ | std::views::reverse) 
+            for (const auto& elem : elems_ | std::views::reverse)
                 if (elem.flags.caseless != cf::inherit)
                     return elem.flags.caseless == cf::enabled;
             return base_.flags.caseless == cf::enabled;
@@ -199,7 +200,7 @@ namespace rx::detail::parser
 
         [[nodiscard]] constexpr bool multiline() const
         {
-            for (const auto& elem : elems_ | std::views::reverse) 
+            for (const auto& elem : elems_ | std::views::reverse)
                 if (elem.flags.multiline != cf::inherit)
                     return elem.flags.multiline == cf::enabled;
             return base_.flags.multiline == cf::enabled;
@@ -207,7 +208,7 @@ namespace rx::detail::parser
 
         [[nodiscard]] constexpr bool dotall() const
         {
-            for (const auto& elem : elems_ | std::views::reverse) 
+            for (const auto& elem : elems_ | std::views::reverse)
                 if (elem.flags.dotall != cf::inherit)
                     return elem.flags.dotall == cf::enabled;
             return base_.flags.dotall == cf::enabled;
@@ -215,7 +216,7 @@ namespace rx::detail::parser
 
         [[nodiscard]] constexpr bool ungreedy() const
         {
-            for (const auto& elem : elems_ | std::views::reverse) 
+            for (const auto& elem : elems_ | std::views::reverse)
                 if (elem.flags.ungreedy != cf::inherit)
                     return elem.flags.ungreedy == cf::enabled;
             return base_.flags.ungreedy == cf::enabled;
@@ -247,17 +248,15 @@ namespace rx::detail::parser
         {
             ((elems_.empty()) ? base_ : elems_.back()).flags.ungreedy = (value) ? cf::enabled : cf::disabled;
         }
-        
-    private:
 
+    private:
         [[nodiscard]] constexpr std::uint_least16_t next_number() const noexcept
         {
             auto& target{ elems_.empty() ? base_ : elems_.back() };
             return target.number_end;
         }
 
-        std::vector<cse>    elems_{};
-        cse                 base_{};
+        std::vector<cse> elems_{};
+        cse              base_{};
     };
-
 }

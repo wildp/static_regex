@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -35,7 +41,7 @@ namespace rx::testing
 
     template<typename CharT>
     tnfa_matcher(const detail::expr_tree<CharT>&, detail::fsm_flags) -> tnfa_matcher<CharT>;
-    
+
 
     /* tagged nfa simulation */
 
@@ -43,7 +49,7 @@ namespace rx::testing
     constexpr auto tnfa_matcher<CharT>::e_closure(closure_t&& closure, const std::size_t k) const -> closure_t
     {
         static constexpr auto compose = [](const auto& g, const auto& f) {
-            return [=]<typename T>(T&& arg) { 
+            return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };
         };
@@ -60,14 +66,16 @@ namespace rx::testing
             new_closure.push_back(std::move(stack.back()));
             stack.pop_back();
             const auto& [q, m]{ new_closure.back() };
-            
+
             using epsilon_t = std::pair<state_t, epsilon_tr>;
-            std::vector et{ std::from_range,
-                            this->get_node(q).out_tr
-                            | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
-                            | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t.type); })
-                            | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<epsilon_tr>(t.type) }; }) };
-            
+            std::vector et{
+                std::from_range,
+                this->get_node(q).out_tr
+                | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
+                | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t.type); })
+                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<epsilon_tr>(t.type) }; })
+            };
+
             std::ranges::sort(et, std::ranges::greater{}, compose(&epsilon_tr::priority, &epsilon_t::second));
 
             for (const auto& [next, e] : et)
@@ -80,8 +88,8 @@ namespace rx::testing
                     else if (e.tag < 0)
                         new_m.at((-e.tag) - 1) = no_tag;
                     stack.emplace_back(next, std::move(new_m));
-                }   
-            }            
+                }
+            }
         }
 
         std::erase_if(new_closure, [this](const closure_entry& e) -> bool {
@@ -107,7 +115,7 @@ namespace rx::testing
             for (std::size_t i{ 0 }; i < this->get_node(q).out_tr.size(); ++i)
             {
                 const auto& tr{ this->get_tr(this->get_node(q).out_tr[i]) };
-                
+
                 if (const auto* const ptr{ std::get_if<normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
                 {
                     if (ptr->cs.contains(a))
@@ -118,7 +126,7 @@ namespace rx::testing
                             new_closure.emplace_back(tr.dst, m);
                     }
                 }
-            }      
+            }
         }
 
         return new_closure;
@@ -130,19 +138,19 @@ namespace rx::testing
         using namespace rx::detail;
 
         tag_vector m0(this->tag_count(), no_tag);
-        closure_t c{{ this->start_node(), std::move(m0) }};
+        closure_t c{ { this->start_node(), std::move(m0) } };
 
         for (std::size_t k{ 0 }; k < input.size(); ++k)
         {
             c = e_closure(std::move(c), k);
             c = step(c, input.at(k));
-            
+
             if (c.empty())
                 return {};
         }
 
         c = e_closure(std::move(c), input.size());
-        auto result{ std::ranges::find_if(c, [&](std::size_t arg){ return this->get_node(arg).is_final; }, &closure_entry::first) };
+        auto result{ std::ranges::find_if(c, [&](std::size_t arg) { return this->get_node(arg).is_final; }, &closure_entry::first) };
 
         if (result == c.end())
             return {};
@@ -163,22 +171,28 @@ namespace rx::testing
 
         auto f = [&](const capture_info::tag_pair_t& p) -> bool {
             return not ((p.first.tag_number >= 0 and v.at(p.first.tag_number) == no_tag)
-                         or (p.second.tag_number >= 0 and v.at(p.second.tag_number) == no_tag));
+                        or (p.second.tag_number >= 0 and v.at(p.second.tag_number) == no_tag));
         };
 
         auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<std::size_t, std::size_t> {
-            return { ((p.first.tag_number >= 0) ? v.at(p.first.tag_number)
-                      : ((p.first.tag_number == start_of_input_tag) ? 0 : size)) + p.first.offset,
-                     ((p.second.tag_number >= 0) ? v.at(p.second.tag_number)
-                      : ((p.second.tag_number == start_of_input_tag) ? 0 : size)) + p.second.offset };
+            return {
+                ((p.first.tag_number >= 0)
+                 ? v.at(p.first.tag_number)
+                 : ((p.first.tag_number == start_of_input_tag) ? 0 : size)) + p.first.offset,
+                ((p.second.tag_number >= 0)
+                 ? v.at(p.second.tag_number)
+                 : ((p.second.tag_number == start_of_input_tag) ? 0 : size)) + p.second.offset
+            };
         };
 
         for (std::size_t i{ 0 }; i < capture_count; ++i)
         {
-            auto rng{ ci.lookup(i) | std::views::filter(f)
-                                   | std::views::transform(t)
-                                   | std::ranges::to<std::vector>() };
-                    
+            auto rng{
+                ci.lookup(i) | std::views::filter(f)
+                | std::views::transform(t)
+                | std::ranges::to<std::vector>()
+            };
+
             if (std::ranges::size(rng) == 0)
             {
                 result.insert(result.end(), { no_tag, no_tag });
@@ -190,7 +204,7 @@ namespace rx::testing
             result.push_back(max_elem->first);
             result.push_back(max_elem->second);
         }
-        
+
         return result;
     }
 }

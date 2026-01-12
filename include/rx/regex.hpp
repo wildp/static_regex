@@ -1,10 +1,16 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <concepts>
 #include <cstddef>
 #include <iterator>
-#include <type_traits>
 #include <ranges>
+#include <type_traits>
 
 #include <rx/etc/string_literal.hpp>
 #include <rx/fsm/flags.hpp>
@@ -20,18 +26,18 @@ namespace rx
     {
         using char_type = decltype(Pattern)::char_type;
 
-        template<std::bidirectional_iterator I>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] constexpr auto match(const I first, const I last) const
+        template<std::bidirectional_iterator Iter>
+        requires std::same_as<std::iter_value_t<Iter>, char_type>
+        [[nodiscard]] constexpr auto match(const Iter first, const Iter last) const
         {
             using namespace detail;
             p1306_matcher<Pattern, default_fsm_flags::full_match> m{};
             return m(first, last);
         }
 
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
-        [[nodiscard]] constexpr auto match(R&& r) const
+        template<std::ranges::bidirectional_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, char_type>
+        [[nodiscard]] constexpr auto match(Range&& r) const
         {
             return match(std::ranges::cbegin(r), std::ranges::cend(r));
         }
@@ -45,18 +51,18 @@ namespace rx
             return m(cstr);
         }
 
-        template<std::bidirectional_iterator I>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] constexpr auto starts_with(const I first, const I last) const
+        template<std::bidirectional_iterator Iter>
+        requires std::same_as<std::iter_value_t<Iter>, char_type>
+        [[nodiscard]] constexpr auto starts_with(const Iter first, const Iter last) const
         {
             using namespace detail;
             p1306_matcher<Pattern, default_fsm_flags::partial_match> m{};
             return m(first, last);
         }
 
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
-        [[nodiscard]] constexpr auto starts_with(R&& r) const
+        template<std::ranges::bidirectional_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, char_type>
+        [[nodiscard]] constexpr auto starts_with(Range&& r) const
         {
             return starts_with(std::ranges::cbegin(r), std::ranges::cend(r));
         }
@@ -70,18 +76,18 @@ namespace rx
             return m(cstr);
         }
 
-        template<std::bidirectional_iterator I>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] constexpr auto search(const I first, const I last) const
+        template<std::bidirectional_iterator Iter>
+        requires std::same_as<std::iter_value_t<Iter>, char_type>
+        [[nodiscard]] constexpr auto search(const Iter first, const Iter last) const
         {
             using namespace detail;
             p1306_matcher<Pattern, default_fsm_flags::search_single> m{};
             return m(first, last);
         }
 
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
-        [[nodiscard]] constexpr auto search(R&& r) const
+        template<std::ranges::bidirectional_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, char_type>
+        [[nodiscard]] constexpr auto search(Range&& r) const
         {
             return search(std::ranges::cbegin(r), std::ranges::cend(r));
         }
@@ -99,7 +105,7 @@ namespace rx
 
     // TODO: replace `decltype(std::ranges::cbegin(std::declval<R&>()))` with `std::ranges::const_iterator_t<T>`
 
-    template<string_literal, typename T>
+    template<string_literal, typename>
     class static_regex_iterator
     {
     public:
@@ -122,11 +128,12 @@ namespace rx
 
 
     template<string_literal Pattern, std::bidirectional_iterator Iter>
-    requires (std::same_as<std::iter_value_t<Iter>, typename static_regex<Pattern>::char_type>)
+    requires std::same_as<std::iter_value_t<Iter>, typename static_regex<Pattern>::char_type>
     class static_regex_iterator<Pattern, Iter>
     {
     public:
         using iterator_concept  = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
         using value_type        = static_regex_match_result<Iter, Pattern, detail::default_fsm_flags::search_all>;
         using difference_type   = std::ptrdiff_t;
         using pointer           = std::add_pointer_t<const value_type>;
@@ -135,8 +142,8 @@ namespace rx
 
         constexpr static_regex_iterator() noexcept = default;
 
-        constexpr static_regex_iterator(const Iter first, const Iter last, regex_type) :
-            first_{ first }, last_{ last }
+        constexpr static_regex_iterator(const Iter first, const Iter last, regex_type)
+            : first_{ first }, last_{ last }
         {
             using namespace detail;
             p1306_matcher<Pattern, default_fsm_flags::search_all> m{};
@@ -144,11 +151,11 @@ namespace rx
             first_ = result_.match_end();
         }
 
-        template<std::ranges::bidirectional_range R>
-        requires (std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                  and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), Iter>)
-        constexpr static_regex_iterator(R&& r, regex_type) :
-            static_regex_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}) {}
+        template<std::ranges::bidirectional_range Range>
+        requires std::same_as<std::ranges::range_value_t<Range>, typename regex_type::char_type>
+                 and std::same_as<decltype(std::ranges::cbegin(std::declval<Range&>())), Iter>
+        constexpr static_regex_iterator(Range&& r, regex_type)
+            : static_regex_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}) {}
 
         constexpr static_regex_iterator& operator++()
         {
@@ -183,17 +190,15 @@ namespace rx
 
         friend constexpr bool operator==(const static_regex_iterator& lhs, static_regex_iterator_sentinel) noexcept
         {
-            return lhs.first_ == iter_type{};
+            return lhs.first_ == Iter{};
         }
 
         template<string_literal, typename, int...>
         friend class static_regex_token_iterator;
 
     private:
-        using iter_type = Iter;
-
-        iter_type  first_;
-        iter_type  last_;
+        Iter       first_;
+        Iter       last_;
         value_type result_;
     };
 
@@ -204,6 +209,7 @@ namespace rx
     {
     public:
         using iterator_concept  = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
         using value_type        = static_regex_match_result<const CharT*, Pattern, detail::default_fsm_flags::search_all>;
         using difference_type   = std::ptrdiff_t;
         using pointer           = std::add_pointer_t<const value_type>;
@@ -212,8 +218,8 @@ namespace rx
 
         constexpr static_regex_iterator() noexcept = default;
 
-        constexpr static_regex_iterator(const CharT* str, regex_type) :
-            ptr_{ str }
+        constexpr static_regex_iterator(const CharT* str, regex_type)
+            : ptr_{ str }
         {
             if (ptr_ == nullptr)
                 return;
@@ -267,10 +273,8 @@ namespace rx
         friend class static_regex_token_iterator;
 
     private:
-        using cstr_type = const CharT*;
-
-        cstr_type  ptr_{ nullptr };
-        value_type result_{};
+        const CharT* ptr_{ nullptr };
+        value_type   result_{};
     };
 
 
@@ -279,21 +283,21 @@ namespace rx
 
     static_regex_iterator() -> static_regex_iterator<"", void>;
 
-    template<std::bidirectional_iterator I, string_literal Pattern>
-    static_regex_iterator(I, I, static_regex<Pattern>) -> static_regex_iterator<Pattern, I>;
+    template<std::bidirectional_iterator Iter, string_literal Pattern>
+    static_regex_iterator(Iter, Iter, static_regex<Pattern>) -> static_regex_iterator<Pattern, Iter>;
 
-    template<std::ranges::bidirectional_range R, string_literal Pattern>
-    static_regex_iterator(R&&, static_regex<Pattern>) -> static_regex_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<R&>()))>;
+    template<std::ranges::bidirectional_range Range, string_literal Pattern>
+    static_regex_iterator(Range&&, static_regex<Pattern>) -> static_regex_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<Range&>()))>;
 
     template<typename CharT, string_literal Pattern>
     static_regex_iterator(const CharT*, static_regex<Pattern>) -> static_regex_iterator<Pattern, CharT>;
 
 
     template<string_literal Pattern, typename T, int... Submatches>
-    requires (std::bidirectional_iterator<T> or std::same_as<T, typename static_regex<Pattern>::char_type>)
+    requires std::bidirectional_iterator<T> or std::same_as<T, typename static_regex<Pattern>::char_type>
     class static_regex_token_iterator<Pattern, T, Submatches...>
     {
-        using parent_type       = static_regex_iterator<Pattern, T>;
+        using parent_type = static_regex_iterator<Pattern, T>;
 
         template<int S>
         static constexpr bool submatch_is_valid{ ((-1 == S) or (S < parent_type::value_type::submatch_count)) };
@@ -303,17 +307,18 @@ namespace rx
 
     public:
         using iterator_concept  = std::input_iterator_tag;
-        using value_type        = typename parent_type::value_type::submatch_type;
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = parent_type::value_type::submatch_type;
         using difference_type   = std::ptrdiff_t;
         using pointer           = std::add_pointer<const value_type>;
         using reference         = std::add_lvalue_reference_t<const value_type>;
         using regex_type        = static_regex<Pattern>;
 
         constexpr static_regex_token_iterator() noexcept = default;
-        
+
         constexpr static_regex_token_iterator(const T first, const T last, regex_type, std::integer_sequence<int, Submatches...>)
-        requires (std::bidirectional_iterator<T>) :
-            iterator_{ first, last, regex_type{} }
+        requires std::bidirectional_iterator<T>
+            : iterator_{ first, last, regex_type{} }
         {
             if constexpr (is_suffix_iterator)
                 suffix_start_ = first;
@@ -322,26 +327,26 @@ namespace rx
         }
 
         constexpr static_regex_token_iterator(const T first, const T last, regex_type, std::integral_constant<int, Submatches>...)
-        requires (std::bidirectional_iterator<T> and sizeof...(Submatches) == 1) :
-            static_regex_token_iterator(first, last, {}, std::integer_sequence<int, Submatches...>{}) {}
+        requires std::bidirectional_iterator<T> and (sizeof...(Submatches) == 1)
+            : static_regex_token_iterator(first, last, {}, std::integer_sequence<int, Submatches...>{}) {}
 
         template<std::ranges::bidirectional_range R>
-        requires (std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                  and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), T>)
-        constexpr static_regex_token_iterator(R&& r, regex_type, std::integer_sequence<int, Submatches...>) 
-        requires (std::bidirectional_iterator<T>) :
-            static_regex_token_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}, std::integer_sequence<int, Submatches...>{}) {}
+        requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
+                 and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), T>
+        constexpr static_regex_token_iterator(R&& r, regex_type, std::integer_sequence<int, Submatches...>)
+        requires std::bidirectional_iterator<T>
+            : static_regex_token_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}, std::integer_sequence<int, Submatches...>{}) {}
 
         template<std::ranges::bidirectional_range R>
-        requires (std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                  and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), T>)
+        requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
+                 and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), T>
         constexpr static_regex_token_iterator(R&& r, regex_type, std::integral_constant<int, Submatches>...)
-        requires (std::bidirectional_iterator<T> and sizeof...(Submatches) == 1) :
-            static_regex_token_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}, std::integer_sequence<int, Submatches...>{}) {}
+        requires std::bidirectional_iterator<T> and (sizeof...(Submatches) == 1)
+            : static_regex_token_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}, std::integer_sequence<int, Submatches...>{}) {}
 
-         constexpr static_regex_token_iterator(const T* str, regex_type, std::integer_sequence<int, Submatches...>)
-        requires (std::same_as<T, typename static_regex<Pattern>::char_type>) :
-            iterator_{ str, regex_type{} }
+        constexpr static_regex_token_iterator(const T* str, regex_type, std::integer_sequence<int, Submatches...>)
+        requires std::same_as<T, typename static_regex<Pattern>::char_type>
+            : iterator_{ str, regex_type{} }
         {
             if constexpr (is_suffix_iterator)
                 suffix_start_ = str;
@@ -350,8 +355,8 @@ namespace rx
         }
 
         constexpr static_regex_token_iterator(const T* str, regex_type, std::integral_constant<int, Submatches>...)
-        requires (std::same_as<T, typename static_regex<Pattern>::char_type> and sizeof...(Submatches) == 1) :
-            static_regex_token_iterator(str, {}, std::integer_sequence<int, Submatches...>{}) {}
+        requires std::same_as<T, typename static_regex<Pattern>::char_type> and (sizeof...(Submatches) == 1)
+            : static_regex_token_iterator(str, {}, std::integer_sequence<int, Submatches...>{}) {}
 
         constexpr static_regex_token_iterator& operator++()
         {
@@ -425,25 +430,27 @@ namespace rx
         static constexpr bool is_suffix_iterator{ ((Submatches == -1) or ...) };
         static constexpr std::array submatches{ Submatches... };
 
-        using iter_type = typename value_type::const_iterator;
+        using iter_type = value_type::const_iterator;
         using suffix_it = std::conditional_t<is_suffix_iterator, iter_type, std::monostate>;
 
-        constexpr void stash_result() 
+        constexpr void stash_result()
         {
             if constexpr (is_suffix_iterator)
             {
                 if (submatches[index_] == -1)
                 {
+                    using sf = detail::submatch_factory<iter_type>;
+                    
                     if (iterator_->has_value())
                     {
-                        result_ = detail::submatch_factory<iter_type>::make_submatch(suffix_start_, iterator_->template get<0>().cbegin());
+                        result_ = sf::make_submatch(suffix_start_, iterator_->template get<0>().cbegin());
                     }
                     else
                     {
                         if constexpr (std::bidirectional_iterator<T>)
-                            result_ = detail::submatch_factory<iter_type>::make_submatch(suffix_start_, iterator_.last_);
+                            result_ = sf::make_submatch(suffix_start_, iterator_.last_);
                         else if constexpr (std::same_as<T, typename static_regex<Pattern>::char_type>)
-                            result_ = detail::submatch_factory<iter_type>::make_submatch(suffix_start_, std::basic_string_view{ suffix_start_ }.cend());        
+                            result_ = sf::make_submatch(suffix_start_, std::basic_string_view{ suffix_start_ }.cend());
 
                         if (result_.cbegin() == result_.cend())
                             index_ = submatches.size();
@@ -473,11 +480,11 @@ namespace rx
     template<std::bidirectional_iterator Iter, string_literal Pattern, int... Is>
     static_regex_token_iterator(Iter, Iter, static_regex<Pattern>, std::integer_sequence<int, Is...>) -> static_regex_token_iterator<Pattern, Iter, Is...>;
 
-    template<std::ranges::bidirectional_range R, string_literal Pattern, int I>
-    static_regex_token_iterator(R&&, static_regex<Pattern>, std::integral_constant<int, I>)-> static_regex_token_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<R&>())), I>;
+    template<std::ranges::bidirectional_range Range, string_literal Pattern, int I>
+    static_regex_token_iterator(Range&&, static_regex<Pattern>, std::integral_constant<int, I>) -> static_regex_token_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<Range&>())), I>;
 
-    template<std::ranges::bidirectional_range R, string_literal Pattern, int... Is>
-    static_regex_token_iterator(R&&, static_regex<Pattern>, std::integer_sequence<int, Is...>)-> static_regex_token_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<R&>())), Is...>;
+    template<std::ranges::bidirectional_range Range, string_literal Pattern, int... Is>
+    static_regex_token_iterator(Range&&, static_regex<Pattern>, std::integer_sequence<int, Is...>) -> static_regex_token_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<Range&>())), Is...>;
 
     template<typename CharT, string_literal Pattern, int I>
     static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integral_constant<int, I>) -> static_regex_token_iterator<Pattern, CharT, I>;
@@ -495,5 +502,4 @@ namespace rx
         }
     }
 }
-
 

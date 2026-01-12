@@ -1,9 +1,15 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #include "headers/tree_matcher.hpp"
 
 
 namespace
 {
-    constexpr rx::detail::parser_flags expo_test_flags{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true };
+    constexpr rx::detail::parser_flags expo_test_flags{ .enable_possessive = true, .enable_backrefs = true, .enable_branchreset = true };
 
     template<typename CharT>
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
@@ -14,7 +20,7 @@ namespace
         if (captures.empty())
             return match_result.has_value();
         else
-            return std::ranges::equal(match_result.value() | std::views::drop(2) , captures);
+            return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
     }
 }
 

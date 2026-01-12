@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -23,11 +29,11 @@ namespace rx::testing
         using tag_result = std::vector<std::size_t>;
 
         template<std::random_access_iterator I>
-        requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+        requires std::convertible_to<std::iter_value_t<I>, CharT>
         [[nodiscard]] constexpr std::optional<tag_result> match(I first, I last) const;
 
         template<std::ranges::random_access_range R>
-        requires (std::convertible_to<std::ranges::range_value_t<R>, CharT>)
+        requires std::convertible_to<std::ranges::range_value_t<R>, CharT>
         [[nodiscard]] constexpr std::optional<tag_result> match(R&& r) const
         {
             return match(std::ranges::begin(r), std::ranges::end(r));
@@ -51,7 +57,7 @@ namespace rx::testing
     template<typename CharT>
     tree_matcher(const CharT*, detail::parser_flags) -> tree_matcher<CharT>;
 
-    
+
     /* helper for tree matcher */
 
     class cont_val
@@ -59,7 +65,7 @@ namespace rx::testing
     public:
         using rep_t = std::int_least16_t;
 
-        constexpr cont_val(std::size_t i) : pos_{ i } {}
+        constexpr explicit(false) cont_val(std::size_t i) : pos_{ i } {}
         constexpr explicit cont_val(std::size_t i, rep_t r) : pos_{ i }, reps_{ r } {}
         constexpr explicit cont_val(std::size_t i, rep_t r, rep_t amt) : pos_{ i }, reps_{ std::add_sat(r, amt) } {}
 
@@ -67,27 +73,23 @@ namespace rx::testing
         [[nodiscard]] constexpr rep_t reps() const noexcept { return reps_; }
 
     private:
-        std::uint_least64_t pos_: 48;
-        rep_t               reps_: 16 { 0 };
+        std::uint_least64_t pos_ : 48;
+        rep_t reps_              : 16 { 0 };
     };
 
     template<typename I>
     struct matcher_state
     {
-        using tags_t            = detail::cdarray<std::optional<I>>;
-        using continuation_t    = std::vector<cont_val>;
+        using tags_t         = detail::cdarray<std::optional<I>>;
+        using continuation_t = std::vector<cont_val>;
 
 
-        I                   it;
-        continuation_t      cont;
-        tags_t              tags;
+        I              it;
+        continuation_t cont;
+        tags_t         tags;
 
-        constexpr matcher_state(I first, std::size_t tag_count, std::size_t start_state) :
-            it{ first },
-            cont{ start_state },
-            tags(tag_count)
-        {
-        }
+        constexpr matcher_state(I first, std::size_t tag_count, std::size_t start_state)
+            : it{ first }, cont{ start_state }, tags(tag_count) {}
     };
 
     enum class rc : uint_least8_t
@@ -102,7 +104,7 @@ namespace rx::testing
 
     template<typename CharT>
     template<std::random_access_iterator I>
-    requires (std::convertible_to<std::iter_value_t<I>, CharT>)
+    requires std::convertible_to<std::iter_value_t<I>, CharT>
     [[nodiscard]] constexpr auto tree_matcher<CharT>::match(const I first, const I last) const -> std::optional<tag_result>
     {
         using state_t = matcher_state<I>;
@@ -110,8 +112,7 @@ namespace rx::testing
         const auto& ci{ this->get_capture_info() };
         const std::size_t capture_count{ ci.capture_count() };
 
-        auto visitor = [&, this](this const auto& rec, state_t& s) -> bool
-        {
+        auto visitor = [&, this](this const auto& rec, state_t& s) -> bool {
             while (not s.cont.empty())
             {
                 const auto raw_data{ s.cont.back() };
@@ -120,8 +121,7 @@ namespace rx::testing
                 const std::size_t pos{ raw_data.pos() };
 
                 const rc result = this->get_expr(pos).visit(detail::overloads{
-                    [&](const tree_matcher::assertion& asr) -> rc
-                    {
+                    [&](const tree_matcher::assertion& asr) -> rc {
                         using detail::assert_type;
                         switch (asr.type)
                         {
@@ -146,13 +146,11 @@ namespace rx::testing
                         }
                         return rc::match_failure;
                     },
-                    [&](const tree_matcher::concat& cat) -> rc
-                    {
+                    [&](const tree_matcher::concat& cat) -> rc {
                         s.cont.append_range(cat.idxs | std::views::reverse);
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::alt& alt) -> rc
-                    {
+                    [&](const tree_matcher::alt& alt) -> rc {
                         if (alt.idxs.empty())
                             return rc::match_failure;
 
@@ -163,7 +161,7 @@ namespace rx::testing
 
                             if (rec(s_copy))
                             {
-                                s = std::move(s_copy); 
+                                s = std::move(s_copy);
                                 return rc::match_success;
                             }
                         }
@@ -171,35 +169,39 @@ namespace rx::testing
                         s.cont.push_back(alt.idxs.back());
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::tag& tag) -> rc
-                    {
+                    [&](const tree_matcher::tag& tag) -> rc {
                         s.tags.at(tag.number) = s.it;
-                            
+
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::backref& bref) -> rc
-                    {
+                    [&](const tree_matcher::backref& bref) -> rc {
                         if (bref.number >= capture_count)
                             throw pattern_error("Backreference to non-existent submatch");
 
                         auto f = [&](const detail::capture_info::tag_pair_t& p) -> bool {
                             return not ((p.first.tag_number >= 0 and not s.tags.at(p.first.tag_number).has_value())
-                                            or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
+                                        or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
                         };
 
                         auto t = [&](const detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
-                            return{ std::next((p.first.tag_number >= 0) ? *s.tags.at(p.first.tag_number)
-                                                : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
-                                    std::next((p.second.tag_number >= 0) ? *s.tags.at(p.second.tag_number)
-                                                : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset) };
+                            return {
+                                std::next((p.first.tag_number >= 0)
+                                          ? *s.tags.at(p.first.tag_number)
+                                          : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
+                                std::next((p.second.tag_number >= 0)
+                                          ? *s.tags.at(p.second.tag_number)
+                                          : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset)
+                            };
                         };
 
                         const auto [beg, end]{ ci.lookup(bref.number) };
 
-                        auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
-                                                                  | std::views::transform(t)
-                                                                  | std::ranges::to<std::vector>() };
-                        
+                        auto rng{
+                            std::ranges::subrange(beg, end) | std::views::filter(f)
+                            | std::views::transform(t)
+                            | std::ranges::to<std::vector>()
+                        };
+
 
                         if (std::ranges::size(rng) == 0)
                             return rc::match_failure; /* capture doesn't exist */
@@ -212,8 +214,7 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::repeat& rep) -> rc
-                    {
+                    [&](const tree_matcher::repeat& rep) -> rc {
                         using detail::repeater_mode;
 
                         if (rep.min == rep.max)
@@ -232,7 +233,7 @@ namespace rx::testing
                             s.cont.insert(s.cont.end(), /* count = */ rep.min - rep_count, /* value = */ rep.idx);
                             return rc::match_continue;
                         }
-                    
+
                         if (rep.mode == repeater_mode::greedy)
                         {
                             /* try to match repeated pattern first */
@@ -244,7 +245,7 @@ namespace rx::testing
 
                             if (rec(s_copy))
                             {
-                                s = std::move(s_copy); 
+                                s = std::move(s_copy);
                                 return rc::match_success;
                             }
                         }
@@ -255,7 +256,7 @@ namespace rx::testing
 
                             if (rec(s_copy))
                             {
-                                s = std::move(s_copy); 
+                                s = std::move(s_copy);
                                 return rc::match_success;
                             }
 
@@ -267,31 +268,30 @@ namespace rx::testing
                         {
                             /* unoptimised possessive matching */
 
-                             state_t s_copy{ s };
+                            state_t s_copy{ s };
 
-                             if (rep.max < rep.min or rep_count < rep.max - 1)
-                                 s_copy.cont.emplace_back(pos, rep_count, 1);
-                             s_copy.cont.push_back(rep.idx);
- 
-                             if (rec(s_copy))
-                             {
-                                 s = std::move(s_copy); 
-                                 return rc::match_success;
-                             }
-                             else if (rec(s))
-                             {
+                            if (rep.max < rep.min or rep_count < rep.max - 1)
+                                s_copy.cont.emplace_back(pos, rep_count, 1);
+                            s_copy.cont.push_back(rep.idx);
+
+                            if (rec(s_copy))
+                            {
+                                s = std::move(s_copy);
                                 return rc::match_success;
-                             }
-                             else
-                             {
+                            }
+                            else if (rec(s))
+                            {
+                                return rc::match_success;
+                            }
+                            else
+                            {
                                 return rc::match_failure;
-                             }
+                            }
                         }
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::char_str& lit) -> rc
-                    {
+                    [&](const tree_matcher::char_str& lit) -> rc {
                         for (const auto c : lit.data)
                         {
                             if (s.it == last or *s.it != c)
@@ -301,12 +301,9 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::char_class& cla) -> rc
-                    {
+                    [&](const tree_matcher::char_class& cla) -> rc {
                         if (s.it == last)
-                        {
                             return rc::match_failure;
-                        }
 
                         using uct = tree_matcher::char_class::underlying_char_type;
 
@@ -353,24 +350,30 @@ namespace rx::testing
 
         auto f = [&](const detail::capture_info::tag_pair_t& p) -> bool {
             return not ((p.first.tag_number >= 0 and not s.tags.at(p.first.tag_number).has_value())
-                            or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
+                        or (p.second.tag_number >= 0 and not s.tags.at(p.second.tag_number).has_value()));
         };
 
         auto t = [&](const detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
-            return { std::next((p.first.tag_number >= 0) ? *s.tags.at(p.first.tag_number)
-                                : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
-                     std::next((p.second.tag_number >= 0) ? *s.tags.at(p.second.tag_number)
-                                : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset) };
+            return {
+                std::next((p.first.tag_number >= 0)
+                          ? *s.tags.at(p.first.tag_number)
+                          : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
+                std::next((p.second.tag_number >= 0)
+                          ? *s.tags.at(p.second.tag_number)
+                          : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset)
+            };
         };
 
         for (std::size_t i{ 0 }; i < capture_count; ++i)
         {
             const auto [beg, end]{ ci.lookup(i) };
 
-            auto rng{ std::ranges::subrange(beg, end) | std::views::filter(f)
-                                                      | std::views::transform(t)
-                                                      | std::ranges::to<std::vector>() };
-                    
+            auto rng{
+                std::ranges::subrange(beg, end) | std::views::filter(f)
+                | std::views::transform(t)
+                | std::ranges::to<std::vector>()
+            };
+
             if (std::ranges::size(rng) == 0)
             {
                 res.insert(res.end(), { detail::no_tag, detail::no_tag });

@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <cstdint>
@@ -28,10 +34,10 @@ namespace rx::detail::tnfa
         struct lookahead1_tag_t { explicit lookahead1_tag_t() = default; };
         struct lookbehind1_tag_t { explicit lookbehind1_tag_t() = default; };
 
-        inline constexpr eof_tag_t          eof_tag{};
-        inline constexpr sof_tag_t          sof_tag{};
-        inline constexpr lookahead1_tag_t   lookahead1_tag{};
-        inline constexpr lookbehind1_tag_t  lookbehind1_tag{};
+        inline constexpr eof_tag_t         eof_tag{};
+        inline constexpr sof_tag_t         sof_tag{};
+        inline constexpr lookahead1_tag_t  lookahead1_tag{};
+        inline constexpr lookbehind1_tag_t lookbehind1_tag{};
     }
 
     /* tnfa transitions */
@@ -83,14 +89,14 @@ namespace rx::detail::tnfa
                                              , eof_anchor_tr, sof_anchor_tr
                                              , lookahead_1_tr<CharT>, lookbehind_1_tr<CharT>
                                              //  , lookahead_tr, lookbehind_tr
-                                            >;
+        >;
 
         state_t         src, dst;
         transition_type type; 
 
         template<typename... Args>
-        constexpr transition(state_t q0, state_t qf, Args&&... args) :
-            src{ q0 }, dst{ qf }, type{ (std::forward<Args>(args))... } {}
+        constexpr transition(state_t q0, state_t qf, Args&&... args)
+            : src{ q0 }, dst{ qf }, type{ (std::forward<Args>(args))... } {}
 
         constexpr void unset()
         {
@@ -109,17 +115,17 @@ namespace rx::detail::tnfa
         std::vector<tr_index> out_tr;
 
         bool is_final{ false };
-        bool is_fallback{ false };              /* must equal false if not is_final */
-        std::uint_least16_t final_offset{ 0 };  /* only meaningful if is_final */
-        continue_at_t continue_at{ 0 };         /* only meaningful if is_final */
+        bool is_fallback{ false };             /* must equal false if not is_final */
+        std::uint_least16_t final_offset{ 0 }; /* only meaningful if is_final */
+        continue_at_t continue_at{ 0 };        /* only meaningful if is_final */
     };
 
     struct continue_info
     {
         using sub_e_closure = std::optional<std::vector<state_t>>;
 
-        state_t         value;
-        // sub_e_closure   sub_ec;
+        state_t value;
+        // sub_e_closure sub_ec;
     };
 
 
@@ -141,7 +147,7 @@ namespace rx::detail::tnfa
         static constexpr bool operator()(const transition<CharT>& tr)
         {
             /* only count e-transitions */
-            return std::holds_alternative<tnfa::epsilon_tr>(tr.type);
+            return std::holds_alternative<epsilon_tr>(tr.type);
         }
     };
 }
@@ -193,7 +199,7 @@ namespace rx::detail
 
         constexpr state_t node_create();
         constexpr state_t node_copy(state_t q);
-        
+
         template<typename... Args>
         constexpr void transition_create(state_t q0, state_t qf, Args&&... args);
 
@@ -208,17 +214,18 @@ namespace rx::detail
         constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
 
         template<typename T>
-        requires (one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>)
+        requires one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>
         constexpr void make_assert(state_t q0, state_t qf, T category);
 
         template<typename T, typename CharSet>
-        requires (one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t> and std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>)
+        requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
+                 and std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
         constexpr void make_assert(state_t q0, state_t qf, T category, CharSet&& cs);
 
         constexpr void make_copy(state_t q0, state_t qf, const transition_info& type);
 
         constexpr void make_ntags(state_t q0, state_t qf, const std::vector<int>& ntags);
-        
+
         constexpr void thompson(const expr_tree<char_type>& ast);
 
         template<bool B, typename Vec, typename Pred, typename NodeProj, typename TrProj>
@@ -229,8 +236,6 @@ namespace rx::detail
 
         template<bool B = true, typename Vec = std::vector<state_t>, typename Pred = tnfa::e_closure_predicate>
         [[nodiscard]] constexpr auto backwards_epsilon_closure(Vec&& qs, Pred pred = {}) const;
-
-        constexpr std::flat_map<state_t, state_t> copy_subgraph(const std::vector<state_t>& qs);
 
         constexpr void remove_dead_and_unreachable_states();
         constexpr void rewrite_sof_anchors();
@@ -244,20 +249,20 @@ namespace rx::detail
         static constexpr state_t default_final_node{ 1 };
 
         /* data members */
-    
-        std::vector<tnfa::node>                         nodes_{ 2 };
-        std::vector<tnfa::transition<char_type>>        transitions_;
-        capture_info                                    capture_info_;
-        std::size_t                                     tag_count_;
-        state_t                                         start_node_{ default_start_node };
-        std::vector<tnfa::continue_info>                cont_info_;
+
+        std::vector<tnfa::node>                  nodes_{ 2 };
+        std::vector<tnfa::transition<char_type>> transitions_;
+        capture_info                             capture_info_;
+        std::size_t                              tag_count_;
+        state_t                                  start_node_{ default_start_node };
+        std::vector<tnfa::continue_info>         cont_info_;
 
         fsm_flags flags_;
 
-        bool has_eof_anchor_    : 1 { false };
-        bool has_sof_anchor_    : 1 { false };
-        bool has_lookahead_1_   : 1 { false };
-        bool has_lookbehind_1_  : 1 { false };
+        bool has_eof_anchor_   : 1 { false };
+        bool has_sof_anchor_   : 1 { false };
+        bool has_lookahead_1_  : 1 { false };
+        bool has_lookbehind_1_ : 1 { false };
     };
 }
 

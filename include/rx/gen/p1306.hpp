@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -30,7 +36,7 @@ namespace rx::detail
     template<typename CharT, std::pair<CharT, CharT>... Intervals>
     [[clang::always_inline]] constexpr bool tr_possible_impl(CharT c)
     {
-        return (tr_possible_interval_impl<CharT, Intervals.first, Intervals.second>(c)  or ...);
+        return (tr_possible_interval_impl<CharT, Intervals.first, Intervals.second>(c) or ...);
     }
 
     template<typename CharT>
@@ -121,7 +127,7 @@ namespace rx::detail
 
         template<std::size_t DFAState, typename I>
         static constexpr void state(I it, result<I>& res, const I last, std::size_t fallback_state, I fallback_it)
-        { 
+        {
             if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
             {
                 fallback_state = DFAState;
@@ -136,12 +142,12 @@ namespace rx::detail
                     static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
 
                     register_operations<fni.op_index>(it, res);
-                    
+
                     if constexpr (fni.final_offset != 0)
                         res.match_end() = it - fni.final_offset;
                     else
                         res.match_end() = it;
-                    
+
                     return;
                 }
             }
@@ -163,7 +169,7 @@ namespace rx::detail
 
         template<std::size_t DFAState, typename CharT>
         static constexpr void state(const CharT* ptr, result<const CharT*>& res, std::size_t fallback_state, const CharT* fallback_ptr)
-        { 
+        {
             if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
             {
                 fallback_state = DFAState;
@@ -205,7 +211,7 @@ namespace rx::detail
 
     public:
         template<std::bidirectional_iterator I>
-        requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>)
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const I last)
         {
             result_type<I> res{ first };
@@ -214,7 +220,7 @@ namespace rx::detail
         }
 
         template<typename CharT>
-        requires (std::is_nothrow_convertible_v<CharT, char_type>)  
+        requires std::is_nothrow_convertible_v<CharT, char_type>
         [[nodiscard]] static constexpr auto operator()(const CharT* cstr)
         {
             result_type<const CharT*> res{ cstr };
@@ -223,7 +229,7 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I>
-        requires (std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>)
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const I last, const tdfa::continue_at_t continue_at) requires (Flags.is_iterator)
         {
             result_type<I> res{ first };
@@ -238,7 +244,7 @@ namespace rx::detail
         }
 
         template<typename CharT>
-        requires (std::is_nothrow_convertible_v<CharT, char_type>)  
+        requires std::is_nothrow_convertible_v<CharT, char_type>
         [[nodiscard]] static constexpr auto operator()(const CharT* cstr, const tdfa::continue_at_t continue_at) requires (Flags.is_iterator)
         {
             result_type<const CharT*> res{ cstr };

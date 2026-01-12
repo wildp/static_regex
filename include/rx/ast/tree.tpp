@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <rx/ast/tree.hpp>
@@ -44,87 +50,87 @@ namespace rx::detail
                 break;
 
             case ast_index<concat>:
+            {
+                const auto& cat{ std::get<concat>(entry) };
+
+                if (cat.idxs.empty())
                 {
-                    const auto& cat{ std::get<concat>(entry) };
-
-                    if (cat.idxs.empty())
-                    {
-                        stack.pop_back();
-                    }
-                    else if (pos == cat.idxs.size())
-                    {
-                        auto& vec{ tag_vec.at(idx) };
-
-                        for (const std::size_t i : cat.idxs)
-                            std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
-
-                        std::ranges::sort(vec);
-                        auto [_, last]{ std::ranges::unique(vec) };
-                        vec.erase(last, vec.end());
-
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(cat.idxs.at(pos - 1), 0);
-                    }
-                }
-                break;
-
-            case ast_index<alt>:
-                {
-                    const auto& atl{ std::get<alt>(entry) };
-
-                    if (pos == atl.idxs.size())
-                    {
-                        auto& vec{ tag_vec.at(idx) };
-
-                        for (const std::size_t i : atl.idxs)
-                            std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
-
-                        std::ranges::sort(vec);
-                        auto [_, last]{ std::ranges::unique(vec) };
-                        vec.erase(last, vec.end());
-
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(atl.idxs.at(pos - 1), 0);
-                    }
-                }
-                break;
-
-            case ast_index<repeat>:
-                {
-                    const auto& rep{ std::get<repeat>(entry) };
-
-                    if (pos == 1)
-                    {
-                        auto& vec{ tag_vec.at(idx) };
-                        std::ranges::copy(tag_vec.at(rep.idx), std::back_inserter(vec));
-
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(rep.idx, 0);
-                    }
-                }
-                break;
-
-            case ast_index<tag>:
-                {
-                    const auto& tag_entry{ std::get<tag>(entry) };
-
-                    auto& vec{ tag_vec.at(idx) };
-                    vec.emplace_back(tag_entry.number);
                     stack.pop_back();
                 }
+                else if (pos == cat.idxs.size())
+                {
+                    auto& vec{ tag_vec.at(idx) };
+
+                    for (const std::size_t i : cat.idxs)
+                        std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
+
+                    std::ranges::sort(vec);
+                    auto [_, last]{ std::ranges::unique(vec) };
+                    vec.erase(last, vec.end());
+
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(cat.idxs.at(pos - 1), 0);
+                }
                 break;
+            }
+
+            case ast_index<alt>:
+            {
+                const auto& atl{ std::get<alt>(entry) };
+
+                if (pos == atl.idxs.size())
+                {
+                    auto& vec{ tag_vec.at(idx) };
+
+                    for (const std::size_t i : atl.idxs)
+                        std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
+
+                    std::ranges::sort(vec);
+                    auto [_, last]{ std::ranges::unique(vec) };
+                    vec.erase(last, vec.end());
+
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(atl.idxs.at(pos - 1), 0);
+                }
+                break;
+            }
+
+            case ast_index<repeat>:
+            {
+                const auto& rep{ std::get<repeat>(entry) };
+
+                if (pos == 1)
+                {
+                    auto& vec{ tag_vec.at(idx) };
+                    std::ranges::copy(tag_vec.at(rep.idx), std::back_inserter(vec));
+
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(rep.idx, 0);
+                }
+                break;
+            }
+
+            case ast_index<tag>:
+            {
+                const auto& tag_entry{ std::get<tag>(entry) };
+
+                auto& vec{ tag_vec.at(idx) };
+                vec.emplace_back(tag_entry.number);
+                stack.pop_back();
+                break;
+            }
 
             default:
                 throw tree_error("Invalid tree");
@@ -168,76 +174,80 @@ namespace rx::detail
                 const_len.at(idx) = 1;
                 stack.pop_back();
                 break;
-            
+
             case ast_index<backref>:
                 stack.pop_back();
                 break;
 
             case ast_index<concat>:
+            {
+                const auto& cat{ std::get<concat>(entry) };
+
+                if (pos == cat.idxs.size())
                 {
-                    const auto& cat{ std::get<concat>(entry) };
+                    auto tmp{
+                        cat.idxs | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                        | std::ranges::to<std::vector>()
+                    };
 
-                    if (pos == cat.idxs.size())
-                    {
-                        auto tmp{ cat.idxs | std::views::transform([&](std::size_t i){ return const_len.at(i); })
-                                           | std::ranges::to<std::vector>() };
+                    if (std::ranges::all_of(tmp, [](const opt_t& o) { return o.has_value(); }))
+                        const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o) { return *o; }),
+                                                                   0, std::plus{});
 
-                        if (std::ranges::all_of(tmp, [](const opt_t& o) { return o.has_value(); }))
-                            const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o) { return *o; }),
-                                                                           0, std::plus{});
-
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(cat.idxs.at(pos - 1), 0);
-                    }
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(cat.idxs.at(pos - 1), 0);
                 }
                 break;
+            }
 
             case ast_index<alt>:
+            {
+                const auto& atl{ std::get<alt>(entry) };
+
+                if (pos == atl.idxs.size())
                 {
-                    const auto& atl{ std::get<alt>(entry) };
+                    auto tmp{
+                        atl.idxs | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                        | std::ranges::to<std::vector>()
+                    };
 
-                    if (pos == atl.idxs.size())
-                    {
-                        auto tmp{ atl.idxs | std::views::transform([&](std::size_t i){ return const_len.at(i); })
-                                           | std::ranges::to<std::vector>() };
+                    auto first{ *std::ranges::begin(tmp) };
 
-                        auto first{ *std::ranges::begin(tmp) };
+                    if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o) { return o == first; }))
+                        const_len.at(idx) = first;
 
-                        if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o) { return o == first; }))
-                            const_len.at(idx) = first;
-
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(atl.idxs.at(pos - 1), 0);
-                    }
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(atl.idxs.at(pos - 1), 0);
                 }
                 break;
+            }
 
             case ast_index<repeat>:
-                {
-                    const auto& rep{ std::get<repeat>(entry) };
+            {
+                const auto& rep{ std::get<repeat>(entry) };
 
-                    if (pos == 1)
-                    {
-                        if (rep.min == rep.max and const_len.at(rep.idx))
-                            const_len.at(idx) = *const_len.at(rep.idx) * rep.min;
-                        
-                        stack.pop_back();
-                    }
-                    else
-                    {
-                        pos += 1;
-                        stack.emplace_back(rep.idx, 0);
-                    }
+                if (pos == 1)
+                {
+                    if (rep.min == rep.max and const_len.at(rep.idx))
+                        const_len.at(idx) = *const_len.at(rep.idx) * rep.min;
+
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(rep.idx, 0);
                 }
                 break;
+            }
 
             default:
                 throw tree_error("Invalid tree");
@@ -265,13 +275,6 @@ namespace rx::detail
             if (i == root_idx())
                 current = { .tag_number = end_of_input_tag, .offset = 0 };
 
-            // if not consteval {
-            //     if (i == root_idx())
-            //         std::println("root idx {}: {}", i, target);
-            //     else
-            //         std::println("idx {}: {}", i, target);
-            // }
-            
             for (std::size_t j{ target.size() }; j > 0; --j)
             {
                 const std::size_t idx{ target.at(j - 1) };
@@ -280,8 +283,6 @@ namespace rx::detail
                 {
                     if (current.has_value())
                     {
-                        // if not consteval { if (i == root_idx()) std::println("remap {}", tn->number); }
-
                         /* remap tag */
 
                         auto [_, success]{ tag_remap.try_emplace(tn->number, *current) };
@@ -293,8 +294,6 @@ namespace rx::detail
                     }
                     else
                     {
-                        // if not consteval { if (i == root_idx()) std::println("setcurrent {}", tn->number); }
-
                         current = { .tag_number = tn->number, .offset = 0 };
                     }
                 }
@@ -306,18 +305,7 @@ namespace rx::detail
                         current = {};
                 }
             }
-
-            // if not consteval { std::println("end idx"); }
-        
         }
-
-        // if not consteval
-        // {
-        //     std::println("Remaps");
-        //     for (auto [k, v] : tag_remap)
-        //         std::println("{}: {}+{}", k, v.tag_number, v.offset);
-        //     std::println("End");
-        // }
 
         /* re-number map and re-number tags in capture_info */
 
@@ -344,7 +332,7 @@ namespace rx::detail
 
     template<typename CharT>
     constexpr void expr_tree<CharT>::insert_search_prefix()
-    {        
+    {
         /* make true wildcard */
         const std::size_t wildcard_idx{ expressions_.size() };
         using uct = char_class::underlying_char_type;

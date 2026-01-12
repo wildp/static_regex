@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -23,7 +29,7 @@ namespace rx::detail
     public:
         using char_type = CharT;
         using char_interval = std::pair<char_type, char_type>;
-        
+
         consteval charset() noexcept = default;
 
 
@@ -164,7 +170,7 @@ namespace rx::detail
 
         template<typename T>
         using partition_contents_result = std::vector<std::vector<T>>;
-     
+
         [[nodiscard]] static constexpr auto partition(const std::vector<ref>& input) -> partition_result;
 
         template<typename T>
@@ -217,7 +223,7 @@ namespace rx::detail
 
         while (true)
         {
-            auto midpoint{ lower_bound + (std::ranges::distance(lower_bound, upper_bound) / 2)};
+            auto midpoint{ lower_bound + (std::ranges::distance(lower_bound, upper_bound) / 2) };
 
             if (midpoint->first != std::numeric_limits<char_type>::min() and c + 1 == midpoint->first)
             {
@@ -247,7 +253,7 @@ namespace rx::detail
                     midpoint->second = next->second;
                     data_.erase(next);
                 }
-                
+
                 return midpoint;
             }
             else if (c < midpoint->first)
@@ -262,7 +268,6 @@ namespace rx::detail
                     /* continue search */
                     upper_bound = std::ranges::prev(midpoint);
                 }
-
             }
             else if (c > midpoint->second)
             {
@@ -292,9 +297,9 @@ namespace rx::detail
 
         if (inserted->second >= c)
             return inserted; /* no need to merge */
-        
+
         inserted->second = c;
-        
+
         /* attempt to merge */
 
         while (true)
@@ -390,8 +395,8 @@ namespace rx::detail
             for (; next != result.end(); ++next)
             {
                 if (it->second != std::numeric_limits<char_type>::max() and it->second + 1 < next->first)
-                    break; /* no overlap */ 
-                
+                    break; /* no overlap */
+
                 if (it->second < next->second)
                     it->second = next->second;
             }
@@ -422,14 +427,13 @@ namespace rx::detail
         while (lit != lend and rit != rend)
         {
             const auto [min_first, max_first]{ std::minmax(lit->first, rit->first) };
-            const auto min_first_or_tmp{ tmp.value_or(min_first) }; 
+            const auto min_first_or_tmp{ tmp.value_or(min_first) };
 
             const auto [min_second, max_second]{ std::minmax(lit->second, rit->second) };
             auto& smaller_it{ (lit->second < rit->second) ? lit : rit };
 
             if (min_second < max_first)
             {
-
                 if (not result.empty() and result.back().second + 1 == min_first_or_tmp)
                     result.back().second = min_second;
                 else
@@ -438,12 +442,12 @@ namespace rx::detail
                 tmp.reset();
                 std::ranges::advance(smaller_it, 1);
             }
-            else 
+            else
             {
                 /* lit and rit overlap */
 
                 if (min_first_or_tmp < max_first)
-                {   
+                {
                     if (not result.empty() and result.back().second + 1 == min_first_or_tmp)
                         result.back().second = max_first - 1;
                     else
@@ -607,7 +611,7 @@ namespace rx::detail
                     /* remove lookahead as a duplicate */
                     part.erase(it);
                 }
-            }         
+            }
         }
     }
 
@@ -633,7 +637,7 @@ namespace rx::detail
                 {
                     /* remove lookahead as a duplicate */
                     if (to_insert >= *(it + 1))
-                    { 
+                    {
                         const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first) };
                         if (pos2 == part.end() or pos2->first != to_insert.first)
                         {
@@ -654,7 +658,7 @@ namespace rx::detail
             }
             else
             {
-                const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {},  &partition_entry::first) };
+                const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first) };
                 if (pos2 == part.end() or pos2->first != to_insert.first)
                     part.emplace(pos2, std::move(to_insert));
             }
@@ -681,7 +685,7 @@ namespace rx::detail
     constexpr void charset<CharT>::part_sort_and_dedup(partitioned_intervals& part)
     {
         std::ranges::sort(part, {}, &partition_entry::first);
-        
+
         for (auto it{ part.begin() }; it != part.end(); ++it)
         {
             const auto duplicate_begin{ std::next(it) };
@@ -745,7 +749,7 @@ namespace rx::detail
                      *      ------
                      */
 
-                    current.second = lookahead.first - 1; 
+                    current.second = lookahead.first - 1;
 
                     for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
                         lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
@@ -818,7 +822,7 @@ namespace rx::detail
         {
             std::vector<bool> mask(input.size(), false);
             mask[input.size() - i - 1] = true;
-            for (const auto& pair: input[i].get().data_)
+            for (const auto& pair : input[i].get().data_)
                 part.emplace_back(pair, mask);
         }
 
@@ -844,7 +848,7 @@ namespace rx::detail
         {
             std::vector<bool> mask(input.size(), false);
             mask[input.size() - i - 1] = true;
-            for (const auto& pair: input[i].first.get().data_)
+            for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
 
@@ -881,7 +885,7 @@ namespace rx::detail
         {
             std::vector<bool> mask(input.size(), false);
             mask[input.size() - i - 1] = true;
-            for (const auto& pair: input[i].first.get().data_)
+            for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
 
@@ -901,5 +905,4 @@ namespace rx::detail
 
         return result;
     }
-    
 }

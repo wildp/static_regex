@@ -1,7 +1,13 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #include <rx/etc/charset.hpp>
 
 
-namespace 
+namespace
 {
     consteval auto make_cs(std::string_view sv)
     {
@@ -77,7 +83,7 @@ namespace
     consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
     {
         const auto input{ make_cs_vec(arg) };
-        const std::vector refs{ std::from_range, input | std::views::transform([](const auto& b){ return std::cref(b); }) };
+        const std::vector refs{ std::from_range, input | std::views::transform([](const auto& b) { return std::cref(b); }) };
         return rx::detail::charset<char>::partition(refs) == make_cs_vec(result);
     }
 }
@@ -159,15 +165,15 @@ static_assert(not contains("acef", 'd'));
 
 /* partition tests */
 static_assert(test_part({}, {}));
-static_assert(test_part({"ac"}, {"ac"}));
-static_assert(test_part({"ac","ac"}, {"ac"}));
-static_assert(test_part({"ac","ae"}, {"de","ac"}));
-static_assert(test_part({"ae","ac"}, {"de","ac"}));
-static_assert(test_part({"ae","bc"}, {"aade","bc"}));
-static_assert(test_part({"bc","ae"}, {"aade","bc"}));
-static_assert(test_part({"aj","bdfg"}, {"aaeehj","bdfg"}));
-static_assert(test_part({"aj","em"}, {"ad","km", "ej"}));
-static_assert(test_part({"aj","em"}, {"ad","km", "ej"}));
-static_assert(test_part({"em","aj"}, {"km","ad", "ej"}));
-static_assert(test_part({"adgh","dfhj"}, {"acgg","efij", "ddhh"}));
-static_assert(test_part({"adgh","dfhj", "dh"}, {"ac","ij", "gg", "ef", "ddhh"}));
+static_assert(test_part({ "ac" }, { "ac" }));
+static_assert(test_part({ "ac", "ac" }, { "ac" }));
+static_assert(test_part({ "ac", "ae" }, { "de", "ac" }));
+static_assert(test_part({ "ae", "ac" }, { "de", "ac" }));
+static_assert(test_part({ "ae", "bc" }, { "aade", "bc" }));
+static_assert(test_part({ "bc", "ae" }, { "aade", "bc" }));
+static_assert(test_part({ "aj", "bdfg" }, { "aaeehj", "bdfg" }));
+static_assert(test_part({ "aj", "em" }, { "ad", "km", "ej" }));
+static_assert(test_part({ "aj", "em" }, { "ad", "km", "ej" }));
+static_assert(test_part({ "em", "aj" }, { "km", "ad", "ej" }));
+static_assert(test_part({ "adgh", "dfhj" }, { "acgg", "efij", "ddhh" }));
+static_assert(test_part({ "adgh", "dfhj", "dh" }, { "ac", "ij", "gg", "ef", "ddhh" }));

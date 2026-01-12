@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <rx/fsm/tdfa.hpp>
@@ -22,40 +28,37 @@ namespace rx::detail::tdfa
 
     struct configuration
     {
-        std::size_t     tnfa_state{ 0 };
-        reg_vec         registers;
-        tag_sequence_t  tag_seq;
+        std::size_t    tnfa_state{ 0 };
+        reg_vec        registers;
+        tag_sequence_t tag_seq;
 
         friend constexpr bool operator==(const configuration&, const configuration&) = default;
 
-        constexpr configuration(std::size_t state, reg_vec reg, tag_sequence_t seq) :
-            tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) } {}
+        constexpr configuration(std::size_t state, reg_vec reg, tag_sequence_t seq)
+            : tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) } {}
 
         constexpr configuration() = default;
     };
 
     struct closure_entry
     {
-        std::size_t     tnfa_state{ 0 };
-        reg_vec         registers;
-        tag_sequence_t  tag_seq;
-        tag_sequence_t  new_tag_seq;
+        std::size_t    tnfa_state{ 0 };
+        reg_vec        registers;
+        tag_sequence_t tag_seq;
+        tag_sequence_t new_tag_seq;
 
         [[maybe_unused]] friend constexpr bool operator==(const closure_entry&, const closure_entry&) = default;
 
-        constexpr closure_entry(std::size_t state, reg_vec reg, tag_sequence_t seq = {}, tag_sequence_t newseq = {}) :
-            tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) }, new_tag_seq{ std::move(newseq) } {}
+        constexpr closure_entry(std::size_t state, reg_vec reg, tag_sequence_t seq = {}, tag_sequence_t newseq = {})
+            : tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) }, new_tag_seq{ std::move(newseq) } {}
 
         constexpr closure_entry() = default;
-    };
-
-    namespace
-    {
-        [[maybe_unused]] inline constexpr configuration next_config_from_ce(const closure_entry& ce)
+        
+        static constexpr configuration next_config(const closure_entry& ce)
         {
-            return { ce.tnfa_state, ce.registers, ce.new_tag_seq }; 
+            return { ce.tnfa_state, ce.registers, ce.new_tag_seq };
         }
-    }
+    };
 
     using config_set_t = std::vector<configuration>;
     using closure_t = std::vector<closure_entry>;
@@ -72,9 +75,9 @@ namespace rx::detail::tdfa
 
     struct node_info
     {
-        config_set_t    config;
-        precedence_t    precedence;
-        bool            is_fallback{ false };
+        config_set_t config;
+        precedence_t precedence;
+        bool         is_fallback{ false };
 
         friend constexpr bool operator==(const node_info&, const node_info&) = default;
     };
@@ -86,9 +89,9 @@ namespace rx::detail::tdfa
     {
         struct entry
         {
-            tag_t           tag;
-            regop::op_t     op;
-            reg_t           reg;
+            tag_t       tag;
+            regop::op_t op;
+            reg_t       reg;
         };
 
     public:
@@ -107,9 +110,8 @@ namespace rx::detail::tdfa
             it = data_.insert(it, entry{ .tag = tag, .op = op, .reg = 0 });
             return { it->reg, false };
         }
-        
-    private:
 
+    private:
         std::vector<entry> data_;
     };
 
@@ -149,7 +151,7 @@ namespace rx::detail::tdfa
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
         static constexpr auto compose = [](const auto& g, const auto& f) {
-            return [=]<typename T>(T&& arg) { 
+            return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };
         };
@@ -162,7 +164,7 @@ namespace rx::detail::tdfa
         std::vector<bool> visited(tnfa_ptr_->node_count(), false);
 
         while (not stack.empty())
-        {   
+        {
             if (visited.at(stack.back().tnfa_state))
             {
                 stack.pop_back();
@@ -178,23 +180,25 @@ namespace rx::detail::tdfa
             // TODO: maybe reimplement to be more efficient, using getif?
             // also maybe sort e-transitions and avoid looking at node.out_tr and node.in_tr
             using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
-            std::vector et{ std::from_range,
-                            tnfa_ptr_->get_node(ce.tnfa_state).out_tr
-                            | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
-                            | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
-                            | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; }) };
-            
+            std::vector et{
+                std::from_range,
+                tnfa_ptr_->get_node(ce.tnfa_state).out_tr
+                | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
+                | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
+                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; })
+            };
+
             std::ranges::sort(et, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_t::second));
 
             for (const auto& [next, e] : et)
             {
                 if (not visited.at(next))
                 {
-                    auto newer_tag_seq{ ce.new_tag_seq };   
+                    auto newer_tag_seq{ ce.new_tag_seq };
                     if (e.tag != 0)
                         newer_tag_seq.push_back(e.tag);
                     stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
-                }   
+                }
             }
         }
 
@@ -214,7 +218,11 @@ namespace rx::detail::tdfa
             std::erase_if(new_closure, [this, &end_found](const closure_entry& ce) -> bool {
                 if (end_found) return true;
                 const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
-                if (node.is_fallback) { end_found = true; return false; }
+                if (node.is_fallback)
+                {
+                    end_found = true;
+                    return false;
+                }
                 if (node.is_final) return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
                                                   [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
@@ -227,14 +235,14 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o) -> std::size_t
     {
-        node_info current_info{ .config{ std::from_range, c | std::views::transform(next_config_from_ce) }, .precedence = p };
+        node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) }, .precedence = p };
 
         const std::size_t new_state{ static_cast<std::size_t>(std::ranges::distance(state_info_.begin(), std::ranges::find(state_info_, current_info))) };
 
         /* check if state already exists */
         if (new_state < state_info_.size())
             return new_state;
-        
+
         /* check if state can be mapped to an existing state */
         for (std::size_t mapped_state{ 0 }; mapped_state < state_info_.size(); ++mapped_state)
             if (mappable(current_info, mapped_state, o, result.register_count_))
@@ -246,7 +254,7 @@ namespace rx::detail::tdfa
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto is_final = [this](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
+        const auto is_final = [this](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_final; };
         const auto it{ std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state) };
         std::optional<continue_at_t> continue_at;
         if (it != std::ranges::end(current_cfg))
@@ -273,7 +281,7 @@ namespace rx::detail::tdfa
         if (flags_.enable_fallback)
         {
             /* set fallback state status for fallback_regops */
-            const auto is_fallback = [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; };
+            const auto is_fallback = [&](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_fallback; };
             const auto it2{ std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state) };
             if (it2 != std::ranges::end(current_cfg))
             {
@@ -281,9 +289,8 @@ namespace rx::detail::tdfa
                 if (continue_at.has_value())
                     cont_info_.emplace_hint(cont_info_.end(), new_state, *continue_at);
             }
-                
         }
-        
+
         return new_state;
     }
 
@@ -322,7 +329,7 @@ namespace rx::detail::tdfa
             for (tag_t t{ 1 }; std::cmp_less_equal(t, tag_count_); ++t)
             {
                 auto h{ history(ce.tag_seq, t) };
-                
+
                 if (not h.empty())
                 {
                     regop::op_t op_rhs{ regop_rhs(h) };
@@ -349,7 +356,7 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr auto factory<CharT>::final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const -> regops_t 
+    constexpr auto factory<CharT>::final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const -> regops_t
     {
         regops_t regops;
 
@@ -390,9 +397,9 @@ namespace rx::detail::tdfa
         // if (state.precedence != mapped_state_info.precedence)
         if (not std::ranges::equal(state.config, mapped_state_info.config, {}, &configuration::tnfa_state, &configuration::tnfa_state))
             return false;
-        
+
         register_map_t map, rmap;
-        
+
         for (const auto& ce1 : state.config)
         {
             for (const auto& ce2 : mapped_state_info.config)
@@ -519,7 +526,7 @@ namespace rx::detail::tdfa
                 else
                     o.emplace_back(f);
             }
-            
+
             if (o.empty())
             {
                 /* avoid creating empty regop blocks */
@@ -538,7 +545,7 @@ namespace rx::detail::tdfa
     {
         for (auto& tr : result.nodes_.at(state).tr)
         {
-            /* not final node => non accepting path exists from tr.next (end of inputs can be anywhere) */
+            /* not final node => non-accepting path exists from tr.next (end of inputs can be anywhere) */
             if (not result.final_nodes_.contains(tr.next))
             {
                 if (tr.op_index == no_transition_regops)
@@ -566,8 +573,8 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count) :
-        tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
+    constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
+        : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
     {
         result.register_count_ = tag_count_ * 2;
         result.final_registers_.resize(tag_count_);
@@ -598,7 +605,7 @@ namespace rx::detail::tdfa
                 {
                     /* avoid creating empty regop blocks */
                     result.nodes_.at(state).tr.emplace_back(s, no_transition_regops, std::move(cs));
-                }   
+                }
                 else
                 {
                     result.nodes_.at(state).tr.emplace_back(s, result.regops_.size(), std::move(cs));
@@ -615,8 +622,8 @@ namespace rx::detail::tdfa
 namespace rx::detail
 {
     template<typename CharT>
-    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa& tnfa) : 
-        capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
+    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa& tnfa)
+        : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
     {
         tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
     }

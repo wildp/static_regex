@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <rx/fsm/tdfa.hpp>
@@ -41,7 +47,7 @@ namespace rx::detail::tdfa
         for (std::size_t i{ 0 }; i < dfa.regops_.size(); ++i)
         {
             auto [it, inserted]{ regop_map.try_emplace(dfa.regops_[i], new_regops.size()) };
-            
+
             if (inserted)
                 new_regops.emplace_back(dfa.regops_[i]);
 
@@ -50,8 +56,8 @@ namespace rx::detail::tdfa
 
         /* remap regop block indicies in dfa */
 
-        for (auto& node: dfa.nodes_)
-            for (auto& tr: node.tr)
+        for (auto& node : dfa.nodes_)
+            for (auto& tr : node.tr)
                 tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : no_transition_regops;
 
         for (auto it{ dfa.final_nodes_.begin() }, last{ dfa.final_nodes_.end() }; it != last; ++it)
@@ -99,7 +105,7 @@ namespace rx::detail::tdfa
 
         /* we keep partitions sorted with the set containing 0 first */
 
-        std::ranges::sort(partitions, std::ranges::greater{}); 
+        std::ranges::sort(partitions, std::ranges::greater{});
 
         return partitions;
     }
@@ -108,7 +114,7 @@ namespace rx::detail::tdfa
     constexpr auto min<CharT>::hopcroft(const tdfa_t& dfa) -> partition_t
     {
         // Adapted from https://en.wikipedia.org/wiki/DFA_minimization#Hopcroft's_algorithm
-        
+
         const std::size_t bitset_size{ dfa.node_count() };
 
         /* set initial partitions; let work = partition  */
@@ -118,7 +124,7 @@ namespace rx::detail::tdfa
         while (not work.empty())
         {
             const bitset_t transitions_to{ std::move(work.back()) };
-            
+
             work.pop_back();
 
             // is this better as a flat_map or as a vector?
@@ -136,14 +142,14 @@ namespace rx::detail::tdfa
                 {
                     bitset_t transitions_from(bitset_size, false);
 
-                    for (const std::size_t s: states)
+                    for (const std::size_t s : states)
                         transitions_from[s] = true;
 
                     for (std::size_t p{ 0 }; p < partitions.size(); ++p)
                     {
                         bitset_t intersection(bitset_size, false);
                         bitset_t rel_complement(bitset_size, false);
-                        
+
                         for (std::size_t i{ 0 }; i < bitset_size; ++i)
                         {
                             intersection[i] = partitions[p][i] and transitions_from[i];
@@ -206,7 +212,7 @@ namespace rx::detail::tdfa
         /* create map for node remapping */
 
         std::vector<std::size_t> state_remap(dfa.node_count(), -1);
-        
+
         for (std::size_t i{ 0 }; i < partitions.size(); ++i)
         {
             const auto& part{ partitions[i] };
@@ -265,7 +271,7 @@ namespace rx::detail::tdfa
 namespace rx::detail
 {
     template<typename CharT>
-    constexpr void tagged_dfa<CharT>::minimise_states() 
+    constexpr void tagged_dfa<CharT>::minimise_states()
     {
         std::invoke(tdfa::min<char_type>{}, *this);
     }

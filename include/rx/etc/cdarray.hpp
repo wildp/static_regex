@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <cstddef>
@@ -18,18 +24,19 @@ namespace rx::detail
     class cdarray_iterator
     {
     public:
-        using iterator_category     = std::contiguous_iterator_tag;
-        using value_type            = T;
-        using difference_type       = std::ptrdiff_t;
-        using pointer               = std::add_pointer_t<T>;
-        using reference             = std::add_lvalue_reference_t<T>;
+        using iterator_concept  = std::contiguous_iterator_tag;
+        using iterator_category = std::contiguous_iterator_tag;
+        using value_type        = T;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = std::add_pointer_t<T>;
+        using reference         = std::add_lvalue_reference_t<T>;
 
         constexpr reference operator*() const { return *it_; }
         constexpr pointer operator->() const { return &operator*(); }
         constexpr cdarray_iterator& operator++() noexcept { ++it_; return *this; }
-        constexpr cdarray_iterator operator++(int) noexcept { cdarray_iterator tmp{ *this }; ++(*this); return tmp; }
+        constexpr cdarray_iterator  operator++(int) noexcept { cdarray_iterator tmp{ *this }; ++(*this); return tmp; }
         constexpr cdarray_iterator& operator--() noexcept { --it_; return *this; }
-        constexpr cdarray_iterator operator--(int) noexcept { cdarray_iterator tmp{ *this }; --(*this); return tmp; }
+        constexpr cdarray_iterator  operator--(int) noexcept { cdarray_iterator tmp{ *this }; --(*this); return tmp; }
         constexpr friend bool operator==(const cdarray_iterator&, const cdarray_iterator&) noexcept = default;
         constexpr friend std::strong_ordering operator<=>(const cdarray_iterator&, const cdarray_iterator&) noexcept = default;
         constexpr cdarray_iterator& operator+=(difference_type d) noexcept { it_ += d; return *this; }
@@ -47,7 +54,7 @@ namespace rx::detail
 
         template<typename, typename>
         friend class cdarray;
-        
+
         constexpr cdarray_iterator(const pointer& ptr) : it_{ ptr } {}
     };
 
@@ -74,22 +81,17 @@ namespace rx::detail
 
         /* construct/copy/destroy */
 
-        constexpr cdarray() noexcept(noexcept(Allocator())) :
-                cdarray(Allocator())
-        {
-        }
+        constexpr cdarray() noexcept(noexcept(Allocator()))
+            : cdarray(Allocator()) {}
 
-        constexpr explicit cdarray(const Allocator& alloc) noexcept :
-                alloc_{ alloc }
-        {
-        }
+        constexpr explicit cdarray(const Allocator& alloc) noexcept
+            : alloc_{ alloc } {}
 
-        constexpr explicit cdarray(size_type count, const Allocator& alloc = Allocator()) :
-                alloc_{ alloc }
+        constexpr explicit cdarray(size_type count, const Allocator& alloc = Allocator())
+            : alloc_{ alloc },
+              data_{ std::allocator_traits<Allocator>::allocate(alloc_, count) },
+              end_{ data_ + count }
         {
-            data_ = std::allocator_traits<Allocator>::allocate(alloc_, count),
-            end_ = data_ + count;
-
             for (pointer p{ data_ }; p != end_; ++p)
                 std::allocator_traits<Allocator>::construct(alloc_, p);
 
@@ -97,12 +99,11 @@ namespace rx::detail
         }
 
 
-        constexpr cdarray(size_type count, const T& value, const Allocator& alloc = Allocator()) :
-                alloc_{ alloc }
+        constexpr cdarray(size_type count, const T& value, const Allocator& alloc = Allocator())
+            : alloc_{ alloc },
+              data_{ std::allocator_traits<Allocator>::allocate(alloc_, count) },
+              end_{ data_ + count }
         {
-            data_ = std::allocator_traits<Allocator>::allocate(alloc_, count),
-            end_ = data_ + count;
-
             for (pointer p{ data_ }; p != end_; ++p)
                 std::allocator_traits<Allocator>::construct(alloc_, p, value);
 
@@ -110,72 +111,65 @@ namespace rx::detail
         }
 
         template<class InputIter>
-        constexpr cdarray(InputIter first, InputIter last, const Allocator& alloc = Allocator()) :
-                alloc_{ alloc }
+        constexpr cdarray(InputIter first, InputIter last, const Allocator& alloc = Allocator())
+            : alloc_{ alloc },
+              data_{ std::allocator_traits<Allocator>::allocate(alloc_, std::distance(first, last)) },
+              end_{ data_ }
         {
-            const std::size_t count{ std::distance(first, last) };
-            data_ = std::allocator_traits<Allocator>::allocate(alloc_, count);
-            end_ = data_ + count;
-
             for (; first != last; ++first)
+            {
                 std::allocator_traits<Allocator>::construct(alloc_, end_, *first);
+                ++end_;
+            }
 
             new_counter();
         }
 
-        template<typename R>
-        requires (std::ranges::input_range<R> and std::convertible_to<std::ranges::range_reference_t<R>, T>)
-        constexpr cdarray(std::from_range_t, R&& rg, const Allocator& alloc = Allocator()) :
-                alloc_{ alloc }
+        template<typename Range>
+        requires std::ranges::input_range<Range> and std::convertible_to<std::ranges::range_reference_t<Range>, T>
+        constexpr cdarray(std::from_range_t, Range&& rg, const Allocator& alloc = Allocator())
+            : alloc_{ alloc },
+              data_{ std::allocator_traits<Allocator>::allocate(alloc, std::ranges::size(rg)) },
+              end_{ data_ }
         {
-            const size_type count{ std::ranges::size(rg) };
-            data_ = std::allocator_traits<Allocator>::allocate(alloc, count);
-            end_ = data_ + count;
-
             for (const auto& item : rg)
+            {
                 std::allocator_traits<Allocator>::construct(alloc_, end_, item);
+                ++end_;
+            }
 
             new_counter();
         }
 
-        constexpr cdarray(const cdarray& other) noexcept :
-                data_{ other.data_ },
-                end_{ other.end_ },
-                use_count_ptr_{ other.use_count_ptr_ },
-                alloc_{ other.get_allocator() }
+        constexpr cdarray(const cdarray& other) noexcept
+            : alloc_{ other.get_allocator() },
+              data_{ other.data_ },
+              end_{ other.end_ },
+              use_count_ptr_{ other.use_count_ptr_ }
         {
             *use_count_ptr_ += 1;
         }
 
-        constexpr cdarray(cdarray&& other) noexcept :
-                data_{ std::exchange(other.data_, nullptr) },
-                end_{ std::exchange(other.end_, nullptr) },
-                use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) },
-                alloc_{ other.get_allocator() }
-        {
-        }
-    
-        constexpr cdarray(const cdarray& other, const std::type_identity_t<Allocator>& alloc) :
-                data_{ other.data_ },
-                end_{ other.end_ },
-                use_count_ptr_{ other.use_count_ptr_ },
-                alloc_{ alloc }
+        constexpr cdarray(cdarray&& other) noexcept
+            : alloc_{ other.get_allocator() },
+              data_{ std::exchange(other.data_, nullptr) },
+              end_{ std::exchange(other.end_, nullptr) },
+              use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) } {}
+
+        constexpr cdarray(const cdarray& other, const std::type_identity_t<Allocator>& alloc)
+            : alloc_{ alloc }, data_{ other.data_ }, end_{ other.end_ }, use_count_ptr_{ other.use_count_ptr_ }
         {
             *use_count_ptr_ += 1;
         }
 
-        constexpr cdarray(cdarray&& other, const std::type_identity_t<Allocator>& alloc) noexcept :
-                data_{ std::exchange(other.data_, nullptr) },
-                end_{ std::exchange(other.end_, nullptr) }, 
-                use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) },
-                alloc_{ alloc }
-        {
-        }
-        
-        constexpr cdarray(std::initializer_list<T> init, const Allocator& alloc = Allocator()) :
-                cdarray(init.begin(), init.end(), alloc)
-        {
-        }
+        constexpr cdarray(cdarray&& other, const std::type_identity_t<Allocator>& alloc) noexcept
+            : alloc_{ alloc },
+              data_{ std::exchange(other.data_, nullptr) },
+              end_{ std::exchange(other.end_, nullptr) },
+              use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) } {}
+
+        constexpr cdarray(std::initializer_list<T> init, const Allocator& alloc = Allocator())
+            : cdarray(init.begin(), init.end(), alloc) {}
 
         constexpr ~cdarray() { this->delete_if_needed(); }
 
@@ -184,10 +178,10 @@ namespace rx::detail
             if (this == &other)
                 return *this;
 
+            alloc_ = other.alloc_;
             data_ = other.data_;
             end_ = other.end_;
             use_count_ptr_ = other.use_count_ptr_;
-            alloc_ = other.alloc_;
 
             *use_count_ptr_ += 1;
 
@@ -199,10 +193,10 @@ namespace rx::detail
             std::allocator_traits<Allocator>::is_always_equal::value)
         {
             this->delete_if_needed();
+            alloc_ = other.alloc_;
             data_ = std::exchange(other.data_, nullptr);
             end_ = std::exchange(other.end_, nullptr);
             use_count_ptr_ = std::exchange(other.use_count_ptr_, nullptr);
-            alloc_ = other.alloc_;
             return *this;
         }
 
@@ -218,10 +212,10 @@ namespace rx::detail
 
         constexpr void swap(cdarray& other) noexcept(std::is_nothrow_swappable_v<T>)
         {
+            std::swap(alloc_, other.alloc_);
             std::swap(data_, other.data_);
             std::swap(end_, other.end_);
             std::swap(use_count_ptr_, other.use_count_ptr_);
-            std::swap(alloc_, other.alloc_);
         }
 
         /* iterators */
@@ -230,9 +224,9 @@ namespace rx::detail
         [[nodiscard]] constexpr const_iterator begin() const noexcept { return data_; }
         [[nodiscard]] constexpr iterator end() { this->copy_if_needed(); return end_; }
         [[nodiscard]] constexpr const_iterator end() const noexcept { return end_; }
-        [[nodiscard]] constexpr reverse_iterator rbegin() { return std::make_reverse_iterator(this->end()); };
+        [[nodiscard]] constexpr reverse_iterator rbegin() { return std::make_reverse_iterator(this->end()); }
         [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(this->end()); };
-        [[nodiscard]] constexpr reverse_iterator rend() { return std::make_reverse_iterator(this->begin()); };
+        [[nodiscard]] constexpr reverse_iterator rend() { return std::make_reverse_iterator(this->begin()); }
         [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept { return std::make_reverse_iterator(this->begin()); }
 
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return this->begin(); }
@@ -244,7 +238,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr bool empty() const noexcept { return (data_ == end_); }
         [[nodiscard]] constexpr size_type size() const noexcept { return std::distance(data_, end_); }
-        [[nodiscard]] constexpr size_type max_size() const noexcept { return this->size(); };
+        [[nodiscard]] constexpr size_type max_size() const noexcept { return this->size(); }
 
         /* element access */
 
@@ -312,7 +306,7 @@ namespace rx::detail
 
                     if constexpr (not std::is_trivially_destructible_v<T>)
                     {
-                        for (pointer p{ data_ }; p != end_; ++p) 
+                        for (pointer p{ data_ }; p != end_; ++p)
                             std::allocator_traits<Allocator>::destroy(alloc_, p);
                     }
 
@@ -333,12 +327,12 @@ namespace rx::detail
             if (n >= this->size())
                 throw std::out_of_range("tag_vector::range_check: n >= this->size()");
         }
-
-        pointer                     data_{ nullptr };
-        pointer                     end_{ nullptr };
-        size_type*                  use_count_ptr_{ nullptr };
-
+        
         [[no_unique_address]]
-        allocator_type              alloc_;
+        allocator_type alloc_;
+
+        pointer        data_{ nullptr };
+        pointer        end_{ nullptr };
+        size_type*     use_count_ptr_{ nullptr };
     };
 }

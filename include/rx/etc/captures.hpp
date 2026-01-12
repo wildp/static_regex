@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -19,18 +25,18 @@ namespace rx::detail
     class capture_info
     {
     public:
-        using capture_number_t  = std::uint_least16_t;
-    
+        using capture_number_t = std::uint_least16_t;
+
         struct pair_entry
         {
-            tag_number_t    tag_number;
-            int             offset;         /* note: offset should normally be negative */
+            tag_number_t tag_number;
+            int          offset;     /* note: offset should normally be negative */
         };
 
-        using tag_pair_t = std::pair<pair_entry, pair_entry>;
+        using tag_pair_t     = std::pair<pair_entry, pair_entry>;
         using tag_remapper_t = std::flat_map<tag_number_t, tag_number_t>;
 
-        using key_type = capture_number_t;
+        using key_type   = capture_number_t;
         using value_type = tag_pair_t;
 
         constexpr capture_info()
@@ -66,28 +72,32 @@ namespace rx::detail
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
         {
             static constexpr auto compose = [](const auto& g, const auto& f) {
-                return [=]<typename T>(T&& arg) { 
+                return [=]<typename T>(T&& arg) {
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
             };
 
             /* for some reason, this doesn't seem to work? */
-            return { std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::first)),
-                     std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::second)) };
+            return {
+                std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::first)),
+                std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::second))
+            };
         }
 
         [[nodiscard]] constexpr auto lookup(capture_number_t cap) const
         {
             auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
 
-            return std::ranges::subrange{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
-                                          std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end) };
+            return std::ranges::subrange{
+                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
+                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end)
+            };
         }
 
-        [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map) 
+        [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map)
         {
             static constexpr auto compose = [](const auto& g, const auto& f) {
-                return [=]<typename T>(T&& arg) { 
+                return [=]<typename T>(T&& arg) {
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
             };
@@ -108,7 +118,7 @@ namespace rx::detail
             }
 
             tag_remapper_t remapper;
-            
+
             std::vector<tag_number_t> set;
             set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::first)));
             set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::second)));

@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <concepts>
@@ -5,7 +11,7 @@
 #include <variant>
 
 
-namespace rx::detail 
+namespace rx::detail
 {
     template<class... Ts>
     struct overloads : Ts... { using Ts::operator()...; };
@@ -34,7 +40,6 @@ namespace rx::detail
     template<typename CharT>
     concept char_is_utf32 = std::same_as<CharT, char32_t>
                             or (std::same_as<CharT, wchar_t> and sizeof(CharT) == sizeof(char32_t)); /* Assume a 32-bit wchar_t is encoded in utf32 */
-    
 
     template<typename CharT>
     concept char_is_multibyte = char_is_utf8<CharT> or char_is_utf16<CharT>;
@@ -42,8 +47,8 @@ namespace rx::detail
 
     template<typename V, typename T, std::size_t I = 0>
     struct index_of_impl : std::conditional_t<std::same_as<T, std::variant_alternative_t<I, V>>,
-                                            std::integral_constant<std::size_t, I>,
-                                            index_of_impl<V, T, I + 1>> {};
+                                              std::integral_constant<std::size_t, I>,
+                                              index_of_impl<V, T, I + 1>> {};
 
     template<typename V, typename T, std::size_t I>
     requires (I >= std::variant_size_v<V>)

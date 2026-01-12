@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <cstdint>
@@ -49,7 +55,7 @@ namespace rx::detail
         {
             std::vector<std::size_t> idxs;
         };
-        
+
         struct concat
         {
             std::vector<std::size_t> idxs;
@@ -60,13 +66,13 @@ namespace rx::detail
             tag_number_t number;
         };
 
-        using backref = tok::backref;  
+        using backref = tok::backref;
 
         struct repeat
         {
             std::size_t idx;
             std::int_least16_t min;
-            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */ 
+            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */
             repeater_mode mode;     /* default = greedy */
         };
 
@@ -79,7 +85,7 @@ namespace rx::detail
         constexpr expr_tree(sv_type sv, parser_flags flags = {});
 
         friend class parser::ll1<char_type>;
-        
+
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
         [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }
         [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }

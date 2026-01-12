@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #include "headers/tdfa_matcher.hpp"
 #include "rx/fsm/flags.hpp"
 
@@ -14,7 +20,7 @@ namespace
 
         const rx::testing::tdfa_matcher dfa{ nfa };
         const auto match_result{ dfa.match(str) };
-        
+
         if (captures.empty())
             return match_result.has_value();
         else if (not match_result.has_value())
@@ -218,7 +224,7 @@ static_assert(partial_match("(abc)+?a", "abcabca", { 0, 4, 0, 3 }));
 static_assert(match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 3, 3, 10 }));
 static_assert(partial_match("(ab+c)+?(ab+c|.*d)", "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
 static_assert(partial_match("(ab+c)+(ab+c|.*d)", "abcabbcacd", { 0, 10, 3, 7, 7, 10 }));
-static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10}));
+static_assert(search("([ad]b+c)+?([ad])", "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10 }));
 static_assert(search("([ad]b+c)+([ad])", "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
 #endif // EXTENDED_TESTS
 
@@ -264,7 +270,7 @@ static_assert(search("^ab", "aba", { 0, 2 }));
 static_assert(search("ab", "bab", { 1, 3 }));
 static_assert(search("ab", "aba", { 0, 2 }));
 #if EXTENDED_TESTS
-static_assert(search("(abc)|(^abc)", "abc", { 0, 3, 0, 3, no_tag, no_tag}));
+static_assert(search("(abc)|(^abc)", "abc", { 0, 3, 0, 3, no_tag, no_tag }));
 #endif // EXTENDED_TESTS
 
 /* sol+eol anchor tests */
@@ -299,4 +305,3 @@ static_assert(not search(R"(a\b)", "a_"));
 
 /* other tests */
 // "R(est)|(Res)T" -> hopcroft
-

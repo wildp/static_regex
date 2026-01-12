@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <iterator>
@@ -7,32 +13,30 @@
 namespace rx::detail
 {
     template<class T>
-    requires (std::is_const_v<T>)
+    requires std::is_const_v<T>
     class static_span
     {
     public:
         /* types */
-        using element_type              = T;
-        using value_type                = std::remove_cv_t<element_type>;
-        using size_type                 = std::size_t;
-        using difference_type           = std::ptrdiff_t;
-        using pointer                   = element_type*;
-        using const_pointer             = element_type*;
-        using reference                 = element_type&;
-        using const_reference           = const element_type&;
-        using const_iterator            = const_pointer;
-        using iterator                  = const_iterator;
-        using const_reverse_iterator    = std::reverse_iterator<iterator>;
-        using reverse_iterator          = const_reverse_iterator;
+        using element_type           = T;
+        using value_type             = std::remove_cv_t<element_type>;
+        using size_type              = std::size_t;
+        using difference_type        = std::ptrdiff_t;
+        using pointer                = element_type*;
+        using const_pointer          = element_type*;
+        using reference              = element_type&;
+        using const_reference        = const element_type&;
+        using const_iterator         = const_pointer;
+        using iterator               = const_iterator;
+        using const_reverse_iterator = std::reverse_iterator<iterator>;
+        using reverse_iterator       = const_reverse_iterator;
 
         /* constructors and assignment */
-        constexpr static_span() noexcept = default; 
+        constexpr static_span() noexcept = default;
 
         template<std::size_t N = std::dynamic_extent>
-        consteval static_span(std::span<T, N> span) noexcept :
-            data_{ span.data() }, size_{ span.size() }
-        {
-        }
+        consteval static_span(std::span<T, N> span) noexcept
+            : data_{ span.data() }, size_{ span.size() } {}
 
         template<std::size_t N = std::dynamic_extent>
         consteval static_span& operator=(std::span<T, N> span) noexcept
@@ -56,7 +60,7 @@ namespace rx::detail
 
         /* iterators */
         [[nodiscard]] constexpr const_iterator begin() const noexcept { return data_; }
-        [[nodiscard]] constexpr const_iterator end() const noexcept { return data_ + this->size() ; }
+        [[nodiscard]] constexpr const_iterator end() const noexcept { return data_ + this->size(); }
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return this->begin(); }
         [[nodiscard]] constexpr const_iterator cend() const noexcept { return this->end(); }
         [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(this->begin()); }
@@ -73,7 +77,7 @@ namespace rx::detail
 
     public:
         /* data members (public so that static_span is structural) */
-        pointer data_{ nullptr };
+        pointer   data_{ nullptr };
         size_type size_{ 0 };
     };
 

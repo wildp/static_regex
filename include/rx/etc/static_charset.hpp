@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <concepts>
@@ -17,7 +23,6 @@ namespace rx::detail
 
     template<typename T, typename CharT>
     concept charset_like = one_of<T, charset<CharT>, static_charset<CharT>>;
-
     
     template<typename CharT>
     class static_charset
@@ -29,20 +34,18 @@ namespace rx::detail
 
         consteval static_charset() noexcept = default;
 
-        consteval explicit static_charset(const charset& cs) :
-            data_{ std::define_static_array(cs.data_) }
-        {
-        }
+        consteval explicit static_charset(const charset& cs)
+            : data_{ std::define_static_array(cs.data_) } {}
 
         template<typename... Args>
-        requires (sizeof...(Args) >= 1 and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...))
+        requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
         constexpr explicit static_charset(Args... args)
         {
             charset tmp;
 
             template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
             {
-                if constexpr (std::convertible_to<Args...[i], char_type>  )
+                if constexpr (std::convertible_to<Args...[i], char_type>)
                     tmp.insert(args...[i]);
                 else if constexpr (std::convertible_to<Args...[i], char_interval>)
                     tmp.insert(args...[i].first, args...[i].second);
@@ -121,7 +124,7 @@ namespace rx::detail
         friend constexpr auto operator<=>(const charset_like<CharT> auto& lhs, const charset_like<CharT> auto& rhs)
         {
             return std::lexicographical_compare_three_way(lhs.data_.begin(), lhs.data_.end(), rhs.data_.begin(), rhs.data_.end());
-        } 
+        }
 
 
         /* additional operators for charset */
@@ -149,7 +152,7 @@ namespace rx::detail
             lhs.data_ = std::move(charset::make_relative_complement(lhs.data_, rhs.data_));
             return lhs;
         }
-        
+
     private:
         static_span<const char_interval> data_;
     };

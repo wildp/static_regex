@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <cstddef>
@@ -49,8 +55,8 @@ namespace rx::detail::tdfa
         op_t op;
         reg_t dst;
 
-        constexpr regop(reg_t destination, op_t operation) :
-            op{ operation }, dst{ destination } {}
+        constexpr regop(reg_t destination, op_t operation)
+            : op{ operation }, dst{ destination } {}
 
         friend constexpr bool operator==(regop, regop) = default;
         friend constexpr std::strong_ordering operator<=>(regop, regop) noexcept = default;
@@ -70,20 +76,20 @@ namespace rx::detail::tdfa
 
     struct fallback_node_info
     {
-        std::size_t     op_index;
-        continue_at_t   continue_at;
+        std::size_t   op_index;
+        continue_at_t continue_at;
 
         friend constexpr bool operator==(const fallback_node_info&, const fallback_node_info&) noexcept = default;
         friend constexpr auto operator<=>(const fallback_node_info&, const fallback_node_info&) noexcept = default;
     };
 
-    using continue_nodes_t  = std::vector<std::size_t>;
-    using final_nodes_t     = std::flat_map<std::size_t, final_node_info>;
-    using fallback_nodes_t  = std::flat_map<std::size_t, fallback_node_info>;
-    using final_regs_t      = std::vector<reg_t>;
+    using continue_nodes_t = std::vector<std::size_t>;
+    using final_nodes_t    = std::flat_map<std::size_t, final_node_info>;
+    using fallback_nodes_t = std::flat_map<std::size_t, fallback_node_info>;
+    using final_regs_t     = std::vector<reg_t>;
 
-    inline constexpr continue_at_t  no_continue{ std::numeric_limits<continue_at_t>::max() };
-    inline constexpr std::size_t    no_transition_regops{ std::numeric_limits<std::size_t>::max() };
+    inline constexpr continue_at_t no_continue{ std::numeric_limits<continue_at_t>::max() };
+    inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
 
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
 
@@ -120,11 +126,11 @@ namespace rx::detail
         friend class tdfa::min<char_type>;
 
         /* observers */
-        
+
         static constexpr std::size_t match_start{ 0 };
 
         [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-        [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { if (i == tdfa::no_transition_regops) return tdfa::empty_regops; else return regops_.at(i); }
+        [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
         [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const { return continue_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
         [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
@@ -135,7 +141,7 @@ namespace rx::detail
         [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
         template<typename>
-        friend class tdfa_info;
+        friend struct tdfa_info;
 
     private:
         using data_t = std::vector<tdfa::node<char_type>>;

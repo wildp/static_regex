@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <print>
@@ -8,13 +14,12 @@
 namespace rx::testing
 {
     template<typename T, typename CharT>
-    requires requires (T t) { std::println(t); } 
+    requires requires (T t) { std::println(t); }
     void dump_tdfa(T target, const detail::tagged_dfa<CharT>& dfa)
     {
         using namespace detail::tdfa;
 
-        auto print_regop = [](T target, const regop& op, std::string_view indent = "")
-        {
+        auto print_regop = [](T target, const regop& op, std::string_view indent = "") {
             if (auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
                 std::println(target, "{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
             else if (auto* copy{ std::get_if<regop::copy>(&op.op) }; copy != nullptr)
@@ -66,7 +71,7 @@ namespace rx::testing
                 std::print(target, "\tFALLBACK -> ACCEPT:");
                 if (fni.final_offset != 0)
                     std::print(target, " [Offset {}]", fni.final_offset);
-                if (fbni.continue_at != detail::tdfa::no_continue)
+                if (fbni.continue_at != no_continue)
                     std::print(target, " [Continue {}]", fbni.continue_at);
                 if (fbni.op_index != no_transition_regops)
                     std::print(target, " [Block {}]", fbni.op_index);

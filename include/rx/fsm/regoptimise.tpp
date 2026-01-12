@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <rx/fsm/tdfa.hpp>
@@ -33,7 +39,7 @@ namespace rx::detail::tdfa
         while (not o_copy.empty())
         {
             bool added{ false };
-            
+
             for (auto it{ o_copy.begin() }; it != o_copy.end();)
             {
                 if (indeg.at(it->dst) == 0)
@@ -61,7 +67,7 @@ namespace rx::detail::tdfa
                         cycle_detected = true;
                         break;
                     }
-                }   
+                }
 
                 o_new.append_range(o_copy);
                 break;
@@ -80,45 +86,42 @@ namespace rx::detail::tdfa
 
     /* tdfa normalisation */
 
-    namespace 
+    constexpr regops_t::iterator dedup_regops(regops_t& o, const regops_t::iterator beg, const regops_t::iterator end)
     {
-        constexpr regops_t::iterator dedup_regops(regops_t& o, const regops_t::iterator beg, const regops_t::iterator end)
+        regops_t::iterator new_end{ end };
+
+        for (auto it{ beg }; it != new_end; ++it)
+            new_end = std::remove(it + 1, new_end, *it);
+
+        return o.erase(new_end, end);
+    }
+
+    constexpr void normalise_regops(regops_t& o, const reg_t regcount)
+    {
+        for (auto it{ o.begin() }; it != o.end();)
         {
-            regops_t::iterator new_end{ end };
+            auto local_end{ it + 1 };
+            if (std::holds_alternative<regop::set>(it->op))
+            {
+                while (local_end != o.end() and std::holds_alternative<regop::set>(local_end->op))
+                    ++local_end;
 
-            for (auto it{ beg }; it != new_end; ++it)
-                new_end = std::remove(it + 1, new_end, *it);
+                local_end = dedup_regops(o, it, local_end);
+                std::ranges::sort(it, local_end, std::ranges::less{}, &regop::dst);
+                it = local_end;
+            }
+            else if (std::holds_alternative<regop::copy>(it->op))
+            {
+                while (local_end != o.end() and std::holds_alternative<regop::copy>(local_end->op))
+                    ++local_end;
 
-            return o.erase(new_end, end);
-        }
-
-        constexpr void normalise_regops(regops_t& o, const reg_t regcount)
-        {
-            for (auto it{ o.begin() }; it != o.end();)
-            {   
-                auto local_end{ it + 1 };
-                if (std::holds_alternative<regop::set>(it->op))
-                {
-                    while (local_end != o.end() and std::holds_alternative<regop::set>(local_end->op))
-                        ++local_end;
-
-                    local_end = dedup_regops(o, it, local_end);
-                    std::ranges::sort(it, local_end, std::ranges::less{}, &regop::dst);
-                    it = local_end;
-                }
-                else if (std::holds_alternative<regop::copy>(it->op))
-                {
-                    while (local_end != o.end() and std::holds_alternative<regop::copy>(local_end->op))
-                        ++local_end;
-
-                    local_end = dedup_regops(o, it, local_end);
-                    toposort_regops(it, local_end, regcount);
-                    it = local_end;
-                }
-                else
-                {
-                    std::unreachable();
-                }
+                local_end = dedup_regops(o, it, local_end);
+                toposort_regops(it, local_end, regcount);
+                it = local_end;
+            }
+            else
+            {
+                std::unreachable();
             }
         }
     }
@@ -152,10 +155,15 @@ namespace rx::detail::tdfa
         explicit constexpr square_matrix(std::size_t reg_count) : data_(reg_count * reg_count, false), reg_count_{ reg_count } {}
         [[nodiscard]] constexpr auto operator[](std::size_t reg1, std::size_t reg2) { return data_[(reg1 * reg_count_) + reg2]; }
         [[nodiscard]] constexpr auto operator[](std::size_t reg1, std::size_t reg2) const { return data_[(reg1 * reg_count_) + reg2]; }
-        [[nodiscard]] constexpr auto at(std::size_t reg1, std::size_t reg2) { return data_.at((reg1 * reg_count_) + reg2); } 
+        [[nodiscard]] constexpr auto at(std::size_t reg1, std::size_t reg2) { return data_.at((reg1 * reg_count_) + reg2); }
         [[nodiscard]] constexpr auto at(std::size_t reg1, std::size_t reg2) const { return data_.at((reg1 * reg_count_) + reg2); }
         [[nodiscard]] constexpr std::size_t side_length() const { return reg_count_; }
-        constexpr void set_symmetric(std::size_t reg1, std::size_t reg2, bool value) { at(reg1, reg2) = value; at(reg2, reg1) = value; }
+
+        constexpr void set_symmetric(std::size_t reg1, std::size_t reg2, bool value)
+        {
+            at(reg1, reg2) = value;
+            at(reg2, reg1) = value;
+        }
 
     private:
         std::vector<bool> data_;
@@ -169,7 +177,7 @@ namespace rx::detail::tdfa
     public:
         using tdfa_t = tagged_dfa<CharT>;
 
-        constexpr opt(std::size_t i = 2) noexcept : iterations_{ i } {};
+        constexpr explicit opt(std::size_t i = 2) noexcept : iterations_{ i } {}
         constexpr void operator()(tdfa_t& dfa);
 
     private:
@@ -203,7 +211,7 @@ namespace rx::detail::tdfa
 
         for (std::size_t node_idx{ 0 }; node_idx < dfa.nodes_.size(); ++node_idx)
         {
-            for (const auto& tr: dfa.nodes_.at(node_idx).tr)
+            for (const auto& tr : dfa.nodes_.at(node_idx).tr)
             {
                 if (tr.op_index == no_transition_regops)
                     reachable.at(node_idx, tr.next) = true;
@@ -214,11 +222,11 @@ namespace rx::detail::tdfa
             /* add final transitions too */
 
             if (dfa.final_nodes_.contains(node_idx))
-                 if (auto fni{ dfa.final_nodes_.at(node_idx) }; fni.op_index != no_transition_regops)
+                if (const auto fni{ dfa.final_nodes_.at(node_idx) }; fni.op_index != no_transition_regops)
                     successor_blocks.at(node_idx).emplace_back(fni.op_index);
         }
 
-        /* calculate reachability matrix (inital reachability is added above) */
+        /* calculate reachability matrix (initial reachability is added above) */
 
         for (std::size_t i{ 0 }; i < reachable.side_length(); ++i)
             reachable[i, i] = true;
@@ -250,7 +258,7 @@ namespace rx::detail::tdfa
         }
 
         for (std::size_t node_idx{ 0 }; node_idx < dfa.nodes_.size(); ++node_idx)
-            for (const auto& tr: dfa.nodes_.at(node_idx).tr)
+            for (const auto& tr : dfa.nodes_.at(node_idx).tr)
                 if (tr.op_index != no_transition_regops)
                     block_graph_.at(tr.op_index) = nodes_to_edges.at(tr.next);
 
@@ -294,7 +302,7 @@ namespace rx::detail::tdfa
                     cpy->src = remap.at(cpy->src);
 
                     if (cpy->src == it->dst)
-                        it = block.erase(it);  /* remove trivial cycles */
+                        it = block.erase(it); /* remove trivial cycles */
                     else
                         ++it;
                 }
@@ -319,11 +327,10 @@ namespace rx::detail::tdfa
         class postorder_visitor
         {
         public:
-
-            explicit constexpr postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count) : 
-                block_added(block_count, false)
+            explicit constexpr postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count)
+                : block_added(block_count, false)
             {
-                for (const auto i: block_graph_start | std::views::reverse)
+                for (const auto i : block_graph_start | std::views::reverse)
                 {
                     stack.emplace_back(i, 0);
                     block_added.at(i) = true;
@@ -357,7 +364,7 @@ namespace rx::detail::tdfa
 
                 return result;
             }
-            
+
         private:
             std::vector<std::pair<std::size_t, std::size_t>> stack;
             std::vector<bool> block_added;
@@ -366,14 +373,14 @@ namespace rx::detail::tdfa
         /* resume liveness implementation */
 
         liveness_matrix liveness(dfa.regops_.size(), dfa.register_count_);
-        
+
         /* make registers assigned to in final transitions live */
 
         for (const auto [_, fni] : dfa.final_nodes_)
             for (const reg_t final_reg : dfa.final_registers_)
                 liveness.at(fni.op_index, final_reg) = true;
-                
-        for (bool loop{ true }; loop; )
+
+        for (bool loop{ true }; loop;)
         {
             loop = false;
             postorder_visitor vis{ block_graph_start_, dfa.regops_.size() };
@@ -396,7 +403,7 @@ namespace rx::detail::tdfa
                     {
                         if (std::holds_alternative<regop::set>(op.op))
                         {
-                            successor_row_copy.at(op.dst) = false; 
+                            successor_row_copy.at(op.dst) = false;
                         }
                         else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         {
@@ -506,9 +513,9 @@ namespace rx::detail::tdfa
                 const auto& op{ block.at(i - 1) };
 
                 if (current_row_copy.at(op.dst))
-                {   
+                {
                     if (std::holds_alternative<regop::set>(op.op))
-                        current_row_copy.at(op.dst) = false; 
+                        current_row_copy.at(op.dst) = false;
                     else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         current_row_copy.at(op.dst) = false, current_row_copy.at(cpy->src) = true;
                     else
@@ -537,7 +544,7 @@ namespace rx::detail::tdfa
                 if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     histories.at(cpy->src) = op.op;
 
-            for (const auto& op: block)
+            for (const auto& op : block)
             {
                 if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
                     histories.at(op.dst) = op.op;
@@ -552,7 +559,7 @@ namespace rx::detail::tdfa
                 std::vector<bool> current_row_copy(liveness.row_begin(block_idx), liveness.row_end(block_idx));
 
                 if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
-                    current_row_copy.at(op.dst) = false; 
+                    current_row_copy.at(op.dst) = false;
                 else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     current_row_copy.at(op.dst) = false, current_row_copy.at(cpy->src) = false;
                 else
@@ -607,7 +614,7 @@ namespace rx::detail::tdfa
                     }
                     else if (x != no_register and y == no_register)
                     {
-                        if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t){ return not overlapping_lifetimes.at(t, cpy->src); }))
+                        if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t) { return not overlapping_lifetimes.at(t, cpy->src); }))
                         {
                             representative_map.at(cpy->src) = x;
 
@@ -619,7 +626,7 @@ namespace rx::detail::tdfa
                     }
                     else if (x == no_register and y != no_register)
                     {
-                        if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t){ return not overlapping_lifetimes.at(t, op.dst); }))
+                        if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t) { return not overlapping_lifetimes.at(t, op.dst); }))
                         {
                             representative_map.at(op.dst) = y;
 
@@ -674,11 +681,11 @@ namespace rx::detail::tdfa
                     std::vector<reg_t> set_union_result;
                     std::ranges::set_union(equivalence_classes.at(x), equivalence_classes.at(y), std::back_inserter(set_union_result));
                     equivalence_classes.at(x) = std::move(set_union_result);
-                    equivalence_classes.at(y) = {};                    
+                    equivalence_classes.at(y) = {};
                 }
             }
         }
-        
+
 
         /* assign remaining registers to an equivalence class (either new or existing) */
 
@@ -694,7 +701,7 @@ namespace rx::detail::tdfa
                 if (representative_map.at(j) != j)
                     continue;
 
-                if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t){ return not overlapping_lifetimes.at(i, t); }))
+                if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t) { return not overlapping_lifetimes.at(i, t); }))
                 {
                     representative_map.at(i) = j;
 
@@ -714,7 +721,7 @@ namespace rx::detail::tdfa
                 equivalence_classes.at(i).assign({ i });
             }
         }
-        
+
         /* assign new registers */
 
         reg_t new_register_number{ 0 };
@@ -766,7 +773,7 @@ namespace rx::detail::tdfa
 namespace rx::detail
 {
     template<typename CharT>
-    constexpr void tagged_dfa<CharT>::optimise_registers() 
+    constexpr void tagged_dfa<CharT>::optimise_registers()
     {
         std::invoke(tdfa::opt<char_type>{}, *this);
     }

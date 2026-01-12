@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -24,24 +30,23 @@ namespace rx::testing
         using string_type = std::basic_string<char_type>;
 
         // Unicode transcoding unsupported -- TODO: change later
-        static_assert(std::same_as<char_type, CharT>); 
-        static_assert(std::same_as<char_type, typename ast_t::char_class::underlying_char_type>); 
+        static_assert(std::same_as<char_type, CharT>);
+        static_assert(std::same_as<char_type, typename ast_t::char_class::underlying_char_type>);
 
-        static constexpr auto append_int = [](string_type& result, const std::integral auto value)
-        {
+        static constexpr auto append_int = [](string_type& result, const std::integral auto value) {
             static constexpr decltype(value) base{ 10 };
             std::vector<char> buf;
             if (value == 0)
                 buf.emplace_back('0');
-            else for (auto v{ value }; v > 0; v /= base)
-                buf.emplace_back('0' + (v % base));
+            else
+                for (auto v{ value }; v > 0; v /= base)
+                    buf.emplace_back('0' + (v % base));
             if (value < 0)
                 buf.emplace_back('-');
             std::ranges::move(buf.rbegin(), buf.rend(), std::back_insert_iterator(result));
         };
 
-        static constexpr auto escape = [](string_type& result, char_type c)
-        {
+        static constexpr auto escape = [](string_type& result, char_type c) {
             if (c == '\177' or (c >= '\0' and c < '\40'))
             {
                 result += '\\';
@@ -56,14 +61,14 @@ namespace rx::testing
                 case '\r': result += 'r'; break;
                 case '\v': result += 'v'; break;
                 default:
-                    {
-                        static constexpr char octal_base{ 010 };
-                        string_type tmp;
-                        for (; c != 0; c /= octal_base)
-                            tmp.push_back('0' + (c % octal_base));
-                        result.append(tmp.rbegin(), tmp.rend());
-                    }
+                {
+                    static constexpr char octal_base{ 010 };
+                    string_type tmp;
+                    for (; c != 0; c /= octal_base)
+                        tmp.push_back('0' + (c % octal_base));
+                    result.append(tmp.rbegin(), tmp.rend());
                     break;
+                }
                 }
             }
             else
@@ -73,32 +78,30 @@ namespace rx::testing
             }
         };
 
-        string_type result;
+        string_type res;
 
-        auto visitor = [&ast](this const auto& rec, string_type& result, std::size_t pos) -> void
-        {
+        auto visitor = [&ast](this const auto& rec, string_type& result, std::size_t pos) -> void {
             ast.get_expr(pos).visit(detail::overloads{
-                [&](const ast_t::assertion& asr)
-                {
+                [&](const ast_t::assertion& asr) {
                     switch (asr.type)
                     {
                     case detail::assert_type::text_start:
                     case detail::assert_type::line_start:
-                        result += '^'; break;
+                        result += '^';
+                        break;
                     case detail::assert_type::text_end:
                     case detail::assert_type::line_end:
-                        result += '$'; break;
+                        result += '$';
+                        break;
                     default:
                         throw std::runtime_error("unrecognised assert_type");
                     }
                 },
-                [&](const ast_t::concat& cat)
-                {
+                [&](const ast_t::concat& cat) {
                     for (const auto idx : cat.idxs)
                         rec(result, idx);
                 },
-                [&](const ast_t::alt& alt)
-                {
+                [&](const ast_t::alt& alt) {
                     for (const auto idx : alt.idxs)
                     {
                         rec(result, idx);
@@ -108,21 +111,18 @@ namespace rx::testing
                     if (alt.idxs.size() > 0)
                         result.pop_back();
                 },
-                [&](const ast_t::tag& tag)
-                {
+                [&](const ast_t::tag& tag) {
                     auto [is_lhs, is_rhs]{ ast.get_capture_info().capture_side(tag.number) };
                     if (is_lhs)
                         result += '(';
                     if (is_rhs)
                         result += ')';
                 },
-                [&](const ast_t::backref& bref)
-                {
+                [&](const ast_t::backref& bref) {
                     result += '\\';
                     append_int(result, bref.number);
                 },
-                [&](const ast_t::repeat& rep)
-                {
+                [&](const ast_t::repeat& rep) {
                     rec(result, rep.idx);
 
                     if (rep.min == 0 and rep.max < 0)
@@ -153,14 +153,12 @@ namespace rx::testing
                     else if (rep.mode == detail::repeater_mode::possessive)
                         result += '+';
                 },
-                [&](const ast_t::char_str& lit)
-                {
+                [&](const ast_t::char_str& lit) {
                     // for (const auto c: lit.data)
                     //     escape(result, c);
                     result += lit.data;
                 },
-                [&](const ast_t::char_class& cla)
-                {
+                [&](const ast_t::char_class& cla) {
                     using pair_t = typename ast_t::char_class::impl_type::underlying_type::char_interval;
                     const auto dn{ cla.data.denormalise() };
                     const auto ci{ dn.intervals() };
@@ -188,9 +186,9 @@ namespace rx::testing
             });
         };
 
-        visitor(result, ast.root_idx());
+        visitor(res, ast.root_idx());
 
-        return result;
+        return res;
     }
 
     [[nodiscard]] constexpr std::string to_string(const detail::expr_tree<char>& ast)

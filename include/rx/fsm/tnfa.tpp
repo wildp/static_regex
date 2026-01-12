@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <rx/fsm/tnfa.hpp>
@@ -30,29 +36,27 @@ namespace rx::detail
     template<typename CharT>
     constexpr auto tagged_nfa<CharT>::node_create() -> state_t
     {
-        const state_t tmp{ nodes_.size() };
+        const state_t p{ nodes_.size() };
         nodes_.emplace_back();
-        return tmp;
+        return p;
     }
 
     template<typename CharT>
     constexpr auto tagged_nfa<CharT>::node_copy(const state_t q) -> state_t
     {
-        const state_t tmp{ nodes_.size() };
-        nodes_.emplace_back();
-
+        const state_t p{ nodes_.size() };
+        auto& new_n{ nodes_.emplace_back() };
         const auto& old_n{ nodes_.at(q) };
-        auto& new_n{ nodes_[tmp] };
 
         new_n.is_final = old_n.is_final;
-        new_n.is_fallback = old_n.is_fallback ;
+        new_n.is_fallback = old_n.is_fallback;
         new_n.final_offset = old_n.final_offset;
         new_n.continue_at = old_n.continue_at;
 
-        return tmp;
+        return p;
     }
 
-    
+
     /* transition creation helper functions */
 
     template<typename CharT>
@@ -87,7 +91,7 @@ namespace rx::detail
 
     template<typename CharT>
     template<typename T>
-    requires (one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>)
+    requires one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */)
     {
         using type = std::conditional_t<std::same_as<T, tnfa::assert_category::eof_tag_t>, eof_anchor_tr, sof_anchor_tr>;
@@ -97,7 +101,8 @@ namespace rx::detail
 
     template<typename CharT>
     template<typename T, typename CharSet>
-    requires (one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t> and std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>)
+    requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
+             and std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */, CharSet&& cs)
     {
         using type = std::conditional_t<std::same_as<T, tnfa::assert_category::lookahead1_tag_t>, lookahead_1_tr, lookbehind_1_tr>;
@@ -129,12 +134,12 @@ namespace rx::detail
 
             make_epsilon(q0, qf, 0, -(ntags.back() + 1));
         }
-        else 
-        {     
+        else
+        {
             make_epsilon(q0, qf);
         }
     }
-    
+
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast)
     {
@@ -162,7 +167,7 @@ namespace rx::detail
                         make_transition(q0, qi, c);
                         q0 = qi;
                     }
-                    
+
                     make_transition(q0, qf, str.data.back());
                 }
                 else
@@ -172,31 +177,31 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::char_class>:
-                {
-                    const auto& cla{ std::get<typename ast_t::char_class>(entry) };
-                    // using uct = decltype(cla)::underlying_char_type;
+            {
+                const auto& cla{ std::get<typename ast_t::char_class>(entry) };
+                // using uct = decltype(cla)::underlying_char_type;
 
-                    if constexpr (char_is_utf8<char_type>)
-                    {
-                        // TODO: implement multibyte chars;
-                        throw tnfa_error("UTF8 character classes are unimplemented");
-                    }
-                    else if constexpr (char_is_utf16<char_type>)
-                    {
-                        // TODO: implement multibyte chars;
-                        throw tnfa_error("UTF16 character classes are unimplemented");
-                    }
-                    else if constexpr (std::same_as<charset_type, typename ast_t::char_class::impl_type::underlying_type>)
-                    {
-                        make_transition(q0, qf, cla.data.get());
-                    }
-                    else
-                    {
-                        // Should be unreachable?
-                        throw tnfa_error("Cannot convert character class to representation used by tnfa");
-                    }
+                if constexpr (char_is_utf8<char_type>)
+                {
+                    // TODO: implement multibyte chars;
+                    throw tnfa_error("UTF8 character classes are unimplemented");
+                }
+                else if constexpr (char_is_utf16<char_type>)
+                {
+                    // TODO: implement multibyte chars;
+                    throw tnfa_error("UTF16 character classes are unimplemented");
+                }
+                else if constexpr (std::same_as<charset_type, typename ast_t::char_class::impl_type::underlying_type>)
+                {
+                    make_transition(q0, qf, cla.data.get());
+                }
+                else
+                {
+                    // Should be unreachable?
+                    throw tnfa_error("Cannot convert character class to representation used by tnfa");
                 }
                 break;
+            }
 
             case ast_index<typename ast_t::concat>:
                 if (const auto& cat{ std::get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
@@ -207,7 +212,7 @@ namespace rx::detail
                         stack.emplace_back(q0, qi, i);
                         q0 = qi;
                     }
-            
+
                     stack.emplace_back(q0, qf, cat.idxs.back());
                 }
                 else
@@ -238,29 +243,29 @@ namespace rx::detail
                             {
                                 stack.emplace_back(q0, qf, alt.idxs.at(i));
                             }
-                            else 
+                            else
                             {
                                 const state_t q1{ node_create() };
                                 const state_t p2{ node_create() };
                                 const state_t p1{ node_create() };
                                 const state_t q2{ node_create() };
-                
+
                                 make_epsilon(q0, q1, 0);
                                 make_epsilon(q0, p1, 1);
-                                
+
                                 stack.emplace_back(q1, p2, alt.idxs.at(i));
                                 make_ntags(p1, q2, tag_vec.at(alt.idxs.at(i)));
-    
+
                                 std::vector<int> remaining_ntags;
                                 for (std::size_t j{ i + 1 }; j < alt.idxs.size(); ++j)
                                     std::ranges::copy(tag_vec.at(alt.idxs.at(j)), std::back_inserter(remaining_ntags));
-    
+
                                 std::ranges::sort(remaining_ntags);
                                 auto [_, last]{ std::ranges::unique(remaining_ntags) };
                                 remaining_ntags.erase(last, remaining_ntags.end());
-    
+
                                 make_ntags(p2, qf, remaining_ntags);
-                
+
                                 q0 = q2;
                             }
                         }
@@ -273,193 +278,193 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::repeat>:
+            {
+                const auto& rep{ std::get<typename ast_t::repeat>(entry) };
+
+                if (rep.mode == repeater_mode::possessive)
+                    throw tnfa_error("Possessive repetition is unimplemented");
+
+                /* reminder: max < min denotes infinity */
+                int max{ (rep.max < rep.min) ? rep.min - 1 : rep.max };
+                int min{ rep.min };
+                const bool lazy{ rep.mode == repeater_mode::lazy };
+
+                while (true)
                 {
-                    const auto& rep{ std::get<typename ast_t::repeat>(entry) };
-
-                    if (rep.mode == repeater_mode::possessive)
-                        throw tnfa_error("Possessive repetition is unimplemented");
-
-                    /* reminder: max < min denotes infinity */
-                    int max{ (rep.max < rep.min) ? rep.min - 1 : rep.max };
-                    int min{ rep.min };
-                    const bool lazy{ rep.mode == repeater_mode::lazy };
-
-                    while (true)
+                    if (min > 1)
                     {
-                        if (min > 1)
+                        const state_t q1{ node_create() };
+
+                        stack.emplace_back(q0, q1, rep.idx);
+
+                        min -= 1;
+                        max -= 1;
+                        q0 = q1;
+                    }
+                    else if (min == 1 and max == 1)
+                    {
+                        stack.emplace_back(q0, qf, rep.idx);
+
+                        break;
+                    }
+                    else if (min == 1 and max > 1)
+                    {
+                        const state_t q1{ node_create() };
+                        const state_t q2{ node_create() };
+
+                        stack.emplace_back(q0, q1, rep.idx);
+                        make_epsilon(q1, qf, not lazy);
+                        make_epsilon(q1, q2, lazy);
+
+                        max -= 1;
+                        q0 = q2;
+                    }
+                    else if (min == 0)
+                    {
+                        const state_t q1{ node_create() };
+
+                        make_epsilon(q0, q1, lazy);
+
+                        if (tag_vec.empty() or tag_vec.at(idx).empty())
                         {
-                            const state_t q1{ node_create() };
-
-                            stack.emplace_back(q0, q1, rep.idx);
-            
-                            min -= 1;
-                            max -= 1;
-                            q0 = q1;
+                            /* generate tag-free nfa */
+                            make_epsilon(q0, qf, not lazy);
                         }
-                        else if (min == 1 and max == 1)
-                        {
-                            stack.emplace_back(q0, qf, rep.idx);
-
-                            break;
-                        }
-                        else if (min == 1 and max > 1)
-                        {
-                            const state_t q1{ node_create() };
-                            const state_t q2{ node_create() };
-
-                            stack.emplace_back(q0, q1, rep.idx);
-                            make_epsilon(q1, qf, not lazy);
-                            make_epsilon(q1, q2, lazy);
-            
-                            max -= 1;
-                            q0 = q2;
-                        }
-                        else if (min == 0)
-                        {
-                            const state_t q1{ node_create() };
-
-                            make_epsilon(q0, q1, lazy);
-
-                            if (tag_vec.empty() or tag_vec.at(idx).empty())
-                            {
-                                /* generate tag-free nfa */
-                                make_epsilon(q0, qf, not lazy);
-                            }
-                            else
-                            {
-                                /* generate tag-aware nfa */
-                                const state_t p1{ node_create() };
-                                make_epsilon(q0, p1, not lazy);
-                                make_ntags(p1, qf, tag_vec.at(rep.idx));
-                            }
-
-                            min = 1;
-                            q0 = q1;
-                        }
-                        else if (min == 1 and max < min)
-                        {
-                            const state_t q1{ node_create() };
-
-                            stack.emplace_back(q0, q1, rep.idx);
-                            make_epsilon(q1, q0, lazy);
-                            make_epsilon(q1, qf, not lazy);
-            
-                            break;
-                        }
-                        // else if (min == 0 and max == 0)
-                        // {
-                        //     epsilon(q0, qf);
-                        //     break;
-                        // }
                         else
                         {
-                            throw tnfa_error("Invalid repeater in tree");
+                            /* generate tag-aware nfa */
+                            const state_t p1{ node_create() };
+                            make_epsilon(q0, p1, not lazy);
+                            make_ntags(p1, qf, tag_vec.at(rep.idx));
                         }
+
+                        min = 1;
+                        q0 = q1;
+                    }
+                    else if (min == 1 and max < min)
+                    {
+                        const state_t q1{ node_create() };
+
+                        stack.emplace_back(q0, q1, rep.idx);
+                        make_epsilon(q1, q0, lazy);
+                        make_epsilon(q1, qf, not lazy);
+
+                        break;
+                    }
+                    // else if (min == 0 and max == 0)
+                    // {
+                    //     epsilon(q0, qf);
+                    //     break;
+                    // }
+                    else
+                    {
+                        throw tnfa_error("Invalid repeater in tree");
                     }
                 }
                 break;
+            }
 
             case ast_index<typename ast_t::tag>:
-                {
-                    /* in tree_expr tags start at 0, whereas here they start at 1 */
-                    const auto& tag_entry{ std::get<typename ast_t::tag>(entry) };
-                    make_epsilon(q0, qf, 0, tag_entry.number + 1);
-                }
+            {
+                /* in tree_expr tags start at 0, whereas here they start at 1 */
+                const auto& tag_entry{ std::get<typename ast_t::tag>(entry) };
+                make_epsilon(q0, qf, 0, tag_entry.number + 1);
                 break;
+            }
 
             case ast_index<typename ast_t::assertion>:
+            {
+                const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
+
+                using cs = nontransient_constexpr_version_of_t<charset_type>;
+                using p = cs::char_interval;
+                namespace ac = tnfa::assert_category;
+
+                /* note: these are not Unicode-aware; TODO: FIX */
+                static constexpr cs newline_cs{ '\n' };
+                static constexpr cs word_cs{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
+                static constexpr cs not_word_cs{ ~word_cs };
+
+                switch (assertion.type)
                 {
-                    const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
+                case assert_type::line_start:
+                    make_assert(q0, qf, ac::lookbehind1_tag, newline_cs);
+                    has_lookbehind_1_ = true;
+                    [[fallthrough]];
 
-                    using cs = nontransient_constexpr_version_of_t<charset_type>;
-                    using p = cs::char_interval;
-                    namespace ac = tnfa::assert_category;
+                case assert_type::text_start:
+                    make_assert(q0, qf, ac::sof_tag);
+                    has_sof_anchor_ = true;
+                    break;
 
-                    /* note: these are not Unicode-aware; TODO: FIX */
-                    static constexpr cs newline_cs{ '\n' };
-                    static constexpr cs word_cs{ p{ '0', '9'}, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
-                    static constexpr cs not_word_cs{ ~word_cs };
+                case assert_type::line_end:
+                    make_assert(q0, qf, ac::lookahead1_tag, newline_cs);
+                    has_lookahead_1_ = true;
+                    [[fallthrough]];
 
-                    switch (assertion.type)
-                    {
-                    case assert_type::line_start:
-                        make_assert(q0, qf, ac::lookbehind1_tag, newline_cs);
-                        has_lookbehind_1_ = true;
-                        [[fallthrough]];
-                    
-                    case assert_type::text_start:
-                        make_assert(q0, qf, ac::sof_tag);
-                        has_sof_anchor_ = true;
-                        break;
-                    
-                    case assert_type::line_end:
-                        make_assert(q0, qf, ac::lookahead1_tag, newline_cs);
-                        has_lookahead_1_ = true;
-                        [[fallthrough]];
-                    
-                    case assert_type::text_end:
-                        make_assert(q0, qf, ac::eof_tag);
-                        has_eof_anchor_ = true;
-                        break;
+                case assert_type::text_end:
+                    make_assert(q0, qf, ac::eof_tag);
+                    has_eof_anchor_ = true;
+                    break;
 
-                    case assert_type::word_boundary:
-                        {
-                            const state_t q1{ node_create() };
-                            const state_t q2{ node_create() };
+                case assert_type::word_boundary:
+                {
+                    const state_t q1{ node_create() };
+                    const state_t q2{ node_create() };
 
-                            make_assert(q0, q1, ac::sof_tag);
-                            make_assert(q0, q1, ac::lookbehind1_tag, not_word_cs);
-                            make_assert(q1, qf, ac::lookahead1_tag, word_cs);
+                    make_assert(q0, q1, ac::sof_tag);
+                    make_assert(q0, q1, ac::lookbehind1_tag, not_word_cs);
+                    make_assert(q1, qf, ac::lookahead1_tag, word_cs);
 
-                            make_assert(q0, q2, ac::lookbehind1_tag, word_cs);
-                            make_assert(q2, qf, ac::lookahead1_tag, not_word_cs);
-                            make_assert(q2, qf, ac::eof_tag);
+                    make_assert(q0, q2, ac::lookbehind1_tag, word_cs);
+                    make_assert(q2, qf, ac::lookahead1_tag, not_word_cs);
+                    make_assert(q2, qf, ac::eof_tag);
 
-                            has_eof_anchor_ = true;
-                            has_sof_anchor_ = true;
-                            has_lookahead_1_ = true;
-                            has_lookbehind_1_ = true;
-                            break;
-                        }
+                    has_eof_anchor_ = true;
+                    has_sof_anchor_ = true;
+                    has_lookahead_1_ = true;
+                    has_lookbehind_1_ = true;
+                    break;
+                }
 
-                    case assert_type::not_word_boundary:
-                        {
-                            const state_t q1{ node_create() };
-                            const state_t q2{ node_create() };
+                case assert_type::not_word_boundary:
+                {
+                    const state_t q1{ node_create() };
+                    const state_t q2{ node_create() };
 
-                            make_assert(q0, q1, ac::sof_tag);
-                            make_assert(q0, q1, ac::lookbehind1_tag, not_word_cs);
-                            make_assert(q1, qf, ac::lookahead1_tag, not_word_cs);
-                            make_assert(q1, qf, ac::eof_tag);
+                    make_assert(q0, q1, ac::sof_tag);
+                    make_assert(q0, q1, ac::lookbehind1_tag, not_word_cs);
+                    make_assert(q1, qf, ac::lookahead1_tag, not_word_cs);
+                    make_assert(q1, qf, ac::eof_tag);
 
-                            make_assert(q0, q2, ac::lookbehind1_tag, word_cs);
-                            make_assert(q2, qf, ac::lookahead1_tag, word_cs);
-                           
-                            has_eof_anchor_ = true;
-                            has_sof_anchor_ = true;
-                            has_lookahead_1_ = true;
-                            has_lookbehind_1_ = true;
-                            break;
-                        }
+                    make_assert(q0, q2, ac::lookbehind1_tag, word_cs);
+                    make_assert(q2, qf, ac::lookahead1_tag, word_cs);
 
-                    default:
-                        throw tnfa_error("Non-trivial assertions are unimplemented");
-                        break;
-                    }
+                    has_eof_anchor_ = true;
+                    has_sof_anchor_ = true;
+                    has_lookahead_1_ = true;
+                    has_lookbehind_1_ = true;
+                    break;
+                }
+
+                default:
+                    throw tnfa_error("Non-trivial assertions are unimplemented");
+                    break;
                 }
                 break;
+            }
+            
 
             case ast_index<typename ast_t::backref>:
                 throw tnfa_error("Backreferences are unsupported");
 
             default:
                 throw tree_error("Invalid tree");
-
             }
         }
     }
 
-    
+
     /* observers */
 
     template<typename CharT>
@@ -470,12 +475,12 @@ namespace rx::detail
 
         std::vector to_visit{ std::forward<Vec>(qs) };
         std::ranges::reverse(to_visit);
-    
+
         std::vector<bool> visited(node_count(), false);
         result_t result;
 
         for (const auto q : to_visit)
-            visited.at(q) = true;  
+            visited.at(q) = true;
 
         while (not to_visit.empty())
         {
@@ -484,7 +489,7 @@ namespace rx::detail
 
             if constexpr (B)
                 result.emplace_back(current);
-            
+
             for (const tr_index i : std::invoke(node_proj, get_node(current)) | std::views::reverse)
             {
                 const auto& tr{ get_tr(i) };
@@ -525,7 +530,7 @@ namespace rx::detail
     constexpr auto tagged_nfa<CharT>::epsilon_closure(Vec&& qs, Pred pred) const
     {
         return closure_impl<B>(std::forward<Vec>(qs), pred, &tnfa::node::out_tr, &tnfa::transition<char_type>::dst);
-    } 
+    }
 
     template<typename CharT>
     template<bool B, typename Vec, typename Pred>
@@ -543,8 +548,8 @@ namespace rx::detail
         /* determine reachable states */
 
         std::vector<state_t> initial_nodes{ start_node_ };
-    
-        for (const auto& ci :cont_info_)
+
+        for (const auto& ci : cont_info_)
             if (ci.value != start_node_)
                 initial_nodes.emplace_back(ci.value);
 
@@ -553,7 +558,7 @@ namespace rx::detail
         /* determine live states */
 
         std::vector<state_t> final_nodes{};
-    
+
         for (state_t q{ 0 }; q < nodes_.size(); ++q)
             if (nodes_[q].is_final)
                 final_nodes.emplace_back(q);
@@ -583,7 +588,7 @@ namespace rx::detail
 
         /* remove dead and unreachable nodes and transitions from nodes */
 
-        const auto pred = [&](const std::size_t i){ return removed_transitions.at(i); };
+        const auto pred = [&](const std::size_t i) { return removed_transitions.at(i); };
 
         for (state_t q{ 0 }; q < nodes_.size(); ++q)
         {
@@ -605,7 +610,7 @@ namespace rx::detail
     /* assertion elimination */
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::rewrite_sof_anchors() 
+    constexpr void tagged_nfa<CharT>::rewrite_sof_anchors()
     {
         static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
             return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookbehind_1_tr>(tr.type);
@@ -616,10 +621,10 @@ namespace rx::detail
         /* create a copy of the start node's e-closure */
 
         std::flat_map<std::size_t, std::size_t> mapped_states;
-        
+
         for (const state_t q : ec)
         {
-            if (const auto& node{ get_node(q) }; node.is_final) 
+            if (const auto& node{ get_node(q) }; node.is_final)
                 mapped_states[q] = q; /* do not create duplicate final nodes */
             else
                 mapped_states[q] = node_copy(q);
@@ -633,7 +638,7 @@ namespace rx::detail
             for (const tr_index i : nodes_.at(q).out_tr)
             {
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                const auto& tr{ get_tr(i) }; 
+                const auto& tr{ get_tr(i) };
 
                 if (std::holds_alternative<normal_tr>(tr.type))
                 {
@@ -667,7 +672,7 @@ namespace rx::detail
             std::erase(nodes_.at(tr.dst).in_tr, i);
             tr.unset();
         }
-            
+
 
         /* reassign start node */
 
@@ -675,7 +680,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::rewrite_eof_anchors() 
+    constexpr void tagged_nfa<CharT>::rewrite_eof_anchors()
     {
         /* NOTE: this function must be called before any other function which adds final nodes */
 
@@ -709,8 +714,8 @@ namespace rx::detail
 
         for (const state_t q : ec)
         {
-            if (const auto& node{ get_node(q) }; node.is_final) 
-            {  
+            if (const auto& node{ get_node(q) }; node.is_final)
+            {
                 if (node.is_fallback)
                 {
                     /* create duplicate non-fallback final node */
@@ -738,7 +743,7 @@ namespace rx::detail
             for (const tr_index i : nodes_.at(q).out_tr)
             {
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                const auto& tr{ get_tr(i) }; 
+                const auto& tr{ get_tr(i) };
 
                 if (std::holds_alternative<normal_tr>(tr.type))
                 {
@@ -793,7 +798,7 @@ namespace rx::detail
         using state_map_t = std::flat_map<state_t, state_t>;
         using all_states_map_t = std::flat_map<charset_type, state_map_t>;
 
-        transition_map_t sc_transitions; 
+        transition_map_t sc_transitions;
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
@@ -807,13 +812,16 @@ namespace rx::detail
         all_states_map_t all_mapped_states;
 
         std::vector<std::pair<charset_type, std::vector<state_t>>> outer_visit;
-        
+
         for (const auto& [edge, tr_vec] : sc_transitions)
         {
-            outer_visit.emplace_back(edge,
-                                     std::vector<state_t>{ std::from_range,
-                                                           tr_vec | std::views::transform([this](const tr_index i) { return transitions_.at(i).dst; })
-                                                         });
+            outer_visit.emplace_back(
+                edge,
+                std::vector<state_t>{
+                    std::from_range,
+                    tr_vec | std::views::transform([this](const tr_index i) { return transitions_.at(i).dst; })
+                }
+            );
         }
 
         while (not outer_visit.empty())
@@ -826,14 +834,14 @@ namespace rx::detail
 
             auto pred = [&](const tnfa::transition<char_type>& tr) {
                 /* skip normal transitions and eof anchors */
-                if (std::holds_alternative<normal_tr>(tr.type) or std::holds_alternative<eof_anchor_tr>(tr.type) )
+                if (std::holds_alternative<normal_tr>(tr.type) or std::holds_alternative<eof_anchor_tr>(tr.type))
                     return false;
 
                 if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 {
                     if (auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
                     {
-                        /* intersection with lookahead_1 transition requires cloned subgraph */
+                        /* intersection with lookahead_1 transition requires a cloned subgraph */
                         outer_visit.emplace_back(std::move(new_edge), std::vector{ tr.dst });
                     }
 
@@ -851,14 +859,13 @@ namespace rx::detail
             for (const state_t q : ec)
                 if (not mapped_states.contains(q)) /* probably inefficient */
                     mapped_states[q] = node_create();
-
         }
 
         /* duplicate transitions */
 
         std::optional<state_t> offset_end;
 
-        for (const auto& [edge, mapped_states] : all_mapped_states) 
+        for (const auto& [edge, mapped_states] : all_mapped_states)
         {
             for (const auto [q, p] : mapped_states)
             {
@@ -896,7 +903,7 @@ namespace rx::detail
                     {
                         /* conditionally e-transition between copied subgraphs */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
-                            make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));                            
+                            make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));
                     }
                     else if (not std::holds_alternative<eof_anchor_tr>(tr.type))
                     {
@@ -916,13 +923,13 @@ namespace rx::detail
             {
                 auto& tr{ transitions_.at(i) };
 
-                /* assign lowest priority to avoid clashes with eof_anchor */
+                /* assign the lowest priority to avoid clashes with eof_anchor */
                 using priority_t = decltype(epsilon_tr::priority);
                 const auto p{ std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz)) };
 
                 std::erase(nodes_.at(tr.dst).in_tr, i);
                 tr.dst = mapped_states.at(tr.dst);
-                tr.type = tnfa::epsilon_tr{ .priority = p, .tag = 0 }; 
+                tr.type = tnfa::epsilon_tr{ .priority = p, .tag = 0 };
                 nodes_.at(tr.dst).in_tr.emplace_back(i);
             }
         }
@@ -946,7 +953,7 @@ namespace rx::detail
         /* find fallback and continuation states */
 
         std::optional<state_t> continue_state;
-        if (cont_info_.size() >= 1)
+        if (not cont_info_.empty())
             continue_state = cont_info_.front().value;
 
         std::vector<state_t> fallback_states;
@@ -974,7 +981,7 @@ namespace rx::detail
             }
 
             /* skip sof anchors */
-            if (std::holds_alternative<sof_anchor_tr>(tr.type) )
+            if (std::holds_alternative<sof_anchor_tr>(tr.type))
                 return false;
 
             /* intersection with lookbehind_1 transition requires cloned subgraph */
@@ -1002,7 +1009,7 @@ namespace rx::detail
 
         /* find lookbehind transitions and group by edge */
 
-        transition_map_t sc_transitions; 
+        transition_map_t sc_transitions;
         std::flat_map<tr_index, lb_info> lb_closures;
 
         std::vector<tr_index> wraparounds; /* sorted; i.e. flat_set */
@@ -1071,7 +1078,7 @@ namespace rx::detail
         if (wraparound_lb_closure.has_value())
         {
             const auto fn = [this](const tr_index i) {
-                const auto& tr{ get_tr(i) }; 
+                const auto& tr{ get_tr(i) };
                 return std::cref(std::get<lookbehind_1_tr>(tr.type).cs);
             };
 
@@ -1081,7 +1088,7 @@ namespace rx::detail
         }
 
 
-        /* determine starts transitions */ 
+        /* determine starts transitions */
 
         start_tr_map_t start_transitions;
         std::vector to_visit{ std::from_range, sc_transitions };
@@ -1108,7 +1115,7 @@ namespace rx::detail
 
         while (not to_visit.empty())
         {
-            using visit_type = typename transition_map_t::value_type;
+            using visit_type = transition_map_t::value_type;
             const visit_type current{ std::move(to_visit.back()) };
             to_visit.pop_back();
 
@@ -1154,7 +1161,7 @@ namespace rx::detail
                     cont_index = static_cast<wraparound_index>(std::distance(wrap_starts.begin(), it));
                 return std::pair{ std::cref(edge), cont_index };
             };
-            
+
             const std::vector ref_pairs{ std::from_range, edges.keys() | std::views::transform(fn) };
 
             for (auto&& [new_edge, vec] : charset_type::partition_ext(ref_pairs))
@@ -1209,7 +1216,7 @@ namespace rx::detail
 
         std::vector<tnfa::continue_at_t> continue_ats;
 
-        for (const auto& edge: wrap_starts)
+        for (const auto& edge : wrap_starts)
         {
             const auto& mapped_states{ all_mapped_states.at(edge) };
             const auto mapped_cont{ mapped_states.at(continue_state.value()) };
@@ -1223,7 +1230,7 @@ namespace rx::detail
 
         if (continue_state.has_value())
         {
-            for (const auto& [edge, mapped_states] : all_mapped_states) 
+            for (const auto& [edge, mapped_states] : all_mapped_states)
             {
                 auto it{ closure_wraparounds.find(edge) };
 
@@ -1243,20 +1250,19 @@ namespace rx::detail
                     auto& new_n{ nodes_.at(it2->second) };
 
                     new_n.is_final = old_n.is_final;
-                    new_n.is_fallback = old_n.is_fallback ;
+                    new_n.is_fallback = old_n.is_fallback;
                     new_n.final_offset = old_n.final_offset;
                     new_n.continue_at = continue_at;
                 }
             }
         }
 
-        
 
         /* duplicate transitions inside and leaving copied closures */
 
         std::vector<tr_index> to_remove{ lb_closures.keys() };
 
-        for (const auto& [edge, mapped_states] : all_mapped_states) 
+        for (const auto& [edge, mapped_states] : all_mapped_states)
         {
             for (const auto [q, p] : mapped_states)
             {
@@ -1266,7 +1272,7 @@ namespace rx::detail
                 for (const tr_index i : nodes_.at(q).out_tr)
                 {
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                    const auto& tr{ get_tr(i) }; 
+                    const auto& tr{ get_tr(i) };
 
                     if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
@@ -1281,7 +1287,7 @@ namespace rx::detail
                             if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
                                 make_epsilon(p, it->second); /* continue within copied subgraph if possible  */
                             else
-                                make_epsilon(p, tr.dst);  /* transition from copied subgraph back to main graph */
+                                make_epsilon(p, tr.dst); /* transition from copied subgraph back to main graph */
                         }
                     }
                     else if (not std::holds_alternative<sof_anchor_tr>(tr.type))
@@ -1299,7 +1305,7 @@ namespace rx::detail
 
         is_closure_start.resize(transitions_.size(), false);
 
-        for (const auto& [edge, mapped_states] : all_mapped_states) 
+        for (const auto& [edge, mapped_states] : all_mapped_states)
         {
             for (const auto [q, p] : mapped_states)
             {
@@ -1327,7 +1333,7 @@ namespace rx::detail
                 }
             }
         }
-                     
+
 
         /* remove lookbehind_1 transitions and empty regular transitions */
 
@@ -1340,11 +1346,10 @@ namespace rx::detail
             std::erase(nodes_.at(tr.dst).in_tr, i);
             tr.unset();
         }
-
     }
 
     template<typename CharT>
-    constexpr void tagged_nfa<CharT>::rewrite_assertions() 
+    constexpr void tagged_nfa<CharT>::rewrite_assertions()
     {
         if (has_sof_anchor_) rewrite_sof_anchors();
         if (has_eof_anchor_) rewrite_eof_anchors();
@@ -1354,15 +1359,16 @@ namespace rx::detail
         if (has_sof_anchor_ or has_eof_anchor_ or has_lookbehind_1_ or has_lookahead_1_) remove_dead_and_unreachable_states();
     }
 
-    
+
     /* constructor */
 
     template<typename CharT>
-    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags) : 
-        capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
+    constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags)
+        : capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
     {
-        nodes_[default_final_node].is_final = true;
-        nodes_[default_final_node].is_fallback = (flags.enable_fallback and not flags_.longest_match);
+        auto& dfn{ nodes_.at(default_final_node) };
+        dfn.is_final = true;
+        dfn.is_fallback = (flags.enable_fallback and not flags_.longest_match);
 
         if (flags_.is_iterator)
             cont_info_.emplace_back(default_start_node);

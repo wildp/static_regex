@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #include <print>
 #include <meta>
 
@@ -18,7 +24,7 @@ namespace
 
     struct tester_info
     {
-        int stage{ 0 };[[maybe_unused]] 
+        int stage{ 0 };
         rx::detail::parser_flags parse{};
         rx::detail::fsm_flags fsm{ dff::full_match };
         bool dbgok : 1 { false };
@@ -62,7 +68,7 @@ namespace
     [[maybe_unused]] void print_capture_info(const rx::detail::capture_info& ci)
     {
         for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
-            for (const auto& elem: ci.lookup(i))
+            for (const auto& elem : ci.lookup(i))
                 std::println("{}: {}+{}, {}+{}", i, elem.first.tag_number, elem.first.offset, elem.second.tag_number, elem.second.offset);
     }
 
@@ -81,7 +87,7 @@ namespace
             using namespace rx::testing;
 
             tree_type tree{ pat, Flags.parse };
-            
+
             if constexpr (Flags.fsm.is_search) tree.insert_search_prefix();
 
             if constexpr (Flags.ptree) std::println("Pattern: {}", to_string(tree));
@@ -103,8 +109,8 @@ namespace
                 {
                     tdfa_type tdfa{ tnfa };
 
-                    if constexpr (Flags.dbgok) std::println("Pattern ok\n"); 
-                    if constexpr (Flags.ptdfa) { dump_tdfa(tdfa); std::println("\n"); } 
+                    if constexpr (Flags.dbgok) std::println("Pattern ok\n");
+                    if constexpr (Flags.ptdfa) { dump_tdfa(tdfa); std::println("\n"); }
 
                     if constexpr (Flags.stage >= 3)
                     {
@@ -126,7 +132,7 @@ namespace
                         else if constexpr (Flags.stage >= 5)
                         {
                             tdfa.minimise_states();
-                            
+
                             if constexpr (Flags.dbgok) std::println("Min ok\n");
                             if constexpr (Flags.pdfam) { dump_tdfa(tdfa); std::println("\n"); }
                         }
@@ -149,19 +155,19 @@ namespace
         }
     };
 
-    [[maybe_unused]] constexpr auto t0 = tester<{ .stage=1 }>{};
-    [[maybe_unused]] constexpr auto t1 = tester<{ .stage=0, .parse{ .enable_possessive=true, .enable_backrefs=true, .enable_branchreset=true } }>{};
-    [[maybe_unused]] constexpr auto t2 = tester<{ .stage=2 }>{};
-    [[maybe_unused]] constexpr auto t3 = tester<{ .stage=2, .dbgok=true, .otags=true, .ptags=true, .ptdfa=true }>{};
-    [[maybe_unused]] constexpr auto t4 = tester<{ .stage=3, .dbgok=true, .otags=true, .pdfao=true }>{};
-    [[maybe_unused]] constexpr auto t5 = tester<{ .stage=3, .fsm=dff::search_single, .dbgok=true, .otags=true, .ptdfa=true, .pdfao=true }>{};
-    [[maybe_unused]] constexpr auto t6 = tester<{ .stage=4, .fsm=dff::partial_match, .dbgok=true, .otags=true, .ptdfa=true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto t7 = tester<{ .stage=4, .dbghc=true, .otags=true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto t8 = tester<{ .stage=5, .dbgok=true, .otags=true, .pdfao=true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto t9 = tester<{ .stage=5, .fsm=dff::partial_match, .dbgok=true, .otags=true, .pdfao=true, .pdfam=true }>{};
-    [[maybe_unused]] constexpr auto tA = tester<{ .stage=2, .fsm=dff::partial_match, .otags=true, .ptdfa=true }>{};
-    [[maybe_unused]] constexpr auto tB = tester<{ .stage=2, .fsm=dff::search_single, .otags=false, .ptags=true, .ptdfa=true }>{};
-    [[maybe_unused]] constexpr auto tC = tester<{ .stage=2, .fsm=dff::search_all, .otags=true, .ptdfa=true }>{};
+    [[maybe_unused]] constexpr auto t0 = tester<{ .stage = 1 }>{};
+    [[maybe_unused]] constexpr auto t1 = tester<{ .stage = 0, .parse{ .enable_possessive = true, .enable_backrefs = true, .enable_branchreset = true } }>{};
+    [[maybe_unused]] constexpr auto t2 = tester<{ .stage = 2 }>{};
+    [[maybe_unused]] constexpr auto t3 = tester<{ .stage = 2, .dbgok = true, .otags = true, .ptags = true, .ptdfa = true }>{};
+    [[maybe_unused]] constexpr auto t4 = tester<{ .stage = 3, .dbgok = true, .otags = true, .pdfao = true }>{};
+    [[maybe_unused]] constexpr auto t5 = tester<{ .stage = 3, .fsm = dff::search_single, .dbgok = true, .otags = true, .ptdfa = true, .pdfao = true }>{};
+    [[maybe_unused]] constexpr auto t6 = tester<{ .stage = 4, .fsm = dff::partial_match, .dbgok = true, .otags = true, .ptdfa = true, .pdfam = true }>{};
+    [[maybe_unused]] constexpr auto t7 = tester<{ .stage = 4, .dbghc = true, .otags = true, .pdfam = true }>{};
+    [[maybe_unused]] constexpr auto t8 = tester<{ .stage = 5, .dbgok = true, .otags = true, .pdfao = true, .pdfam = true }>{};
+    [[maybe_unused]] constexpr auto t9 = tester<{ .stage = 5, .fsm = dff::partial_match, .dbgok = true, .otags = true, .pdfao = true, .pdfam = true }>{};
+    [[maybe_unused]] constexpr auto tA = tester<{ .stage = 2, .fsm = dff::partial_match, .otags = true, .ptdfa = true }>{};
+    [[maybe_unused]] constexpr auto tB = tester<{ .stage = 2, .fsm = dff::search_single, .otags = false, .ptags = true, .ptdfa = true }>{};
+    [[maybe_unused]] constexpr auto tC = tester<{ .stage = 2, .fsm = dff::search_all, .otags = true, .ptdfa = true }>{};
 
     template<rx::string_literal S>
     [[maybe_unused]] void match(rx::static_regex<S> m, const std::vector<std::string_view>& test)
@@ -197,7 +203,7 @@ namespace
             else
                 std::println("{:?}: No Match", sv);
         }
-    }   
+    }
 }
 
 

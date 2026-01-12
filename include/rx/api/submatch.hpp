@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <algorithm>
@@ -22,18 +28,18 @@ namespace rx
     class submatch
     {
     public:
-        using value_type                = std::iter_value_t<Iter>;
+        using value_type             = std::iter_value_t<Iter>;
 #if __cpp_lib_ranges_as_const > 202311L
-        using const_iterator            = std::const_iterator<Iter>;
+        using const_iterator         = std::const_iterator<Iter>;
 #else
-        using const_iterator            = Iter; /* semantically incorrect workaround */
+        using const_iterator         = Iter; /* semantically incorrect workaround */
 #endif
-        using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
-        using iterator                  = const_iterator;
-        using reverse_iterator          = const_reverse_iterator;
-        using size_type                 = std::size_t;
-        using string_type               = std::basic_string<value_type>;
-        using view_type                 = std::basic_string_view<value_type>;
+        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using iterator               = const_iterator;
+        using reverse_iterator       = const_reverse_iterator;
+        using size_type              = std::size_t;
+        using string_type            = std::basic_string<value_type>;
+        using view_type              = std::basic_string_view<value_type>;
 
         constexpr submatch() = default;
 
@@ -41,8 +47,8 @@ namespace rx
 
         [[nodiscard]] constexpr bool matched() const noexcept { return first_ != const_iterator{}; }
         [[nodiscard]] constexpr explicit operator bool() const noexcept { return this->matched(); }
-        [[nodiscard]] constexpr bool empty() const noexcept { return this->matched() ? first_ == last_ : true; };
-        [[nodiscard]] constexpr size_type size() const { return this->matched() ? std::saturate_cast<size_type>(std::ranges::distance(first_, last_)) : 0; };
+        [[nodiscard]] constexpr bool empty() const noexcept { return this->matched() ? first_ == last_ : true; }
+        [[nodiscard]] constexpr size_type size() const { return this->matched() ? std::saturate_cast<size_type>(std::ranges::distance(first_, last_)) : 0; }
         [[nodiscard]] constexpr size_type length() const { return this->size(); }
 
         /* iterators */
@@ -58,42 +64,63 @@ namespace rx
 
         /* structured binding support */
 
-        template<std::size_t N, typename T> requires (N < 2)
+        template<std::size_t N, typename T>
+        requires (N < 2)
         [[nodiscard]] constexpr auto&& get(this T&& self)
         {
-            if constexpr (N == 0) return std::forward<T>(self).begin_;
-            if constexpr (N == 1) return std::forward<T>(self).end_;
-        } 
+            if constexpr (N == 0)
+                return std::forward<T>(self).begin_;
+            if constexpr (N == 1)
+                return std::forward<T>(self).end_;
+        }
 
         /* conversion */
 
-        [[nodiscard]] constexpr string_type str() const { if (this->matched()) return { first_, last_ }; return {}; }
-        [[nodiscard]] constexpr operator string_type() const { return this->str(); }
-        [[nodiscard]] constexpr view_type view() const requires std::contiguous_iterator<const_iterator> { if (this->matched())  return { first_, last_ }; return {}; }
-        [[nodiscard]] constexpr operator view_type() const requires std::contiguous_iterator<const_iterator> { return this->view(); }
+        [[nodiscard]] constexpr string_type str() const
+        {
+            if (this->matched())
+                return { first_, last_ };
+            return {};
+        }
+
+        [[nodiscard]] constexpr view_type view() const requires std::contiguous_iterator<const_iterator>
+        {
+            if (this->matched())
+                return { first_, last_ };
+            return {};
+        }
+
+        [[nodiscard]] constexpr explicit(false) operator string_type() const { return this->str(); }
+        [[nodiscard]] constexpr explicit(false) operator view_type() const requires std::contiguous_iterator<const_iterator> { return this->view(); }
 
         /* operators */
 
         [[nodiscard]] friend constexpr bool operator==(const submatch& lhs, const submatch& rhs)
         {
-            return (lhs and rhs) ? std::ranges::equal(lhs, rhs) : lhs.matched() == rhs.matched();
+            return (lhs and rhs)
+                   ? std::ranges::equal(lhs, rhs)
+                   : lhs.matched() == rhs.matched();
         }
 
         [[nodiscard]] friend constexpr bool operator==(const submatch& sub, const view_type view)
         {
-            return sub ? std::ranges::equal(sub, view) : false;
+            return sub
+                   ? std::ranges::equal(sub, view)
+                   : false;
         }
 
         [[nodiscard]] friend constexpr auto operator<=>(const submatch& lhs, const submatch& rhs)
         {
-            return (lhs and rhs) ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end())
-                                 : lhs.matched() <=> rhs.matched();
+            return (lhs and rhs)
+                   ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end())
+                   : lhs.matched() <=> rhs.matched();
         }
 
         [[nodiscard]] friend constexpr auto operator<=>(const submatch& sub, const view_type view)
         {
-            return sub ? std::lexicographical_compare_three_way(sub.begin(), sub.end(), view.begin(), view.end())
-                       : std::strong_ordering::less;
+            return sub
+                   ? std::lexicographical_compare_three_way(sub.begin(), sub.end(), view.begin(), view.end())
+                   : std::strong_ordering::less;
         }
 
         template<typename CharT, typename Traits>
@@ -114,8 +141,8 @@ namespace rx
         }
 
     private:
-        constexpr submatch(iterator first, iterator last) :
-            first_{ first }, last_{ last } {}
+        constexpr submatch(iterator first, iterator last)
+            : first_{ first }, last_{ last } {}
 
         friend class detail::submatch_factory<Iter>;
 

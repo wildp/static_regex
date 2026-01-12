@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #pragma once
 
 #include <rx/ast/tree.hpp>
@@ -17,19 +23,19 @@ namespace rx::detail::parser
         using char_type = CharT;
         using ast_t = expr_tree<char_type>;
         using sv_type = std::basic_string_view<char_type>;
-        
+
         constexpr ll1(ast_t& ast, sv_type sv);
-        
+
     private:
-        using assertion     = ast_t::assertion;
-        using alt           = ast_t::alt;
-        using concat        = ast_t::concat;
-        using tag           = ast_t::tag;
-        using backref       = ast_t::backref;
-        using repeat        = ast_t::repeat;
-        using char_str      = ast_t::char_str;
-        using char_class    = ast_t::char_class;
-        using type          = ast_t::type;
+        using assertion  = ast_t::assertion;
+        using alt        = ast_t::alt;
+        using concat     = ast_t::concat;
+        using tag        = ast_t::tag;
+        using backref    = ast_t::backref;
+        using repeat     = ast_t::repeat;
+        using char_str   = ast_t::char_str;
+        using char_class = ast_t::char_class;
+        using type       = ast_t::type;
 
         [[nodiscard]] constexpr std::size_t sa_make_empty();
         [[nodiscard]] constexpr std::size_t sa_make_dot();
@@ -134,12 +140,12 @@ namespace rx::detail::parser
         using char_type = CharT;
         using terminal = lexer<char_type>::token_t;
         using elem_t = std::variant<terminal, nonterminal, semantic_action>;
-        
+
         constexpr void pop() { data_.pop_back(); }
         constexpr void push(const std::vector<elem_t>& elems) { data_.append_range(elems | std::views::reverse); }
         [[nodiscard]] constexpr auto& root() { return data_.back(); }
         [[nodiscard]] constexpr const auto& root() const { return data_.back(); }
-        
+
         constexpr auto begin() const noexcept { return data_.cbegin(); }
         constexpr auto end() const noexcept { return data_.cend(); }
         constexpr auto rbegin() const noexcept { return data_.crbegin(); }
@@ -183,8 +189,8 @@ namespace rx::detail::parser
     /* parser implemenation */
 
     template<typename CharT>
-    constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv) : 
-        ref_{ ast }, lex_{ sv }
+    constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv)
+        : ref_{ ast }, lex_{ sv }
     {
         using terminal = ll1_stack<char_type>::terminal;
 
@@ -321,7 +327,7 @@ namespace rx::detail::parser
                         /* epsilon */
                         break;
                     case tok_index<dot>:
-                    case tok_index<hat>:    
+                    case tok_index<hat>:
                     case tok_index<dollar>:
                     case tok_index<assertion>:
                     case tok_index<lparen>:
@@ -453,7 +459,7 @@ namespace rx::detail::parser
                         stack.push({ nt::E });
                         break;
                     case tok_index<quest>:
-                        stack.push({ sa::cap_parse_flag, quest{}, sa::cap_parse_flag_done , nt::E });
+                        stack.push({ sa::cap_parse_flag, quest{}, sa::cap_parse_flag_done, nt::E });
                         break;
                     default:
                         throw pattern_error("Invalid pattern");
@@ -461,152 +467,153 @@ namespace rx::detail::parser
                     break;
                 }
             }
-            else if(const auto* const action{ std::get_if<semantic_action>(&top) })
+            else if (const auto* const action{ std::get_if<semantic_action>(&top) })
             {
                 using sa = semantic_action;
 
                 switch (*action)
                 {
                 case sa::make_empty:
-                    {                 
-                        semstack.push(sa_make_empty());
-                    }
+                {
+                    semstack.push(sa_make_empty());
                     break;
+                }
                 case sa::make_dot:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::dot */                        
-                        semstack.push(sa_make_dot());
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::dot */
+                    semstack.push(sa_make_dot());
                     break;
+                }
                 case sa::make_hat:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::hat */                        
-                        semstack.push(sa_make_hat());
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::hat */
+                    semstack.push(sa_make_hat());
                     break;
+                }
                 case sa::make_dollar:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::dollar */
-                        semstack.push(sa_make_dollar());
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::dollar */
+                    semstack.push(sa_make_dollar());
                     break;
+                }
                 case sa::make_assert:
-                    {
-                        assertion as{ std::get<assertion>(std::get<terminal>(semstack.pop())) }; /* pop tok::assertion */
-                        semstack.push(sa_make_assert(std::move(as)));
-                    }
+                {
+                    assertion as{ std::get<assertion>(std::get<terminal>(semstack.pop())) }; /* pop tok::assertion */
+                    semstack.push(sa_make_assert(std::move(as)));
                     break;
+                }
                 case sa::make_char_lit:
-                    {
-                        char_str lit{ std::get<char_str>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
-                        semstack.push(sa_make_char_lit(std::move(lit)));
-                    }
+                {
+                    char_str lit{ std::get<char_str>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+                    semstack.push(sa_make_char_lit(std::move(lit)));
                     break;
+                }
                 case sa::make_char_class:
-                    {
-                        char_class cc{ std::get<char_class>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
-                        semstack.push(sa_make_char_class(std::move(cc)));
-                    }
+                {
+                    char_class cc{ std::get<char_class>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+                    semstack.push(sa_make_char_class(std::move(cc)));
                     break;
+                }
                 case sa::make_alt:
-                    {
-                        const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
-                        std::ignore = semstack.pop(); /* pop tok::vert */
-                        const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
-                        semstack.push(sa_make_alt(lhs_idx, rhs_idx));
-                    }
+                {
+                    const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    std::ignore = semstack.pop(); /* pop tok::vert */
+                    const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    semstack.push(sa_make_alt(lhs_idx, rhs_idx));
                     break;
+                }
                 case sa::make_concat:
-                    {
-                        const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
-                        const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
-                        semstack.push(sa_make_concat(lhs_idx, rhs_idx));
-                    }
+                {
+                    const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    semstack.push(sa_make_concat(lhs_idx, rhs_idx));
                     break;
+                }
                 case sa::make_bref:
-                    {
-                        const auto bref{ std::get<tok::backref>(std::get<terminal>(semstack.pop())) }; /* pop tok::backref */
-                        semstack.push(sa_make_bref(bref));
-                    }
+                {
+                    const auto bref{ std::get<tok::backref>(std::get<terminal>(semstack.pop())) }; /* pop tok::backref */
+                    semstack.push(sa_make_bref(bref));
                     break;
+                }
                 case sa::make_star:
-                    {
-                        const auto mode{ std::get<repeater_mode>(semstack.pop()) };
-                        std::ignore = semstack.pop(); /* pop tok::star */
-                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
-                        semstack.push(sa_make_star(child_idx, mode));
-                    }
+                {
+                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    std::ignore = semstack.pop(); /* pop tok::star */
+                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    semstack.push(sa_make_star(child_idx, mode));
                     break;
+                }
                 case sa::make_plus:
-                    {
-                        const auto mode{ std::get<repeater_mode>(semstack.pop()) };
-                        std::ignore = semstack.pop(); /* pop tok::plus */
-                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
-                        semstack.push(sa_make_plus(child_idx, mode));
-                    }
+                {
+                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    std::ignore = semstack.pop(); /* pop tok::plus */
+                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    semstack.push(sa_make_plus(child_idx, mode));
                     break;
+                }
                 case sa::make_quest:
-                    {
-                        const auto mode{ std::get<repeater_mode>(semstack.pop()) };
-                        std::ignore = semstack.pop(); /* pop tok::quest */
-                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
-                        semstack.push(sa_make_quest(child_idx, mode));
-                    }
+                {
+                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    std::ignore = semstack.pop(); /* pop tok::quest */
+                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    semstack.push(sa_make_quest(child_idx, mode));
                     break;
+                }
                 case sa::make_repeat:
-                    {
-                        const auto mode{ std::get<repeater_mode>(semstack.pop()) };
-                        const auto rep{ std::get<tok::repeat_n_m>(std::get<terminal>(semstack.pop())) };
-                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
-                        semstack.push(sa_make_repeat(child_idx, rep, mode));
-                    }
+                {
+                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    const auto rep{ std::get<tok::repeat_n_m>(std::get<terminal>(semstack.pop())) };
+                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    semstack.push(sa_make_repeat(child_idx, rep, mode));
                     break;
+                }
                 case sa::rep_greedy:
-                    {
-                        semstack.push(sa_rep_greedy());
-                    }
+                {
+                    semstack.push(sa_rep_greedy());
                     break;
+                }
                 case sa::rep_lazy:
-                    {
-                        std::ignore = semstack.pop();  /* pop tok::quest */
-                        semstack.push(sa_rep_lazy());
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::quest */
+                    semstack.push(sa_rep_lazy());
                     break;
+                }
                 case sa::rep_possessive:
-                    {
-                        std::ignore = semstack.pop();  /* pop tok::plus */
-                        semstack.push(sa_rep_possessive());
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::plus */
+                    semstack.push(sa_rep_possessive());
                     break;
+                }
                 case sa::cap_push:
-                    {
-                        sa_cap_push();
-                    }
+                {
+                    sa_cap_push();
                     break;
+                }
                 case sa::cap_pop:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::rparen */
-                        const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
-                        std::ignore = semstack.pop(); /* pop tok::lparen */
-                        semstack.push(sa_cap_pop(child_idx));
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::rparen */
+                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    std::ignore = semstack.pop(); /* pop tok::lparen */
+                    semstack.push(sa_cap_pop(child_idx));
                     break;
+                }
                 case sa::cap_parse_flag:
-                    {
-                        sa_cap_parse_flag();
-                    }
+                {
+                    sa_cap_parse_flag();
                     break;
+                }
                 case sa::cap_parse_flag_done:
-                    {
-                        std::ignore = semstack.pop(); /* pop tok::quest */
-                        /* this exists only so we can use capture_pop(_empty)? for captures with flags */
-                    }
+                {
+                    std::ignore = semstack.pop(); /* pop tok::quest */
+                    /* this exists only so we can use capture_pop(_empty)? for captures with flags */
                     break;
+                }
                 case sa::begin_alt:
-                    {
-                        /* exists only so branch resetting captures work */
-                        sa_begin_alt();
-                    }
+                {
+                    /* exists only so branch resetting captures work */
+                    sa_begin_alt();
+                    break;
+                }
                 }
             }
             else
@@ -628,13 +635,13 @@ namespace rx::detail::parser
     {
         return new_expression<char_str>(/* empty string */);
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_dot()
     {
         /* depending on flags, insert true wildcard instead of [^\n] */
         if (capstack_.dotall())
-        { 
+        {
             char_class result{ true };
             result.data.normalise();
             return new_expression<char_class>(std::move(result));
@@ -647,22 +654,22 @@ namespace rx::detail::parser
             return new_expression<char_class>(std::move(result));
         }
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_hat()
     {
         /* depending on flags, insert assert_type::line_start instead of assert_type::text_start */
-        if (capstack_.multiline()) 
+        if (capstack_.multiline())
             return new_expression<assertion>(assert_type::line_start);
         else
             return new_expression<assertion>(assert_type::text_start);
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_dollar()
     {
         /* depending on flags, insert assert_type::line_end instead of assert_type::text_end */
-        if (capstack_.multiline()) 
+        if (capstack_.multiline())
             return new_expression<assertion>(assert_type::line_end);
         else
             return new_expression<assertion>(assert_type::text_end);
@@ -670,7 +677,7 @@ namespace rx::detail::parser
 
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_assert(assertion&& as)
-    {   
+    {
         /* todo: perform checks on implementability here */
         return new_expression<assertion>(std::move(as));
     }
@@ -688,7 +695,7 @@ namespace rx::detail::parser
 
                 if (is_alphabetic(*c))
                 {
-                    const auto new_idx{ new_expression<char_class>() }; 
+                    const auto new_idx{ new_expression<char_class>() };
                     auto& target{ std::get<char_class>(get_expr(new_idx)).data };
 
                     target.insert(*c);
@@ -700,19 +707,19 @@ namespace rx::detail::parser
             {
                 /* several characters (need to insert concat) */
 
-                if constexpr(char_is_multibyte<char_type>)
+                if constexpr (char_is_multibyte<char_type>)
                 {
                     // TODO: implement this using utf32 proxy iterators
                     throw tree_error("Caseless flag on multibyte strings not implemented");
                 }
-                
+
                 auto lit_it{ std::ranges::begin(lit.data) };
                 const auto lit_end{ std::ranges::end(lit.data) };
 
                 if (std::ranges::any_of(lit_it, lit_end, is_alphabetic))
                 {
                     /* create new concat to insert caseless string into */
-                    const auto cat_idx{ new_expression<concat>() }; 
+                    const auto cat_idx{ new_expression<concat>() };
 
                     while (lit_it != lit_end)
                     {
@@ -721,18 +728,17 @@ namespace rx::detail::parser
                         if (is_alphabetic(c))
                         {
                             /* insert character class of [cC] into cat */
-                            const auto new_idx{ new_expression<char_class>() }; 
+                            const auto new_idx{ new_expression<char_class>() };
                             auto& target{ std::get<char_class>(get_expr(new_idx)).data };
                             std::get<concat>(get_expr(cat_idx)).idxs.push_back(new_idx);
 
                             target.insert(c);
                             target.make_caseless();
-                            
                         }
                         else
                         {
                             /* insert character string into cat */
-                            const auto new_idx{ new_expression<char_str>() }; 
+                            const auto new_idx{ new_expression<char_str>() };
                             auto& target{ std::get<char_str>(get_expr(new_idx)).data };
 
                             target.push_back(c);
@@ -748,26 +754,26 @@ namespace rx::detail::parser
                 }
             }
         }
-        
+
         return new_expression<char_str>(std::move(lit));
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_char_class(char_class&& cc)
     {
         if (capstack_.caseless())
             cc.data.make_caseless();
-        
+
         return new_expression<char_class>(std::move(cc));
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_alt(const std::size_t lhs_idx, const std::size_t rhs_idx)
     {
         if (type& ast{ get_expr(rhs_idx) }; std::holds_alternative<alt>(ast))
         {
             auto& ast_alt{ std::get<alt>(ast) };
-            
+
             if (flags().enable_alttocc and not ast_alt.idxs.empty())
             {
                 /* attempt to replace a|b with [ab] */
@@ -799,7 +805,7 @@ namespace rx::detail::parser
                 }
                 else if (std::holds_alternative<char_str>(rhs))
                 {
-                    const auto saved_idx{ ast_alt.idxs.front() }; 
+                    const auto saved_idx{ ast_alt.idxs.front() };
 
                     if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
                     {
@@ -817,10 +823,10 @@ namespace rx::detail::parser
                             if (auto other_insert{ std::get<char_str>(lhs).get_if_single() })
                             {
                                 /* replace rhs with new char class in alt */
-                                const auto new_idx{ new_expression<char_class>() }; 
+                                const auto new_idx{ new_expression<char_class>() };
                                 auto& target{ std::get<char_class>(get_expr(new_idx)).data };
 
-                                /* calling new_expression invalidates references, so we must re-get ast_alt */ 
+                                /* calling new_expression invalidates references, so we must re-get ast_alt */
                                 auto& ast_alt2{ std::get<alt>(get_expr(rhs_idx)) };
                                 ast_alt2.idxs.front() = new_idx;
 
@@ -889,7 +895,7 @@ namespace rx::detail::parser
                                 /* create new char class */
                                 const auto new_idx{ new_expression<char_class>() };
                                 auto& target{ std::get<char_class>(get_expr(new_idx)).data };
-                                
+
                                 target.insert(*to_insert);
                                 target.insert(*other_insert);
                                 overwritable_.push_back(lhs_idx);
@@ -905,7 +911,7 @@ namespace rx::detail::parser
             return new_expression<alt>(std::vector<std::size_t>{ lhs_idx, rhs_idx });
         }
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, const std::size_t rhs_idx)
     {
@@ -914,7 +920,7 @@ namespace rx::detail::parser
             /* append rhs into existing concat */
             /* this case _should_ only arise from captures, so we can skip merging strings */
             auto& target{ std::get<concat>(ast).idxs };
-            
+
             type& rhs{ get_expr(rhs_idx) };
 
             if (std::holds_alternative<concat>(rhs))
@@ -964,7 +970,7 @@ namespace rx::detail::parser
 
             return rhs_idx;
         }
-        else 
+        else
         {
             type& rhs{ get_expr(rhs_idx) };
             type& lhs{ get_expr(lhs_idx) };
@@ -986,7 +992,7 @@ namespace rx::detail::parser
             }
         }
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_bref(const backref bref)
     {
@@ -1001,41 +1007,41 @@ namespace rx::detail::parser
             throw parser_error("Backreferences are not enabled");
         }
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_star(const std::size_t child_idx, const repeater_mode mode)
     {
         return new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, mode);
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_plus(const std::size_t child_idx, const repeater_mode mode)
     {
         return new_expression<repeat>(child_idx, std::int_least16_t{ 1 }, std::int_least16_t{ 0 }, mode);
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_quest(const std::size_t child_idx, const repeater_mode mode)
     {
         return new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, mode);
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_repeat(const std::size_t child_idx, const tok::repeat_n_m rep, const repeater_mode mode)
     {
         return new_expression<repeat>(child_idx, rep.min, rep.max, mode);
     }
-    
+
     template<typename CharT>
     constexpr repeater_mode ll1<CharT>::sa_rep_greedy() const
     {
         /* swap greedy and lazy quantifiers if 'ungreedy' flag is set */
         if (capstack_.ungreedy())
-            return repeater_mode::lazy;  /* swapped */
+            return repeater_mode::lazy; /* swapped */
         else
             return repeater_mode::greedy; /* default */
     }
-    
+
     template<typename CharT>
     constexpr repeater_mode ll1<CharT>::sa_rep_lazy() const
     {
@@ -1043,9 +1049,9 @@ namespace rx::detail::parser
         if (capstack_.ungreedy())
             return repeater_mode::greedy; /* swapped */
         else
-            return repeater_mode::lazy;  /* default */
+            return repeater_mode::lazy; /* default */
     }
-    
+
     template<typename CharT>
     constexpr repeater_mode ll1<CharT>::sa_rep_possessive() const
     {
@@ -1054,7 +1060,7 @@ namespace rx::detail::parser
         else
             throw parser_error("Possessive repetition is not enabled");
     }
-    
+
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx)
     {
@@ -1086,11 +1092,11 @@ namespace rx::detail::parser
 
                 if (lhs_tag < 0 or rhs_tag < 0)
                     throw tree_error("Capture limit exceed");
-                
+
                 const auto lhs_tag_entry{ new_expression<tag>(lhs_tag) };
                 const auto rhs_tag_entry{ new_expression<tag>(rhs_tag) };
 
-                /* calling new_expression invalidates references, so we must re-get ast for target */ 
+                /* calling new_expression invalidates references, so we must re-get ast for target */
                 auto& target{ std::get<concat>(get_expr(child_idx)).idxs };
                 target.insert(target.cbegin(), lhs_tag_entry);
                 target.insert(target.cend(), rhs_tag_entry);
@@ -1116,7 +1122,7 @@ namespace rx::detail::parser
             return child_idx; /* non capturing group */
         }
     }
-    
+
     template<typename CharT>
     constexpr void ll1<CharT>::sa_cap_push()
     {
@@ -1128,9 +1134,9 @@ namespace rx::detail::parser
         else
         {
             capstack_.push_non_capturing();
-        }   
+        }
     }
-    
+
     template<typename CharT>
     constexpr void ll1<CharT>::sa_cap_parse_flag()
     {
@@ -1173,12 +1179,12 @@ namespace rx::detail::parser
             for (bool loop{ true }; loop;)
             {
                 if (lit == lend)
-                    throw pattern_error("Invalid Pattern"); 
+                    throw pattern_error("Invalid Pattern");
 
                 const auto lookahead{ *lit };
                 bool increment{ true };
 
-                switch(lookahead)
+                switch (lookahead)
                 {
                 case 'i':
                     capstack_.set_caseless(flag_value);
@@ -1199,7 +1205,7 @@ namespace rx::detail::parser
                         throw pattern_error("Capturing group arguments can only contain one hyphen");
                     flag_value = false;
                     break;
-                    
+
                 case ':':
                     capstack_.set_non_capturing();
                     loop = false;
@@ -1220,7 +1226,7 @@ namespace rx::detail::parser
             break;
         }
     }
-    
+
     template<typename CharT>
     constexpr void ll1<CharT>::sa_begin_alt()
     {
@@ -1234,8 +1240,8 @@ namespace rx::detail
     /* constructor for tree */
 
     template<typename CharT>
-    constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags) :
-            flags_{ flags } 
+    constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags)
+        : flags_{ flags }
     {
         parser::ll1<char_type> ll1_parser(*this, sv);
     }
