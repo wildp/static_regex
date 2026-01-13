@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <rx/fsm/tdfa.hpp>
+#include "tdfa.hpp"
 
 #include <algorithm>
 #include <optional>

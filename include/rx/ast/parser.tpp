@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <rx/ast/tree.hpp>
+#include "tree.hpp"
 
 #include <ranges>
 
-#include <rx/api/regex_error.hpp>
-#include <rx/ast/capstack.hpp>
+#include "../api/regex_error.hpp"
+#include "../ast/capstack.hpp"
 
 
 namespace rx::detail::parser

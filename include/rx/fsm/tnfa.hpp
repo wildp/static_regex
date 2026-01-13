@@ -12,10 +12,10 @@
 #include <variant>
 #include <vector>
 
-#include <rx/ast/tree.hpp>
-#include <rx/etc/bitcharset.hpp>
-#include <rx/etc/charset.hpp>
-#include <rx/fsm/flags.hpp>
+#include "../ast/tree.hpp"
+#include "../etc/bitcharset.hpp"
+#include "../etc/charset.hpp"
+#include "../fsm/flags.hpp"
 
 
 namespace rx::detail::tnfa
@@ -266,4 +266,4 @@ namespace rx::detail
     };
 }
 
-#include <rx/fsm/tnfa.tpp>
+#include "tnfa.tpp"

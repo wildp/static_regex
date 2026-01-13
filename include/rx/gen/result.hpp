@@ -13,10 +13,10 @@
 #include <type_traits>
 #include <utility>
 
-#include <rx/api/submatch.hpp>
-#include <rx/etc/string_literal.hpp>
-#include <rx/fsm/flags.hpp>
-#include <rx/gen/compile.hpp>
+#include "../api/submatch.hpp"
+#include "../etc/string_literal.hpp"
+#include "../fsm/flags.hpp"
+#include "../gen/compile.hpp"
 
 
 namespace rx::detail

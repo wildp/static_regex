@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <rx/fsm/tnfa.hpp>
+#include "tnfa.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -18,8 +18,8 @@
 #include <type_traits>
 #include <utility>
 
-#include <rx/api/regex_error.hpp>
-#include <rx/etc/static_charset.hpp>
+#include "../api/regex_error.hpp"
+#include "../etc/static_charset.hpp"
 
 
 namespace rx::detail

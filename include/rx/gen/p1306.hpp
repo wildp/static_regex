@@ -13,11 +13,10 @@
 #include <meta>
 #include <type_traits>
 
-#include <rx/api/submatch.hpp>
-#include <rx/etc/string_literal.hpp>
-#include <rx/fsm/tdfa.hpp>
-#include <rx/gen/compile.hpp>
-#include <rx/gen/result.hpp>
+#include "../etc/string_literal.hpp"
+#include "../fsm/tdfa.hpp"
+#include "../gen/compile.hpp"
+#include "../gen/result.hpp"
 
 
 namespace rx::detail

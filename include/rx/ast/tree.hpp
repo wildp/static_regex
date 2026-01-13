@@ -10,9 +10,9 @@
 #include <variant>
 #include <vector>
 
-#include <rx/ast/tok.hpp>
-#include <rx/etc/captures.hpp>
-#include <rx/etc/util.hpp>
+#include "../ast/tok.hpp"
+#include "../etc/captures.hpp"
+#include "../etc/util.hpp"
 
 
 namespace rx::detail
@@ -116,5 +116,5 @@ namespace rx::detail
 }
 
 
-#include <rx/ast/tree.tpp>
-#include <rx/ast/parser.tpp>
+#include "tree.tpp"
+#include "parser.tpp"

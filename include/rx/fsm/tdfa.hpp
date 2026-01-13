@@ -13,9 +13,9 @@
 #include <variant>
 #include <vector>
 
-#include <rx/etc/captures.hpp>
-#include <rx/fsm/flags.hpp>
-#include <rx/fsm/tnfa.hpp>
+#include "../etc/captures.hpp"
+#include "../fsm/flags.hpp"
+#include "../fsm/tnfa.hpp"
 
 
 namespace rx::detail::tdfa
@@ -160,6 +160,6 @@ namespace rx::detail
     };
 }
 
-#include <rx/fsm/tdfa.tpp>
-#include <rx/fsm/regoptimise.tpp>
-#include <rx/fsm/minimise.tpp>
+#include "tdfa.tpp"
+#include "regoptimise.tpp"
+#include "minimise.tpp"

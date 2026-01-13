@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <rx/ast/tree.hpp>
+#include "tree.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -16,8 +16,8 @@
 #include <utility>
 #include <variant>
 
-#include <rx/api/regex_error.hpp>
-#include <rx/etc/captures.hpp>
+#include "../api/regex_error.hpp"
+#include "../etc/captures.hpp"
 
 
 namespace rx::detail

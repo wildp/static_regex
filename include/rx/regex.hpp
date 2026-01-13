@@ -12,10 +12,10 @@
 #include <ranges>
 #include <type_traits>
 
-#include <rx/etc/string_literal.hpp>
-#include <rx/fsm/flags.hpp>
-#include <rx/gen/p1306.hpp>
-#include <rx/gen/result.hpp>
+#include "etc/string_literal.hpp"
+#include "fsm/flags.hpp"
+#include "gen/p1306.hpp"
+#include "gen/result.hpp"
 
 
 namespace rx
