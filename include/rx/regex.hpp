@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #include "etc/string_literal.hpp"
+#include "etc/util.hpp"
 #include "fsm/flags.hpp"
 #include "gen/p1306.hpp"
 #include "gen/result.hpp"
@@ -26,86 +27,78 @@ namespace rx
     {
         using char_type = decltype(Pattern)::char_type;
 
-        template<std::bidirectional_iterator Iter>
-        requires std::same_as<std::iter_value_t<Iter>, char_type>
-        [[nodiscard]] constexpr auto match(const Iter first, const Iter last) const
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto match(const I first, const S last)
         {
             using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::full_match> m{};
-            return m(first, last);
+            p1306_matcher<Pattern, default_fsm_flags::full_match> matcher;
+            return matcher(first, last);
         }
 
-        template<std::ranges::bidirectional_range Range>
-        requires std::same_as<std::ranges::range_value_t<Range>, char_type>
-        [[nodiscard]] constexpr auto match(Range&& r) const
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        [[nodiscard]] static constexpr auto match(R&& r)
         {
-            return match(std::ranges::cbegin(r), std::ranges::cend(r));
+            return match(std::ranges::begin(r), std::ranges::end(r));
         }
 
         template<typename CharT>
         requires std::same_as<CharT, char_type>
-        [[nodiscard]] constexpr auto match(const CharT* cstr) const
+        [[nodiscard]] static constexpr auto match(const CharT* cstr)
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::full_match> m{};
-            return m(cstr);
+            return match(cstr, detail::cstr_sentinel);
         }
 
-        template<std::bidirectional_iterator Iter>
-        requires std::same_as<std::iter_value_t<Iter>, char_type>
-        [[nodiscard]] constexpr auto starts_with(const Iter first, const Iter last) const
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto starts_with(const I first, const S last)
         {
             using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::partial_match> m{};
-            return m(first, last);
+            p1306_matcher<Pattern, default_fsm_flags::partial_match> matcher;
+            return matcher(first, last);
         }
 
-        template<std::ranges::bidirectional_range Range>
-        requires std::same_as<std::ranges::range_value_t<Range>, char_type>
-        [[nodiscard]] constexpr auto starts_with(Range&& r) const
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        [[nodiscard]] static constexpr auto starts_with(R&& r)
         {
-            return starts_with(std::ranges::cbegin(r), std::ranges::cend(r));
+            return starts_with(std::ranges::begin(r), std::ranges::end(r));
         }
 
         template<typename CharT>
         requires std::same_as<CharT, char_type>
-        [[nodiscard]] constexpr auto starts_with(const CharT* cstr) const
+        [[nodiscard]] static constexpr auto starts_with(const CharT* cstr)
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::partial_match> m{};
-            return m(cstr);
+            return starts_with(cstr, detail::cstr_sentinel);
         }
 
-        template<std::bidirectional_iterator Iter>
-        requires std::same_as<std::iter_value_t<Iter>, char_type>
-        [[nodiscard]] constexpr auto search(const Iter first, const Iter last) const
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto search(const I first, const S last)
         {
             using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_single> m{};
-            return m(first, last);
+            p1306_matcher<Pattern, default_fsm_flags::search_single> matcher;
+            return matcher(first, last);
         }
 
-        template<std::ranges::bidirectional_range Range>
-        requires std::same_as<std::ranges::range_value_t<Range>, char_type>
-        [[nodiscard]] constexpr auto search(Range&& r) const
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        [[nodiscard]] static constexpr auto search(R&& r)
         {
-            return search(std::ranges::cbegin(r), std::ranges::cend(r));
+            return search(std::ranges::begin(r), std::ranges::end(r));
         }
 
         template<typename CharT>
         requires std::same_as<CharT, char_type>
-        [[nodiscard]] constexpr auto search(const CharT* cstr) const
+        [[nodiscard]] static constexpr auto search(const CharT* cstr)
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_single> m{};
-            return m(cstr);
+            return search(cstr, detail::cstr_sentinel);
         }
     };
 
 
-    // TODO: replace `decltype(std::ranges::cbegin(std::declval<R&>()))` with `std::ranges::const_iterator_t<T>`
-
-    template<string_literal, typename>
+    template<string_literal, typename, typename>
     class static_regex_iterator
     {
     public:
@@ -113,10 +106,11 @@ namespace rx
         friend constexpr bool operator==(static_regex_iterator, static_regex_iterator) noexcept = default;
     };
 
-    using static_regex_iterator_sentinel = static_regex_iterator<"", void>;
+    using static_regex_sentinel_t = static_regex_iterator<"", void, void>;
+    inline constexpr static_regex_sentinel_t static_regex_sentinel;
 
 
-    template<string_literal, typename, int...>
+    template<string_literal, typename, typename, int...>
     class static_regex_token_iterator
     {
     public:
@@ -124,183 +118,127 @@ namespace rx
         friend constexpr bool operator==(static_regex_token_iterator, static_regex_token_iterator) noexcept = default;
     };
 
-    using static_regex_token_iterator_sentinel = static_regex_token_iterator<"", void>;
+    using static_regex_token_sentinel_t = static_regex_token_iterator<"", void, void>;
+    inline constexpr static_regex_token_sentinel_t static_regex_token_sentinel;
 
 
-    template<string_literal Pattern, std::bidirectional_iterator Iter>
-    requires std::same_as<std::iter_value_t<Iter>, typename static_regex<Pattern>::char_type>
-    class static_regex_iterator<Pattern, Iter>
+    template<string_literal Pattern, std::bidirectional_iterator I, std::sentinel_for<I> S>
+    requires std::same_as<std::iter_value_t<I>, typename static_regex<Pattern>::char_type> and std::default_initializable<I>
+    class static_regex_iterator<Pattern, I, S>
     {
+        using matcher_type      = detail::p1306_matcher<Pattern, detail::default_fsm_flags::search_all>;
+
     public:
         using iterator_concept  = std::input_iterator_tag;
         using iterator_category = std::input_iterator_tag;
-        using value_type        = static_regex_match_result<Iter, Pattern, detail::default_fsm_flags::search_all>;
+        using value_type        = matcher_type::template result_type<I>;
         using difference_type   = std::ptrdiff_t;
-        using pointer           = std::add_pointer_t<const value_type>;
-        using reference         = std::add_lvalue_reference_t<const value_type>;
         using regex_type        = static_regex<Pattern>;
 
-        constexpr static_regex_iterator() noexcept = default;
+        static_regex_iterator() = default;
 
-        constexpr static_regex_iterator(const Iter first, const Iter last, regex_type)
-            : first_{ first }, last_{ last }
-        {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_all> m{};
-            result_ = m(first_, last_);
-            first_ = result_.match_end();
-        }
+        constexpr static_regex_iterator(const I first, const S last, regex_type)
+            : static_regex_iterator(first, last) {}
 
-        template<std::ranges::bidirectional_range Range>
-        requires std::same_as<std::ranges::range_value_t<Range>, typename regex_type::char_type>
-                 and std::same_as<decltype(std::ranges::cbegin(std::declval<Range&>())), Iter>
-        constexpr static_regex_iterator(Range&& r, regex_type)
-            : static_regex_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}) {}
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
+                 and std::same_as<std::ranges::iterator_t<R>, I> and std::same_as<std::ranges::sentinel_t<R>, S>
+        constexpr static_regex_iterator(R&& r, regex_type)
+            : static_regex_iterator(std::ranges::begin(r), std::ranges::end(r)) {}
+
+        template<detail::character CharT>
+        requires std::same_as<const CharT*, I>
+        constexpr static_regex_iterator(const CharT* str, regex_type)
+            : static_regex_iterator(str, detail::cstr_sentinel) {}
 
         constexpr static_regex_iterator& operator++()
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_all> m{};
-            result_ = m(first_, last_, result_.continue_at());
-            first_ = result_.match_end();
+            if (not result_.has_value())
+                return *this;
+
+            if (current_ == result_.match_end_)
+            {
+                if (current_ == end_)
+                {
+                    result_ = value_type{};
+                    return *this;
+                }
+                else
+                {
+                    ++current_;
+                }
+            }
+            else
+            {
+                current_ = result_.match_end_;
+            }
+
+            result_ = matcher_(current_, end_, result_.continue_at_);
             return *this;
         }
 
-        constexpr static_regex_iterator operator++(int)
+        constexpr void operator++(int)
         {
-            const auto copy{ *this };
-            this->operator++();
-            return copy;
+            +*this;
         }
 
-        [[nodiscard]] constexpr reference operator*() const noexcept
+        [[nodiscard]] constexpr const value_type& operator*() const noexcept
         {
             return result_;
         }
 
-        [[nodiscard]] constexpr pointer operator->() const noexcept
+        [[nodiscard]] constexpr const value_type* operator->() const noexcept
         {
             return &result_;
         }
 
-        friend constexpr bool operator==(const static_regex_iterator& lhs, const static_regex_iterator& rhs) noexcept
+        friend constexpr bool operator==(const static_regex_iterator& x, const static_regex_iterator& y) noexcept
         {
-            return lhs.first_ == rhs.first_ and lhs.last_ == rhs.last_;
+            return x.current_ == y.current_;
         }
 
-        friend constexpr bool operator==(const static_regex_iterator& lhs, static_regex_iterator_sentinel) noexcept
+        friend constexpr bool operator==(const static_regex_iterator& x, static_regex_sentinel_t) noexcept
         {
-            return lhs.first_ == Iter{};
+            return not x.result_.has_value();
         }
 
-        template<string_literal, typename, int...>
+        template<string_literal, typename, typename, int...>
         friend class static_regex_token_iterator;
 
     private:
-        Iter       first_;
-        Iter       last_;
+        constexpr static_regex_iterator(const I first, const S last)
+            : current_{ first }, end_{ last }, result_(matcher_(current_, end_))
+        {
+            if (not result_.has_value())
+                current_ = I{};
+        }
+
+        I current_{};
+        [[no_unique_address]] S end_{};
+        [[no_unique_address]] matcher_type matcher_;
         value_type result_;
     };
 
 
-    template<string_literal Pattern, typename CharT>
-    requires std::same_as<CharT, typename static_regex<Pattern>::char_type>
-    class static_regex_iterator<Pattern, CharT>
+    static_regex_iterator() -> static_regex_iterator<"", void, void>;
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern>
+    static_regex_iterator(I, S, static_regex<Pattern>) -> static_regex_iterator<Pattern, I, S>;
+
+    template<std::ranges::bidirectional_range R, string_literal Pattern>
+    static_regex_iterator(R&&, static_regex<Pattern>) -> static_regex_iterator<Pattern, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>>;
+
+    template<detail::character CharT, string_literal Pattern>
+    static_regex_iterator(const CharT*, static_regex<Pattern>) -> static_regex_iterator<Pattern, const CharT*, detail::cstr_sentinel_t>;
+
+
+    template<string_literal Pattern, std::bidirectional_iterator I, std::sentinel_for<I> S, int... Submatches> 
+    class static_regex_token_iterator<Pattern, I, S, Submatches...>
     {
-    public:
-        using iterator_concept  = std::input_iterator_tag;
-        using iterator_category = std::input_iterator_tag;
-        using value_type        = static_regex_match_result<const CharT*, Pattern, detail::default_fsm_flags::search_all>;
-        using difference_type   = std::ptrdiff_t;
-        using pointer           = std::add_pointer_t<const value_type>;
-        using reference         = std::add_lvalue_reference_t<const value_type>;
-        using regex_type        = static_regex<Pattern>;
+        using parent_type = static_regex_iterator<Pattern, I, S>;
 
-        constexpr static_regex_iterator() noexcept = default;
-
-        constexpr static_regex_iterator(const CharT* str, regex_type)
-            : ptr_{ str }
-        {
-            if (ptr_ == nullptr)
-                return;
-
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_all> m{};
-            result_ = m(ptr_);
-            ptr_ = result_.match_end();
-        }
-
-        constexpr static_regex_iterator& operator++()
-        {
-            if (ptr_ == nullptr)
-                return *this;
-
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_all> m{};
-            result_ = m(ptr_, result_.continue_at());
-            ptr_ = result_.match_end();
-            return *this;
-        }
-
-        constexpr static_regex_iterator operator++(int)
-        {
-            const auto copy{ *this };
-            this->operator++();
-            return copy;
-        }
-
-        [[nodiscard]] constexpr reference operator*() const noexcept
-        {
-            return result_;
-        }
-
-        [[nodiscard]] constexpr pointer operator->() const noexcept
-        {
-            return &result_;
-        }
-
-        friend constexpr bool operator==(const static_regex_iterator& lhs, const static_regex_iterator& rhs) noexcept
-        {
-            return lhs.ptr_ == rhs.ptr_;
-        }
-
-        friend constexpr bool operator==(const static_regex_iterator& lhs, static_regex_iterator_sentinel) noexcept
-        {
-            return lhs.ptr_ == nullptr;
-        }
-
-        template<string_literal, typename, int...>
-        friend class static_regex_token_iterator;
-
-    private:
-        const CharT* ptr_{ nullptr };
-        value_type   result_{};
-    };
-
-
-    static_assert(std::input_iterator<static_regex_iterator<"", char>>);
-    static_assert(std::input_iterator<static_regex_iterator<"", std::string::const_iterator>>);
-
-    static_regex_iterator() -> static_regex_iterator<"", void>;
-
-    template<std::bidirectional_iterator Iter, string_literal Pattern>
-    static_regex_iterator(Iter, Iter, static_regex<Pattern>) -> static_regex_iterator<Pattern, Iter>;
-
-    template<std::ranges::bidirectional_range Range, string_literal Pattern>
-    static_regex_iterator(Range&&, static_regex<Pattern>) -> static_regex_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<Range&>()))>;
-
-    template<typename CharT, string_literal Pattern>
-    static_regex_iterator(const CharT*, static_regex<Pattern>) -> static_regex_iterator<Pattern, CharT>;
-
-
-    template<string_literal Pattern, typename T, int... Submatches>
-    requires std::bidirectional_iterator<T> or std::same_as<T, typename static_regex<Pattern>::char_type>
-    class static_regex_token_iterator<Pattern, T, Submatches...>
-    {
-        using parent_type = static_regex_iterator<Pattern, T>;
-
-        template<int S>
-        static constexpr bool submatch_is_valid{ ((-1 == S) or (S < parent_type::value_type::submatch_count)) };
+        template<int Submatch>
+        static constexpr bool submatch_is_valid{ ((-1 == Submatch) or (Submatch < parent_type::value_type::submatch_count)) };
 
         static_assert(sizeof...(Submatches) > 0);
         static_assert((submatch_is_valid<Submatches> and ...));
@@ -310,75 +248,57 @@ namespace rx
         using iterator_category = std::input_iterator_tag;
         using value_type        = parent_type::value_type::submatch_type;
         using difference_type   = std::ptrdiff_t;
-        using pointer           = std::add_pointer<const value_type>;
-        using reference         = std::add_lvalue_reference_t<const value_type>;
         using regex_type        = static_regex<Pattern>;
 
-        constexpr static_regex_token_iterator() noexcept = default;
+        static_regex_token_iterator() = default;
 
-        constexpr static_regex_token_iterator(const T first, const T last, regex_type, std::integer_sequence<int, Submatches...>)
-        requires std::bidirectional_iterator<T>
-            : iterator_{ first, last, regex_type{} }
-        {
-            if constexpr (is_suffix_iterator)
-                suffix_start_ = first;
+        constexpr static_regex_token_iterator(const I first, const S last, regex_type, std::integer_sequence<int, Submatches...>)
+            : static_regex_token_iterator(first, last) {}
 
-            this->stash_result();
-        }
-
-        constexpr static_regex_token_iterator(const T first, const T last, regex_type, std::integral_constant<int, Submatches>...)
-        requires std::bidirectional_iterator<T> and (sizeof...(Submatches) == 1)
-            : static_regex_token_iterator(first, last, {}, std::integer_sequence<int, Submatches...>{}) {}
+        constexpr static_regex_token_iterator(const I first, const S last, regex_type, std::integral_constant<int, Submatches>...)
+        requires (sizeof...(Submatches) == 1)
+            : static_regex_token_iterator(first, last) {}
 
         template<std::ranges::bidirectional_range R>
         requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                 and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), T>
+                 and std::same_as<std::ranges::iterator_t<R>, I> and std::same_as<std::ranges::sentinel_t<R>, S>
         constexpr static_regex_token_iterator(R&& r, regex_type, std::integer_sequence<int, Submatches...>)
-        requires std::bidirectional_iterator<T>
-            : static_regex_token_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}, std::integer_sequence<int, Submatches...>{}) {}
+            : static_regex_token_iterator(std::ranges::begin(r), std::ranges::end(r)) {}
 
         template<std::ranges::bidirectional_range R>
         requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                 and std::same_as<decltype(std::ranges::cbegin(std::declval<R&>())), T>
+                 and std::same_as<std::ranges::iterator_t<R>, I> and std::same_as<std::ranges::sentinel_t<R>, S>
         constexpr static_regex_token_iterator(R&& r, regex_type, std::integral_constant<int, Submatches>...)
-        requires std::bidirectional_iterator<T> and (sizeof...(Submatches) == 1)
-            : static_regex_token_iterator(std::ranges::cbegin(r), std::ranges::cend(r), {}, std::integer_sequence<int, Submatches...>{}) {}
+        requires (sizeof...(Submatches) == 1)
+            : static_regex_token_iterator(std::ranges::begin(r), std::ranges::end(r)) {}
 
-        constexpr static_regex_token_iterator(const T* str, regex_type, std::integer_sequence<int, Submatches...>)
-        requires std::same_as<T, typename static_regex<Pattern>::char_type>
-            : iterator_{ str, regex_type{} }
-        {
-            if constexpr (is_suffix_iterator)
-                suffix_start_ = str;
+        template<detail::character CharT>
+        requires std::same_as<const CharT*, I>
+        constexpr static_regex_token_iterator(const CharT* str, regex_type, std::integer_sequence<int, Submatches...>)
+            : static_regex_token_iterator(str, detail::cstr_sentinel) {}
 
-            this->stash_result();
-        }
-
-        constexpr static_regex_token_iterator(const T* str, regex_type, std::integral_constant<int, Submatches>...)
-        requires std::same_as<T, typename static_regex<Pattern>::char_type> and (sizeof...(Submatches) == 1)
-            : static_regex_token_iterator(str, {}, std::integer_sequence<int, Submatches...>{}) {}
+        template<detail::character CharT>
+        requires std::same_as<const CharT*, I>
+        constexpr static_regex_token_iterator(const CharT* str, regex_type, std::integral_constant<int, Submatches>...)
+        requires (sizeof...(Submatches) == 1)
+            : static_regex_token_iterator(str, detail::cstr_sentinel) {}
 
         constexpr static_regex_token_iterator& operator++()
         {
             ++index_;
 
-            if (index_ == submatches.size() and iterator_ != static_regex_iterator_sentinel{})
+            if (index_ == submatches.size() and iterator_ != static_regex_sentinel)
             {
-                if constexpr (is_suffix_iterator)
-                {
-                    if constexpr (std::bidirectional_iterator<T>)
-                        suffix_start_ = iterator_.first_;
-                    else if constexpr (std::same_as<T, typename static_regex<Pattern>::char_type>)
-                        suffix_start_ = iterator_.ptr_;
-                }
-
                 ++iterator_;
                 index_ = 0;
+
+                if constexpr (is_suffix_iterator)
+                    suffix_start_ = iterator_.current_;
             }
 
             if constexpr (is_suffix_iterator)
             {
-                if (iterator_ == static_regex_iterator_sentinel{})
+                if (iterator_ == static_regex_sentinel)
                 {
                     while (index_ < submatches.size() and submatches[index_] != -1)
                         ++index_;
@@ -392,46 +312,46 @@ namespace rx
             return *this;
         }
 
-        constexpr static_regex_token_iterator operator++(int)
+        constexpr void operator++(int)
         {
-            const auto copy{ *this };
-            this->operator++();
-            return copy;
+            *this;
         }
 
-        [[nodiscard]] constexpr reference operator*() const noexcept
+        [[nodiscard]] constexpr const value_type& operator*() const noexcept
         {
             return result_;
         }
 
-        [[nodiscard]] constexpr pointer operator->() const noexcept
+        [[nodiscard]] constexpr const value_type* operator->() const noexcept
         {
             return &result_;
         }
 
-        friend constexpr bool operator==(const static_regex_token_iterator& lhs, const static_regex_token_iterator& rhs) noexcept
+        friend constexpr bool operator==(const static_regex_token_iterator& x, const static_regex_token_iterator& y) noexcept
         {
-            return lhs.iterator_ == rhs.iterator_ and lhs.index_ == rhs.index_;
+            return x.iterator_ == y.iterator_ and x.index_ == y.index_;
         }
 
-        friend constexpr bool operator==(const static_regex_token_iterator& lhs, static_regex_token_iterator_sentinel) noexcept
+        friend constexpr bool operator==(const static_regex_token_iterator& x, static_regex_token_sentinel_t) noexcept
         {
             if constexpr (is_suffix_iterator)
-            {
-                return lhs.iterator_ == static_regex_iterator_sentinel{} and lhs.index_ == submatches.size();
-            }
+                return x.iterator_ == static_regex_sentinel and x.index_ == submatches.size();
             else
-            {
-                return lhs.iterator_ == static_regex_iterator_sentinel{};
-            }
+                return x.iterator_ == static_regex_sentinel;
         }
 
     private:
         static constexpr bool is_suffix_iterator{ ((Submatches == -1) or ...) };
         static constexpr std::array submatches{ Submatches... };
 
-        using iter_type = value_type::const_iterator;
-        using suffix_it = std::conditional_t<is_suffix_iterator, iter_type, std::monostate>;
+        using iter_type = value_type::iterator;
+        using suffix_it = detail::maybe_type_t<is_suffix_iterator, iter_type>;
+
+        constexpr static_regex_token_iterator(const I first, const S last)
+            : iterator_{ first, last, regex_type{} }, suffix_start_{ detail::maybe_type_init<is_suffix_iterator>(first) }
+        {
+            this->stash_result();
+        }
 
         constexpr void stash_result()
         {
@@ -443,16 +363,28 @@ namespace rx
                     
                     if (iterator_->has_value())
                     {
-                        result_ = sf::make_submatch(suffix_start_, iterator_->template get<0>().cbegin());
+                        result_ = sf::make_submatch(suffix_start_, iterator_->template get<0>().begin());
                     }
                     else
                     {
-                        if constexpr (std::bidirectional_iterator<T>)
-                            result_ = sf::make_submatch(suffix_start_, iterator_.last_);
-                        else if constexpr (std::same_as<T, typename static_regex<Pattern>::char_type>)
-                            result_ = sf::make_submatch(suffix_start_, std::basic_string_view{ suffix_start_ }.cend());
+                        if constexpr (std::same_as<S, I>)
+                        {
+                            result_ = sf::make_submatch(suffix_start_, iterator_.end_);
+                        }
+                        else if constexpr (std::random_access_iterator<I> and std::sized_sentinel_for<S, I>)
+                        {
+                            result_ = sf::make_submatch(suffix_start_, suffix_start_ + (iterator_.end_ - suffix_start_));
+                        }
+                        else
+                        {
+                            I suffix_end{ suffix_start_ };
+                            while (suffix_end != iterator_.end_)
+                                ++suffix_end;
 
-                        if (result_.cbegin() == result_.cend())
+                            result_ = sf::make_submatch(suffix_start_, suffix_end);
+                        }
+
+                        if (result_.begin() == result_.end())
                             index_ = submatches.size();
                     }
 
@@ -465,32 +397,39 @@ namespace rx
         }
 
 
-        parent_type iterator_;
+        parent_type iterator_{};
         std::size_t index_{ 0 };
         value_type  result_;
 
         [[no_unique_address]] suffix_it suffix_start_;
     };
 
-    static_regex_token_iterator() -> static_regex_token_iterator<"", void>;
 
-    template<std::bidirectional_iterator Iter, string_literal Pattern, int I>
-    static_regex_token_iterator(Iter, Iter, static_regex<Pattern>, std::integral_constant<int, I>) -> static_regex_token_iterator<Pattern, Iter, I>;
+    static_regex_token_iterator() -> static_regex_token_iterator<"", void, void>;
 
-    template<std::bidirectional_iterator Iter, string_literal Pattern, int... Is>
-    static_regex_token_iterator(Iter, Iter, static_regex<Pattern>, std::integer_sequence<int, Is...>) -> static_regex_token_iterator<Pattern, Iter, Is...>;
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern, int Int>
+    static_regex_token_iterator(I, S, static_regex<Pattern>, std::integral_constant<int, Int>)
+        -> static_regex_token_iterator<Pattern, I, S, Int>;
 
-    template<std::ranges::bidirectional_range Range, string_literal Pattern, int I>
-    static_regex_token_iterator(Range&&, static_regex<Pattern>, std::integral_constant<int, I>) -> static_regex_token_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<Range&>())), I>;
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern, int... Ints>
+    static_regex_token_iterator(I, S, static_regex<Pattern>, std::integer_sequence<int, Ints...>)
+        -> static_regex_token_iterator<Pattern, I, S, Ints...>;
 
-    template<std::ranges::bidirectional_range Range, string_literal Pattern, int... Is>
-    static_regex_token_iterator(Range&&, static_regex<Pattern>, std::integer_sequence<int, Is...>) -> static_regex_token_iterator<Pattern, decltype(std::ranges::cbegin(std::declval<Range&>())), Is...>;
+    template<std::ranges::bidirectional_range R, string_literal Pattern, int Int>
+    static_regex_token_iterator(R&&, static_regex<Pattern>, std::integral_constant<int, Int>)
+        -> static_regex_token_iterator<Pattern, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Int>;
 
-    template<typename CharT, string_literal Pattern, int I>
-    static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integral_constant<int, I>) -> static_regex_token_iterator<Pattern, CharT, I>;
+    template<std::ranges::bidirectional_range R, string_literal Pattern, int... Ints>
+    static_regex_token_iterator(R&&, static_regex<Pattern>, std::integer_sequence<int, Ints...>)
+        -> static_regex_token_iterator<Pattern, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Ints...>;
 
-    template<typename CharT, string_literal Pattern, int... Is>
-    static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integer_sequence<int, Is...>) -> static_regex_token_iterator<Pattern, CharT, Is...>;
+    template<typename CharT, string_literal Pattern, int Int>
+    static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integral_constant<int, Int>)
+        -> static_regex_token_iterator<Pattern, const CharT*, detail::cstr_sentinel_t, Int>;
+
+    template<typename CharT, string_literal Pattern, int... Ints>
+    static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integer_sequence<int, Ints...>)
+        -> static_regex_token_iterator<Pattern, const CharT*, detail::cstr_sentinel_t, Ints...>;
 
 
     namespace literals

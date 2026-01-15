@@ -23,7 +23,7 @@ namespace rx
             std::copy_n(str, N, value_.begin());
         }
 
-        constexpr std::basic_string_view<char_type> view() const
+        [[nodiscard]] constexpr std::basic_string_view<char_type> view() const
         {
             return { value_.data(), N - 1 };
         }

@@ -17,6 +17,7 @@ target_sources(tests
         tests/bset_test.cpp
         tests/cset_test.cpp
         tests/expo_test.cpp
+        tests/iter_test.cpp
         tests/tdfa_test.cpp
         tests/tnfa_test.cpp
         tests/tree_test.cpp

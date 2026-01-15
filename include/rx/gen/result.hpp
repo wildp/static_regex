@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <stdexcept>
@@ -15,6 +16,7 @@
 
 #include "../api/submatch.hpp"
 #include "../etc/string_literal.hpp"
+#include "../etc/util.hpp"
 #include "../fsm/flags.hpp"
 #include "../gen/compile.hpp"
 
@@ -27,32 +29,53 @@ namespace rx::detail
 
 namespace rx
 {
-    template<std::bidirectional_iterator Iter, string_literal Pattern, detail::fsm_flags Flags>
+    template<std::bidirectional_iterator I, string_literal Pattern, detail::fsm_flags Flags>
+    requires std::default_initializable<I> and std::copyable<I> 
     class static_regex_match_result
     {
-        using factory                = detail::submatch_factory<Iter>;
-        using dfa_t                  = detail::compiled_dfa<Pattern, Flags>;
+        using factory = detail::submatch_factory<I>;
+        using dfa_t   = detail::compiled_dfa<Pattern, Flags>;
 
-        class proxy_submatch_iterator;
+        class proxy_iterator;
 
     public:
         using size_type              = std::size_t;
-        using char_type              = std::remove_cv_t<std::iter_value_t<Iter>>;
-        using submatch_type          = submatch<Iter>;
-        using const_iterator         = proxy_submatch_iterator;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-        using iterator               = const_iterator;
-        using reverse_iterator       = const_reverse_iterator;
+        using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
+        using submatch_type          = submatch<I>;
+        using iterator               = proxy_iterator;
+        using reverse_iterator       = std::reverse_iterator<iterator>;
+        // using const_iterator         = proxy_iterator;
+        // using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
         static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
 
-        constexpr static_regex_match_result() noexcept = default;
+        constexpr static_regex_match_result() noexcept
+        {
+            if constexpr (has_registers and not has_enabled)
+                reg_.fill(I{});
+            if constexpr (has_enabled)
+                enabled_.fill(false);
+        }
 
         /* observers */
 
-        [[nodiscard]] constexpr explicit(false) operator bool() const { return this->has_value(); }
-        [[nodiscard]] constexpr bool has_value() const { return match_end_ != iterator_type{}; }
-        [[nodiscard]] constexpr size_type size() const { return (this->has_value()) ? submatch_count : 0; }
+        [[nodiscard]] constexpr bool has_value() const
+        {
+            if constexpr (std::contiguous_iterator<I>)
+                return std::to_address(match_end_) != std::to_address(I{});
+            else
+                return match_success_;
+        }
+
+        [[nodiscard]] constexpr explicit(false) operator bool() const
+        {
+            return this->has_value();
+        }
+        
+        [[nodiscard]] constexpr size_type size() const
+        {
+            return (this->has_value()) ? submatch_count : 0;
+        }
 
         /* array-like access */
 
@@ -60,7 +83,8 @@ namespace rx
         {
             template for (constexpr size_type N : std::views::iota(0uz, submatch_count))
             {
-                if (n == N) return this->get<N>();
+                if (n == N)
+                    return this->get<N>();
             }
             std::unreachable();
         }
@@ -73,14 +97,33 @@ namespace rx
 
         /* iterator support */
 
-        [[nodiscard]] constexpr const_iterator begin() const { return (this->has_value()) ? const_iterator{ this, 0 } : this->end(); }
-        [[nodiscard]] constexpr const_iterator end() const { return { this, this->size() }; }
-        [[nodiscard]] constexpr const_iterator cbegin() const { return this->begin(); }
-        [[nodiscard]] constexpr const_iterator cend() const { return this->end(); }
-        [[nodiscard]] constexpr const_reverse_iterator rbegin() const { return std::make_reverse_iterator(this->end()); }
-        [[nodiscard]] constexpr const_reverse_iterator rend() const { return std::make_reverse_iterator(this->begin()); }
-        [[nodiscard]] constexpr const_reverse_iterator crbegin() const { return this->rbegin(); }
-        [[nodiscard]] constexpr const_reverse_iterator crend() const { return this->rend(); }
+        [[nodiscard]] constexpr iterator begin() const
+        {
+            return this->has_value()
+                   ? iterator{ this, 0 }
+                   : this->end();
+        }
+
+        [[nodiscard]] constexpr iterator end() const
+        {
+            return { this, this->size() };
+        }
+
+        [[nodiscard]] constexpr reverse_iterator rbegin() const
+        {
+            return std::make_reverse_iterator(this->end());
+        }
+
+        [[nodiscard]] constexpr reverse_iterator rend() const
+        {
+            return std::make_reverse_iterator(this->begin());
+        }
+
+        // /* TODO: Implement const iterators with correct semantics */
+        // [[nodiscard]] constexpr const_iterator cbegin() const = delete;
+        // [[nodiscard]] constexpr const_iterator cend() const = delete;
+        // [[nodiscard]] constexpr const_reverse_iterator crbegin() const = delete;
+        // [[nodiscard]] constexpr const_reverse_iterator crend() const = delete;
 
         /* tuple support */
 
@@ -106,16 +149,20 @@ namespace rx
                 {
                     if (this->tag_enabled<current.first.tag_number>())
                     {
-                        return factory::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                                                      std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
+                        return factory::make_submatch(
+                            std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                            std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                        );
                     }
                 }
                 else
                 {
                     if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
                     {
-                        return factory::make_submatch(std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                                                      std::next(this->get_tag<current.second.tag_number>(), current.second.offset));
+                        return factory::make_submatch(
+                            std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                            std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                        );
                     }
                 }
             }
@@ -125,17 +172,17 @@ namespace rx
 
         friend struct detail::p1306_matcher<Pattern, Flags>;
 
-        template<string_literal Pattern2, typename T>
+        template<string_literal, typename, typename>
         friend class static_regex_iterator;
 
     private:
         /* iterator implementation */
 
-        class proxy_submatch_iterator
+        class proxy_iterator
         {
             friend class static_regex_match_result;
 
-            using it          = proxy_submatch_iterator;
+            using it          = proxy_iterator;
             using parent_type = static_regex_match_result;
 
         public:
@@ -143,10 +190,8 @@ namespace rx
             using iterator_category = std::input_iterator_tag;
             using value_type        = submatch_type;
             using difference_type   = std::ptrdiff_t;
-            using pointer           = void;
-            using reference         = value_type;
 
-            constexpr proxy_submatch_iterator() = default;
+            proxy_iterator() = default;
 
             constexpr value_type operator*() const { return (*ptr_)[pos_]; }
             constexpr value_type operator[](difference_type n) const { return (*ptr_)[pos_ + n]; }
@@ -166,24 +211,27 @@ namespace rx
             constexpr friend difference_type operator-(const it& lhs, const it& rhs) { return rhs.pos_ - lhs.pos_; }
 
         private:
-            constexpr proxy_submatch_iterator(const parent_type* ptr, std::size_t pos) : ptr_{ ptr }, pos_{ pos } {}
+            constexpr proxy_iterator(const parent_type* ptr, std::size_t pos) : ptr_{ ptr }, pos_{ pos } {}
 
             const parent_type* ptr_{ nullptr };
             std::size_t pos_{ 0 };
         };
 
-        static_assert(std::random_access_iterator<proxy_submatch_iterator>);
-
 
         /* implementation helpers */
 
-        using iterator_type = Iter;
+        static constexpr bool has_registers{ dfa_t::value.register_count != 0 };
+        static constexpr bool has_success{ not std::contiguous_iterator<I> };
+        static constexpr bool has_enabled{ has_registers and has_success };
         static constexpr bool has_match_start{ dfa_t::value.captures.has_match_start() };
 
-        explicit constexpr static_regex_match_result(iterator_type start)
+        explicit constexpr static_regex_match_result(I start)
+            : match_start_{ detail::maybe_type_init<has_match_start>(start)}
         {
-            if constexpr (has_match_start) match_start_ = start;
-            if constexpr (dfa_t::value.register_count > 0) reg_.fill(iterator_type{});
+            if constexpr (has_registers and not has_enabled)
+                reg_.fill(I{});
+            if constexpr (has_enabled)
+                enabled_.fill(false);
         }
 
         template<detail::tag_number_t N>
@@ -191,12 +239,14 @@ namespace rx
         {
             if constexpr (N == detail::start_of_input_tag or N == detail::end_of_input_tag)
                 return true;
+            else if constexpr (std::contiguous_iterator<I>)
+                return std::to_address(reg_[dfa_t::value.final_registers[N]]) != std::to_address(I{});
             else
-                return reg_[dfa_t::value.final_registers[N]] != iterator_type{};
+                return enabled_[dfa_t::value.final_registers[N]];
         }
 
         template<detail::tag_number_t N>
-        [[nodiscard]] constexpr iterator_type get_tag() const
+        [[nodiscard]] constexpr I get_tag() const
         {
             if constexpr (N == detail::start_of_input_tag)
                 return match_start_;
@@ -215,20 +265,18 @@ namespace rx
 
         /* data members and protected trivial accessors */
 
-        using registers_type = std::conditional_t<dfa_t::value.register_count == 0, std::monostate, std::array<iterator_type, dfa_t::value.register_count>>;
-        using match_start_type = std::conditional_t<has_match_start, iterator_type, std::monostate>;
-        using continue_type = std::conditional_t<Flags.is_iterator, detail::tdfa::continue_at_t, std::monostate>;
+        using registers_type   = detail::maybe_type_t<has_registers, std::array<I, dfa_t::value.register_count>>;
+        using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, dfa_t::value.register_count>>;
+        using match_start_type = detail::maybe_type_t<has_match_start, I>;
+        using continue_type    = detail::maybe_type_t<Flags.is_iterator, detail::tdfa::continue_at_t>;
+        using success_type     = detail::maybe_type_t<has_success, bool>;
 
-    protected:
-        [[clang::always_inline]] constexpr registers_type& reg() noexcept { return reg_; }
-        [[clang::always_inline]] constexpr iterator_type& match_end() noexcept { return match_end_; }
-        [[clang::always_inline]] constexpr continue_type& continue_at() noexcept requires (Flags.is_iterator) { return continue_at_; }
-
-    private:
-        [[no_unique_address]] registers_type   reg_{};
+        [[no_unique_address]] registers_type reg_{};
         [[no_unique_address]] match_start_type match_start_{};
-                              iterator_type    match_end_{};
-        [[no_unique_address]] continue_type    continue_at_{ detail::tdfa::no_continue };
+        I match_end_{};
+        [[no_unique_address]] enabled_type enabled_{};
+        [[no_unique_address]] continue_type continue_at_{ detail::maybe_type_init<Flags.is_iterator>(detail::tdfa::no_continue) };
+        [[no_unique_address]] success_type match_success_{ detail::maybe_type_init<has_success>(false) };
     };
 }
 

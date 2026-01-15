@@ -471,7 +471,7 @@ namespace rx::detail
     template<bool B, typename Vec, typename Pred, typename NodeProj, typename TrProj>
     constexpr auto tagged_nfa<CharT>::closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const
     {
-        using result_t = std::conditional_t<B, std::vector<state_t>, std::monostate>;
+        using result_t = maybe_type_t<B, std::vector<state_t>>;
 
         std::vector to_visit{ std::forward<Vec>(qs) };
         std::ranges::reverse(to_visit);

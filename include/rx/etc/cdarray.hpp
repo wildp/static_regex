@@ -28,11 +28,9 @@ namespace rx::detail
         using iterator_category = std::contiguous_iterator_tag;
         using value_type        = T;
         using difference_type   = std::ptrdiff_t;
-        using pointer           = std::add_pointer_t<T>;
-        using reference         = std::add_lvalue_reference_t<T>;
 
-        constexpr reference operator*() const { return *it_; }
-        constexpr pointer operator->() const { return &operator*(); }
+        constexpr value_type& operator*() const { return *it_; }
+        constexpr value_type* operator->() const { return &operator*(); }
         constexpr cdarray_iterator& operator++() noexcept { ++it_; return *this; }
         constexpr cdarray_iterator  operator++(int) noexcept { cdarray_iterator tmp{ *this }; ++(*this); return tmp; }
         constexpr cdarray_iterator& operator--() noexcept { --it_; return *this; }
@@ -45,17 +43,17 @@ namespace rx::detail
         constexpr cdarray_iterator& operator-=(difference_type d) noexcept { it_ -= d; return *this; }
         constexpr friend cdarray_iterator operator-(const cdarray_iterator lhs, difference_type d) noexcept { return lhs.it_ - d; }
         constexpr friend difference_type operator-(const cdarray_iterator lhs, const cdarray_iterator rhs) noexcept { return lhs.it_ - rhs.it_; }
-        constexpr reference operator[](difference_type d) const { return it_[d]; }
+        constexpr value_type& operator[](difference_type d) const { return it_[d]; }
 
         constexpr cdarray_iterator() noexcept = default;
 
     private:
-        pointer it_{ nullptr };
+        std::add_pointer_t<value_type> it_{ nullptr };
 
         template<typename, typename>
         friend class cdarray;
 
-        constexpr cdarray_iterator(const pointer& ptr) : it_{ ptr } {}
+        constexpr cdarray_iterator(const value_type* ptr) : it_{ ptr } {}
     };
 
     template<typename T, typename Allocator>

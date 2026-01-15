@@ -19,6 +19,9 @@ namespace rx::detail
     template<typename T, typename... Ts>
     concept one_of = (std::same_as<T, Ts> or ...);
 
+    template<typename CharT>
+    concept character = one_of<CharT, char, wchar_t, char8_t, char16_t, char32_t>;
+
     // TODO: replace with P2996 implementation
     template<typename, typename>
     struct type_in_variant_impl {};
@@ -55,4 +58,31 @@ namespace rx::detail
     struct index_of_impl<V, T, I> {};
 
     inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
+
+    template<bool Const, typename T>
+    using maybe_const_t = std::conditional_t<Const, const T, T>;
+
+    struct cstr_sentinel_t
+    {
+        template<character CharT>
+        friend constexpr bool operator==(const CharT* c, cstr_sentinel_t)
+        {
+            return *c == CharT{};
+        }
+    };
+
+    inline constexpr cstr_sentinel_t cstr_sentinel;
+
+    template<bool Enabled, typename T>
+    using maybe_type_t = std::conditional_t<Enabled, T, std::monostate>;
+
+    template<bool Enabled, typename T>
+    [[clang::always_inline]] constexpr decltype(auto) maybe_type_init(T&& val)
+    {
+        if constexpr (Enabled)
+            return std::forward<T>(val);
+        else
+            return std::monostate{};
+        
+    }
 }
