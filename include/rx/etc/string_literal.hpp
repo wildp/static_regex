@@ -7,7 +7,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <string_view>
 
 namespace rx
@@ -20,14 +19,14 @@ namespace rx
 
         consteval string_literal(const char_type (&str)[N])
         {
-            std::copy_n(str, N, value_.begin());
+            std::ranges::copy_n(str, N, value_);
         }
 
         [[nodiscard]] constexpr std::basic_string_view<char_type> view() const
         {
-            return { value_.data(), N - 1 };
+            return { value_, N - 1 };
         }
 
-        std::array<char_type, N> value_;
+        char_type value_[N]{};
     };
 }
