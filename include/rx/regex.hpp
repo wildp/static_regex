@@ -6,12 +6,16 @@
 
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <ranges>
+#include <stdexcept>
 #include <type_traits>
+#include <utility>
 
+#include "api/submatch.hpp"
 #include "etc/string_literal.hpp"
 #include "etc/util.hpp"
 #include "fsm/flags.hpp"
@@ -37,7 +41,7 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
         [[nodiscard]] static constexpr auto match(R&& r)
         {
             return match(std::ranges::begin(r), std::ranges::end(r));
@@ -60,7 +64,7 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
         [[nodiscard]] static constexpr auto starts_with(R&& r)
         {
             return starts_with(std::ranges::begin(r), std::ranges::end(r));
@@ -83,7 +87,7 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
         [[nodiscard]] static constexpr auto search(R&& r)
         {
             return search(std::ranges::begin(r), std::ranges::end(r));
@@ -98,60 +102,103 @@ namespace rx
     };
 
 
-    template<string_literal, typename, typename>
-    class static_regex_iterator
+    template<std::ranges::bidirectional_range V, typename Regex>
+    requires std::ranges::view<V>
+    class regex_match_view
     {
-    public:
-        constexpr static_regex_iterator() noexcept = default;
-        friend constexpr bool operator==(static_regex_iterator, static_regex_iterator) noexcept = default;
+        static_assert("submatches_view: invalid range");
     };
 
-    using static_regex_sentinel_t = static_regex_iterator<"", void, void>;
-    inline constexpr static_regex_sentinel_t static_regex_sentinel;
 
 
-    template<string_literal, typename, typename, int...>
-    class static_regex_token_iterator
+    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    requires std::ranges::view<V>
+    class regex_match_view<V, static_regex<Pattern>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern>>>
     {
+        template<bool Const>
+        struct iterator;
+
+        struct sentinel {};
+
     public:
-        constexpr static_regex_token_iterator() noexcept = default;
-        friend constexpr bool operator==(static_regex_token_iterator, static_regex_token_iterator) noexcept = default;
+        regex_match_view() requires std::default_initializable<V> = default;
+        constexpr explicit regex_match_view(V base, static_regex<Pattern> /* regex */) : base_{ std::move(base) } {}
+
+        [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
+        [[nodiscard]] constexpr V base() && { return std::move(base_); }
+
+        [[nodiscard]] constexpr iterator<false> begin()
+        {
+            return iterator<false>{ std::ranges::begin(base_), std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr iterator<true> begin() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return iterator<true>{ std::ranges::begin(base_), std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr sentinel end()
+        {
+            return {};
+        }
+
+        [[nodiscard]] constexpr sentinel end() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return {};
+        }
+
+    private:
+        V base_{};
     };
-
-    using static_regex_token_sentinel_t = static_regex_token_iterator<"", void, void>;
-    inline constexpr static_regex_token_sentinel_t static_regex_token_sentinel;
-
-
-    template<string_literal Pattern, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    requires std::same_as<std::iter_value_t<I>, typename static_regex<Pattern>::char_type> and std::default_initializable<I>
-    class static_regex_iterator<Pattern, I, S>
+    
+    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    requires std::ranges::view<V>
+    template<bool Const>
+    struct regex_match_view<V, static_regex<Pattern>>::iterator
     {
-        using matcher_type      = detail::p1306_matcher<Pattern, detail::default_fsm_flags::search_all>;
+    private:
+        using Parent  = detail::maybe_const_t<Const, regex_match_view>;
+        using Base    = detail::maybe_const_t<Const, V>;
+        using Matcher = detail::p1306_matcher<Pattern, detail::default_fsm_flags::search_all>;
 
     public:
-        using iterator_concept  = std::input_iterator_tag;
         using iterator_category = std::input_iterator_tag;
-        using value_type        = matcher_type::template result_type<I>;
-        using difference_type   = std::ptrdiff_t;
-        using regex_type        = static_regex<Pattern>;
+        using iterator_concept  = std::input_iterator_tag;
+        using value_type        = static_regex_match_result<std::ranges::iterator_t<Base>, Pattern, detail::default_fsm_flags::search_all>;
+        using difference_type   = std::ranges::range_difference_t<Base>;
 
-        static_regex_iterator() = default;
+        iterator() requires std::default_initializable<std::ranges::iterator_t<Base>> = default;
 
-        constexpr static_regex_iterator(const I first, const S last, regex_type)
-            : static_regex_iterator(first, last) {}
+        constexpr iterator(std::ranges::iterator_t<Base> current, std::ranges::sentinel_t<Base> end)
+            : current_{ std::move(current) }, end_{ std::move(end) }, result_{ matcher_(current_, end_) } {}
 
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                 and std::same_as<std::ranges::iterator_t<R>, I> and std::same_as<std::ranges::sentinel_t<R>, S>
-        constexpr static_regex_iterator(R&& r, regex_type)
-            : static_regex_iterator(std::ranges::begin(r), std::ranges::end(r)) {}
+        constexpr explicit(false) iterator(iterator<not Const> i)
+        requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
+            : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, result_{ std::move(i.result_) } {}
 
-        template<detail::character CharT>
-        requires std::same_as<const CharT*, I>
-        constexpr static_regex_iterator(const CharT* str, regex_type)
-            : static_regex_iterator(str, detail::cstr_sentinel) {}
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        {
+            return current_;
+        }
 
-        constexpr static_regex_iterator& operator++()
+        constexpr std::ranges::iterator_t<Base>& base() && 
+        {
+            return std::move(current_);
+        }
+
+        constexpr const value_type& operator*() const
+        {
+            return result_;
+        }
+
+        constexpr const value_type* operator->() const
+        {
+            return &result_;
+        }
+
+        constexpr iterator& operator++()
         {
             if (not result_.has_value())
                 return *this;
@@ -179,126 +226,171 @@ namespace rx
 
         constexpr void operator++(int)
         {
-            +*this;
+            ++*this;
         }
 
-        [[nodiscard]] constexpr const value_type& operator*() const noexcept
-        {
-            return result_;
-        }
-
-        [[nodiscard]] constexpr const value_type* operator->() const noexcept
-        {
-            return &result_;
-        }
-
-        friend constexpr bool operator==(const static_regex_iterator& x, const static_regex_iterator& y) noexcept
+        friend constexpr bool operator==(const iterator& x, const iterator& y)
+        requires std::equality_comparable<std::ranges::iterator_t<Base>>
         {
             return x.current_ == y.current_;
         }
 
-        friend constexpr bool operator==(const static_regex_iterator& x, static_regex_sentinel_t) noexcept
+        friend constexpr auto operator<=>(const iterator& x, const iterator& y)
+        requires std::three_way_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.current_ <=> y.current_;
+        }
+
+        friend constexpr bool operator==(const iterator& x, sentinel /* y */)
         {
             return not x.result_.has_value();
         }
 
-        template<string_literal, typename, typename, int...>
-        friend class static_regex_token_iterator;
+        template<std::ranges::input_range W, int...>
+        requires std::ranges::view<W> 
+        friend class submatches_view;
 
     private:
-        constexpr static_regex_iterator(const I first, const S last)
-            : current_{ first }, end_{ last }, result_(matcher_(current_, end_))
-        {
-            if (not result_.has_value())
-                current_ = I{};
-        }
-
-        I current_{};
-        [[no_unique_address]] S end_{};
-        [[no_unique_address]] matcher_type matcher_;
+        std::ranges::iterator_t<Base> current_{};
+        [[no_unique_address]] std::ranges::sentinel_t<Base> end_{};
+        [[no_unique_address]] Matcher matcher_; 
         value_type result_;
     };
 
+    template<typename Range, string_literal Pattern>
+    regex_match_view(Range&&, static_regex<Pattern>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern>>;
 
-    static_regex_iterator() -> static_regex_iterator<"", void, void>;
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern>
-    static_regex_iterator(I, S, static_regex<Pattern>) -> static_regex_iterator<Pattern, I, S>;
-
-    template<std::ranges::bidirectional_range R, string_literal Pattern>
-    static_regex_iterator(R&&, static_regex<Pattern>) -> static_regex_iterator<Pattern, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>>;
-
-    template<detail::character CharT, string_literal Pattern>
-    static_regex_iterator(const CharT*, static_regex<Pattern>) -> static_regex_iterator<Pattern, const CharT*, detail::cstr_sentinel_t>;
-
-
-    template<string_literal Pattern, std::bidirectional_iterator I, std::sentinel_for<I> S, int... Submatches> 
-    class static_regex_token_iterator<Pattern, I, S, Submatches...>
+    namespace detail
     {
-        using parent_type = static_regex_iterator<Pattern, I, S>;
+        template<typename R>
+        concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_regex_match_result>;
+    }
+
+    template<std::ranges::input_range V, int... Submatches>
+    requires std::ranges::view<V>
+    class submatches_view
+    {
+        static_assert("submatches_view: invalid range");
+    };
+
+    template<std::ranges::input_range V, int... Submatches>
+    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+    class submatches_view<V, Submatches...> : std::ranges::view_interface<submatches_view<V, Submatches...>>
+    {
+        using MatchResult = std::ranges::range_value_t<V>;
 
         template<int Submatch>
-        static constexpr bool submatch_is_valid{ ((-1 == Submatch) or (Submatch < parent_type::value_type::submatch_count)) };
+        static constexpr bool submatch_is_valid{ ((-1 == Submatch) or (Submatch < MatchResult::submatch_count)) };
 
         static_assert(sizeof...(Submatches) > 0);
         static_assert((submatch_is_valid<Submatches> and ...));
 
+        template<bool Const>
+        struct iterator;
+
+        struct sentinel {};
+
     public:
-        using iterator_concept  = std::input_iterator_tag;
+        submatches_view() requires std::default_initializable<V> = default;
+        constexpr explicit submatches_view(V base, std::integer_sequence<int, Submatches...> /* submatches */) : base_{ std::move(base) } {}
+
+        [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
+        [[nodiscard]] constexpr V base() && { return std::move(base_); }
+
+        [[nodiscard]] constexpr iterator<false> begin()
+        {
+            return iterator<false>{ std::ranges::begin(base_), std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr iterator<true> begin() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return iterator<true>{ std::ranges::begin(base_), std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr sentinel end()
+        {
+            return {};
+        }
+
+        [[nodiscard]] constexpr sentinel end() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return {};
+        }
+
+    private:
+        V base_{};
+    };
+
+    template<std::ranges::input_range V, int... Submatches>
+    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+    template<bool Const>
+    struct submatches_view<V, Submatches...>::iterator
+    {
+    private:
+        using Parent   = detail::maybe_const_t<Const, submatches_view>;
+        using Base     = detail::maybe_const_t<Const, V>;
+        using BaseBase = typename std::ranges::iterator_t<Base>::Base;
+
+    public:
         using iterator_category = std::input_iterator_tag;
-        using value_type        = parent_type::value_type::submatch_type;
-        using difference_type   = std::ptrdiff_t;
-        using regex_type        = static_regex<Pattern>;
+        using iterator_concept  = std::input_iterator_tag;
+        using value_type        = submatch<std::ranges::iterator_t<BaseBase>>;
+        using difference_type   = std::ranges::range_difference_t<Base>;
 
-        static_regex_token_iterator() = default;
+        iterator()
+        requires std::default_initializable<std::ranges::iterator_t<Base>>
+                 and std::default_initializable<std::ranges::iterator_t<BaseBase>> = default;
 
-        constexpr static_regex_token_iterator(const I first, const S last, regex_type, std::integer_sequence<int, Submatches...>)
-            : static_regex_token_iterator(first, last) {}
+        constexpr iterator(std::ranges::iterator_t<Base> current, std::ranges::sentinel_t<Base> end)
+            : current_{ std::move(current) }, end_{ std::move(end) },
+              suffix_start_{ std::as_const(current_).base() }
+        {
+            this->stash_result();
+        }
 
-        constexpr static_regex_token_iterator(const I first, const S last, regex_type, std::integral_constant<int, Submatches>...)
-        requires (sizeof...(Submatches) == 1)
-            : static_regex_token_iterator(first, last) {}
+        constexpr explicit(false) iterator(iterator<not Const> i)
+        requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
+            : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, index_{ i.index_ },
+              result_{ std::move(i.result_) }, suffix_start_{ std::move(i.suffix_start_)} {}
 
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                 and std::same_as<std::ranges::iterator_t<R>, I> and std::same_as<std::ranges::sentinel_t<R>, S>
-        constexpr static_regex_token_iterator(R&& r, regex_type, std::integer_sequence<int, Submatches...>)
-            : static_regex_token_iterator(std::ranges::begin(r), std::ranges::end(r)) {}
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        {
+            return current_;
+        }
 
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, typename regex_type::char_type>
-                 and std::same_as<std::ranges::iterator_t<R>, I> and std::same_as<std::ranges::sentinel_t<R>, S>
-        constexpr static_regex_token_iterator(R&& r, regex_type, std::integral_constant<int, Submatches>...)
-        requires (sizeof...(Submatches) == 1)
-            : static_regex_token_iterator(std::ranges::begin(r), std::ranges::end(r)) {}
+        constexpr std::ranges::iterator_t<Base>& base() && 
+        {
+            return std::move(current_);
+        }
 
-        template<detail::character CharT>
-        requires std::same_as<const CharT*, I>
-        constexpr static_regex_token_iterator(const CharT* str, regex_type, std::integer_sequence<int, Submatches...>)
-            : static_regex_token_iterator(str, detail::cstr_sentinel) {}
+        constexpr const value_type& operator*() const
+        {
+            return result_;
+        }
 
-        template<detail::character CharT>
-        requires std::same_as<const CharT*, I>
-        constexpr static_regex_token_iterator(const CharT* str, regex_type, std::integral_constant<int, Submatches>...)
-        requires (sizeof...(Submatches) == 1)
-            : static_regex_token_iterator(str, detail::cstr_sentinel) {}
+        constexpr const value_type* operator->() const
+        {
+            return &result_;
+        }
 
-        constexpr static_regex_token_iterator& operator++()
+        constexpr iterator& operator++()
         {
             ++index_;
 
-            if (index_ == submatches.size() and iterator_ != static_regex_sentinel)
+            if (index_ == submatches.size() and current_ != end_)
             {
-                ++iterator_;
+                ++current_;
                 index_ = 0;
 
-                if constexpr (is_suffix_iterator)
-                    suffix_start_ = iterator_.current_;
+                if constexpr (has_suffix_iterator)
+                    suffix_start_ = current_.current_;
             }
 
-            if constexpr (is_suffix_iterator)
+            if constexpr (has_suffix_iterator)
             {
-                if (iterator_ == static_regex_sentinel)
+                if (current_ == end_)
                 {
                     while (index_ < submatches.size() and submatches[index_] != -1)
                         ++index_;
@@ -314,71 +406,61 @@ namespace rx
 
         constexpr void operator++(int)
         {
-            *this;
+            ++*this;
         }
 
-        [[nodiscard]] constexpr const value_type& operator*() const noexcept
+        friend constexpr bool operator==(const iterator& x, const iterator& y)
+        requires std::equality_comparable<std::ranges::iterator_t<Base>>
         {
-            return result_;
+            return x.current_ == y.current_;
         }
 
-        [[nodiscard]] constexpr const value_type* operator->() const noexcept
+        friend constexpr auto operator<=>(const iterator& x, const iterator& y)
+        requires std::three_way_comparable<std::ranges::iterator_t<Base>>
         {
-            return &result_;
+            return x.current_ <=> y.current_;
         }
 
-        friend constexpr bool operator==(const static_regex_token_iterator& x, const static_regex_token_iterator& y) noexcept
+        friend constexpr bool operator==(const iterator& x, sentinel /* y */)
         {
-            return x.iterator_ == y.iterator_ and x.index_ == y.index_;
-        }
-
-        friend constexpr bool operator==(const static_regex_token_iterator& x, static_regex_token_sentinel_t) noexcept
-        {
-            if constexpr (is_suffix_iterator)
-                return x.iterator_ == static_regex_sentinel and x.index_ == submatches.size();
+            if constexpr (has_suffix_iterator)
+                return not x.current_->has_value() and x.index_ == submatches.size();
             else
-                return x.iterator_ == static_regex_sentinel;
+                return not x.current_->has_value();     
         }
 
     private:
-        static constexpr bool is_suffix_iterator{ ((Submatches == -1) or ...) };
+        static constexpr bool has_suffix_iterator{ ((Submatches == -1) or ...) };
         static constexpr std::array submatches{ Submatches... };
 
-        using iter_type = value_type::iterator;
-        using suffix_it = detail::maybe_type_t<is_suffix_iterator, iter_type>;
-
-        constexpr static_regex_token_iterator(const I first, const S last)
-            : iterator_{ first, last, regex_type{} }, suffix_start_{ detail::maybe_type_init<is_suffix_iterator>(first) }
-        {
-            this->stash_result();
-        }
+        using suffix_start_t = detail::maybe_type_t<has_suffix_iterator, std::ranges::iterator_t<BaseBase>>;
 
         constexpr void stash_result()
         {
-            if constexpr (is_suffix_iterator)
+            if constexpr (has_suffix_iterator)
             {
                 if (submatches[index_] == -1)
                 {
-                    using sf = detail::submatch_factory<iter_type>;
+                    using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
                     
-                    if (iterator_->has_value())
+                    if (current_->has_value())
                     {
-                        result_ = sf::make_submatch(suffix_start_, iterator_->template get<0>().begin());
+                        result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
                     }
                     else
                     {
-                        if constexpr (std::same_as<S, I>)
+                        if constexpr (std::ranges::common_range<BaseBase>)
                         {
-                            result_ = sf::make_submatch(suffix_start_, iterator_.end_);
+                            result_ = sf::make_submatch(suffix_start_, current_.end_);
                         }
-                        else if constexpr (std::random_access_iterator<I> and std::sized_sentinel_for<S, I>)
+                        else if constexpr (std::ranges::random_access_range<BaseBase> and std::ranges::sized_range<BaseBase>)
                         {
-                            result_ = sf::make_submatch(suffix_start_, suffix_start_ + (iterator_.end_ - suffix_start_));
+                            result_ = sf::make_submatch(suffix_start_, suffix_start_ + (current_.end_ - suffix_start_));
                         }
                         else
                         {
-                            I suffix_end{ suffix_start_ };
-                            while (suffix_end != iterator_.end_)
+                            std::ranges::iterator_t<BaseBase> suffix_end{ suffix_start_ };
+                            while (suffix_end != current_.end_)
                                 ++suffix_end;
 
                             result_ = sf::make_submatch(suffix_start_, suffix_end);
@@ -392,44 +474,345 @@ namespace rx
                 }
             }
 
-            if (iterator_->has_value())
-                result_ = iterator_->operator[](submatches[index_]);
+            if (current_->has_value())
+                result_ = current_->operator[](submatches[index_]);
         }
 
 
-        parent_type iterator_{};
+        std::ranges::iterator_t<Base> current_{};
+        [[no_unique_address]] std::ranges::sentinel_t<Base> end_{};
         std::size_t index_{ 0 };
         value_type  result_;
 
-        [[no_unique_address]] suffix_it suffix_start_;
+        [[no_unique_address]] suffix_start_t suffix_start_;
     };
 
 
-    static_regex_token_iterator() -> static_regex_token_iterator<"", void, void>;
+    template<std::ranges::input_range V>
+    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+    class submatches_view<V> : std::ranges::view_interface<submatches_view<V>>
+    {
+        using MatchResult = std::ranges::range_value_t<V>;
+        static constexpr int submatch_limit{ MatchResult::submatch_count };
 
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern, int Int>
-    static_regex_token_iterator(I, S, static_regex<Pattern>, std::integral_constant<int, Int>)
-        -> static_regex_token_iterator<Pattern, I, S, Int>;
+        template<bool Const>
+        struct iterator;
 
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern, int... Ints>
-    static_regex_token_iterator(I, S, static_regex<Pattern>, std::integer_sequence<int, Ints...>)
-        -> static_regex_token_iterator<Pattern, I, S, Ints...>;
+        struct sentinel {};
 
-    template<std::ranges::bidirectional_range R, string_literal Pattern, int Int>
-    static_regex_token_iterator(R&&, static_regex<Pattern>, std::integral_constant<int, Int>)
-        -> static_regex_token_iterator<Pattern, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Int>;
+    public:
+        submatches_view() requires std::default_initializable<V> = default;
 
-    template<std::ranges::bidirectional_range R, string_literal Pattern, int... Ints>
-    static_regex_token_iterator(R&&, static_regex<Pattern>, std::integer_sequence<int, Ints...>)
-        -> static_regex_token_iterator<Pattern, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Ints...>;
+        template<std::ranges::input_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, int>
+        constexpr explicit submatches_view(V base, R&& submatches)
+            : base_{ std::move(base) }, submatches_{ std::from_range, std::forward<R>(submatches) }
+        {
+            if (submatches_.empty())
+                throw std::invalid_argument("submatches_view::submatches_view: no submatches specified");
 
-    template<typename CharT, string_literal Pattern, int Int>
-    static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integral_constant<int, Int>)
-        -> static_regex_token_iterator<Pattern, const CharT*, detail::cstr_sentinel_t, Int>;
+            if (not std::ranges::all_of(submatches_, [](int s) { return (-1 == s) or (s < submatch_limit); }))
+                throw std::out_of_range("submatches_view::submatches_view: invalid submatch index");
+        }
 
-    template<typename CharT, string_literal Pattern, int... Ints>
-    static_regex_token_iterator(const CharT*, static_regex<Pattern>, std::integer_sequence<int, Ints...>)
-        -> static_regex_token_iterator<Pattern, const CharT*, detail::cstr_sentinel_t, Ints...>;
+        [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
+        [[nodiscard]] constexpr V base() && { return std::move(base_); }
+
+        [[nodiscard]] constexpr iterator<false> begin()
+        {
+            return iterator<false>{ this, std::ranges::begin(base_), std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr iterator<true> begin() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return iterator<true>{ this, std::ranges::begin(base_), std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr sentinel end()
+        {
+            return {};
+        }
+
+        [[nodiscard]] constexpr sentinel end() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return {};
+        }
+
+    private:
+        V base_{};
+        std::vector<int> submatches_{ 0 };
+    };
+
+    template<std::ranges::input_range V>
+    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+    template<bool Const>
+    struct submatches_view<V>::iterator
+    {
+    private:
+        using Parent   = detail::maybe_const_t<Const, submatches_view>;
+        using Base     = detail::maybe_const_t<Const, V>;
+        using BaseBase = typename std::ranges::iterator_t<Base>::Base;
+
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using iterator_concept  = std::input_iterator_tag;
+        using value_type        = submatch<std::ranges::iterator_t<BaseBase>>;
+        using difference_type   = std::ranges::range_difference_t<Base>;
+
+        iterator()
+        requires std::default_initializable<std::ranges::iterator_t<Base>>
+                 and std::default_initializable<std::ranges::iterator_t<BaseBase>> = default;
+
+        constexpr iterator(Parent* parent, std::ranges::iterator_t<Base> current, std::ranges::sentinel_t<Base> end)
+            : parent_{ parent }, current_{ std::move(current) }, end_{ std::move(end) },
+              suffix_start_{ std::as_const(current_).base() }
+        {
+            this->stash_result();
+        }
+
+        constexpr explicit(false) iterator(iterator<not Const> i)
+        requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
+            : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, index_{ i.index_ },
+              result_{ std::move(i.result_) }, suffix_start_{ std::move(i.suffix_start_)} {}
+
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        {
+            return current_;
+        }
+
+        constexpr std::ranges::iterator_t<Base>& base() && 
+        {
+            return std::move(current_);
+        }
+
+        constexpr const value_type& operator*() const
+        {
+            return result_;
+        }
+
+        constexpr const value_type* operator->() const
+        {
+            return &result_;
+        }
+
+        constexpr iterator& operator++()
+        {
+            ++index_;
+
+            if (index_ == parent_->submatches_.size() and current_ != end_)
+            {
+                ++current_;
+                index_ = 0;
+                suffix_start_ = current_.current_;
+            }
+
+            if (current_ == end_)
+            {
+                while (index_ < parent_->submatches_.size() and parent_->submatches_.at(index_) != -1)
+                    ++index_;
+
+                if (index_ == parent_->submatches_.size())
+                    return *this;
+            }
+
+            this->stash_result();
+            return *this;
+        }
+
+        constexpr void operator++(int)
+        {
+            ++*this;
+        }
+
+        friend constexpr bool operator==(const iterator& x, const iterator& y)
+        requires std::equality_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.current_ == y.current_;
+        }
+
+        friend constexpr auto operator<=>(const iterator& x, const iterator& y)
+        requires std::three_way_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.current_ <=> y.current_;
+        }
+
+        friend constexpr bool operator==(const iterator& x, sentinel /* y */)
+        {
+            return not x.current_->has_value() and x.index_ == x.parent_->submatches_.size();
+        }
+
+    private:
+        constexpr void stash_result()
+        {
+            if (parent_->submatches_.at(index_) == -1)
+            {
+                using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
+                
+                if (current_->has_value())
+                {
+                    result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
+                }
+                else
+                {
+                    if constexpr (std::ranges::common_range<BaseBase>)
+                    {
+                        result_ = sf::make_submatch(suffix_start_, current_.end_);
+                    }
+                    else if constexpr (std::ranges::random_access_range<BaseBase> and std::ranges::sized_range<BaseBase>)
+                    {
+                        result_ = sf::make_submatch(suffix_start_, suffix_start_ + (current_.end_ - suffix_start_));
+                    }
+                    else
+                    {
+                        std::ranges::iterator_t<BaseBase> suffix_end{ suffix_start_ };
+                        while (suffix_end != current_.end_)
+                            ++suffix_end;
+
+                        result_ = sf::make_submatch(suffix_start_, suffix_end);
+                    }
+
+                    if (result_.begin() == result_.end())
+                        index_ = parent_->submatches_.size();
+                }
+
+                return;
+            }
+
+            if (current_->has_value())
+                result_ = current_->operator[](parent_->submatches_.at(index_));
+        }
+
+
+        Parent* parent_;
+        std::ranges::iterator_t<Base> current_{};
+        [[no_unique_address]] std::ranges::sentinel_t<Base> end_{};
+        std::size_t index_{ 0 };
+        value_type  result_;
+
+        std::ranges::iterator_t<BaseBase> suffix_start_;
+    };
+
+
+    template<typename Range, int... Submatches>
+    submatches_view(Range&&, std::integer_sequence<int, Submatches...>) -> submatches_view<std::views::all_t<Range>, Submatches...>;
+
+    template<typename Range, typename Submatches>
+    submatches_view(Range&&, Submatches&&) -> submatches_view<std::views::all_t<Range>>;
+
+
+    namespace detail
+    {
+        template<typename Regex>
+        concept static_regex_like = template_instantiation_of<Regex, ^^static_regex>;
+    }
+
+    namespace views
+    {
+        namespace detail
+        {
+            template<typename Range, typename Regex>
+            concept can_regex_match_view = requires
+            {
+                regex_match_view(std::declval<Range>(), std::declval<Regex>());
+            };
+
+            template<typename Range, typename T>
+            concept can_submatches_view = requires
+            {
+                submatches_view(std::declval<Range>(), std::declval<T>());
+            };
+
+            template<typename Regex>
+            struct static_regex_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_adaptor_closure<Regex>>
+            {
+                template<std::ranges::viewable_range Range>
+                requires detail::can_regex_match_view<Range, Regex>
+                [[nodiscard]] constexpr auto operator()(Range&& r) const
+                {
+                    return regex_match_view(std::forward<Range>(r), Regex{});
+                }
+            };
+
+            struct regex_match_adaptor
+            {
+                template<std::ranges::viewable_range Range, typename Regex>
+                requires detail::can_regex_match_view<Range, Regex>
+                [[nodiscard]] constexpr auto operator()(Range&& r, Regex&& x) const
+                {
+                    return regex_match_view(std::forward<Range>(r), std::forward<Regex>(x));
+                }
+
+                template<typename Regex>
+                requires rx::detail::static_regex_like<Regex>
+                [[nodiscard]] consteval auto operator()(Regex /* x */) const
+                {
+                    return static_regex_adaptor_closure<Regex>();
+                }
+            };
+
+            template<int... Submatches>
+            struct static_submatches_adaptor_closure : std::ranges::range_adaptor_closure<static_submatches_adaptor_closure<Submatches...>>
+            {
+                template<std::ranges::viewable_range Range>
+                requires detail::can_submatches_view<Range, std::integer_sequence<int, Submatches...>>
+                [[nodiscard]] constexpr auto operator()(Range&& r) const
+                {
+                    return submatches_view(std::forward<Range>(r), std::integer_sequence<int, Submatches...>{});
+                }
+            };
+
+            template<typename T>
+            struct dynamic_submatches_adaptor_closure : std::ranges::range_adaptor_closure<dynamic_submatches_adaptor_closure<T>>
+            {
+                template<std::ranges::viewable_range Range>
+                requires detail::can_submatches_view<Range, std::views::all_t<T>>
+                [[nodiscard]] constexpr auto operator()(Range&& r) const
+                {
+                    return submatches_view(std::forward<Range>(r), sub_);
+                }
+
+                constexpr explicit dynamic_submatches_adaptor_closure(T submatches) :
+                    sub_{ std::forward<T>(submatches) } {}
+
+            private:
+                std::views::all_t<T> sub_;
+            };
+
+            struct submatches_adaptor
+            {
+                template<std::ranges::viewable_range Range, typename Submatches>
+                requires detail::can_submatches_view<Range, Submatches>
+                [[nodiscard]] constexpr auto operator()(Range&& r, Submatches&& x) const
+                {
+                    return submatches_view(std::forward<Range>(r), std::forward<Submatches>(x));
+                }
+
+                template<typename Submatches>
+                [[nodiscard]] constexpr auto operator()(Submatches&& submatches) const
+                {
+                    return dynamic_submatches_adaptor_closure{ std::forward<Submatches>(submatches) };
+                }
+
+                template<int... Submatches>
+                [[nodiscard]] consteval auto operator()(std::integer_sequence<int, Submatches...>) const
+                {
+                    return static_submatches_adaptor_closure<Submatches...>();
+                }
+
+                template<int... Submatches>
+                [[nodiscard]] consteval auto operator()(std::integral_constant<int, Submatches>...) const
+                requires (sizeof...(Submatches) == 1)
+                {
+                    return static_submatches_adaptor_closure<Submatches...>();
+                }
+            };
+        }
+
+        inline constexpr detail::regex_match_adaptor regex_match;
+        inline constexpr detail::submatches_adaptor submatches;
+    }
 
 
     namespace literals

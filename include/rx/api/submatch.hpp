@@ -97,25 +97,25 @@ namespace rx
 
 #if __cpp_lib_ranges_as_const >= 202311L
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept
-        requires std::bidirectional_iterator<std::const_iterator<I>>
+        requires std::bidirectional_iterator<const_iterator>
         {
-            return std::make_const_iterator(first_)
+            return std::make_const_iterator(this->begin());
         }
 
         [[nodiscard]] constexpr const_iterator cend() const noexcept
-        requires std::bidirectional_iterator<std::const_iterator<I>>
+        requires std::bidirectional_iterator<const_iterator>>
         {
-            return std::make_const_iterator(last_)
+            return std::make_const_iterator(this->end());
         }
 
         [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
-        requires std::bidirectional_iterator<std::const_iterator<I>>
+        requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_reverse_iterator(this->cend());
         }
 
         [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept
-        requires std::bidirectional_iterator<std::const_iterator<I>>
+        requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_reverse_iterator(this->cbegin());
         }
@@ -167,6 +167,20 @@ namespace rx
             return this->view();
         }
 
+#if __cpp_lib_ranges_as_const >= 202311L
+        [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() const &
+        requires (not std::same_as<const_iterator, iterator>)
+        {
+            return { first_, last_ };
+        }
+
+        [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() &&
+        requires (not std::same_as<const_iterator, iterator>)
+        {
+            return { std::move(first_), std::move(last_) };
+        }
+#endif
+
         /* operators */
 
         [[nodiscard]] friend constexpr bool operator==(const submatch& lhs, const submatch& rhs)
@@ -215,18 +229,18 @@ namespace rx
         }
 
     private:
-        static constexpr bool use_bool{ not std::contiguous_iterator<I> };
+        static constexpr bool use_bool{ not std::contiguous_iterator<I> };  
         using maybe_bool = detail::maybe_type_t<use_bool, bool>;
 
         constexpr submatch(I first, I last)
-            : first_{ first }, last_{ last }, match_{ detail::maybe_type_init<use_bool>(true) } {}
+            : first_{ std::move(first) }, last_{ std::move(last) }, match_{ true } {}
 
         friend class detail::submatch_factory<I>;
 
         I first_{};
         I last_{};
 
-        [[no_unique_address]] maybe_bool match_{ detail::maybe_type_init<use_bool>(false) };
+        [[no_unique_address]] maybe_bool match_{ false };
     };
 }
 

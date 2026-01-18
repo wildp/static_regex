@@ -36,16 +36,19 @@ namespace rx
         using factory = detail::submatch_factory<I>;
         using dfa_t   = detail::compiled_dfa<Pattern, Flags>;
 
+        template<bool Const>
         class proxy_iterator;
 
     public:
         using size_type              = std::size_t;
         using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
         using submatch_type          = submatch<I>;
-        using iterator               = proxy_iterator;
+        using iterator               = proxy_iterator<false>;
         using reverse_iterator       = std::reverse_iterator<iterator>;
-        // using const_iterator         = proxy_iterator;
-        // using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+#if __cpp_lib_ranges_as_const >= 202311L
+        using const_iterator         = proxy_iterator<true>;
+        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+#endif
 
         static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
 
@@ -172,52 +175,11 @@ namespace rx
 
         friend struct detail::p1306_matcher<Pattern, Flags>;
 
-        template<string_literal, typename, typename>
-        friend class static_regex_iterator;
+        template<std::ranges::bidirectional_range V, typename Regex>
+        requires std::ranges::view<V>
+        friend class regex_match_view;
 
     private:
-        /* iterator implementation */
-
-        class proxy_iterator
-        {
-            friend class static_regex_match_result;
-
-            using it          = proxy_iterator;
-            using parent_type = static_regex_match_result;
-
-        public:
-            using iterator_concept  = std::random_access_iterator_tag;
-            using iterator_category = std::input_iterator_tag;
-            using value_type        = submatch_type;
-            using difference_type   = std::ptrdiff_t;
-
-            proxy_iterator() = default;
-
-            constexpr value_type operator*() const { return (*ptr_)[pos_]; }
-            constexpr value_type operator[](difference_type n) const { return (*ptr_)[pos_ + n]; }
-
-            constexpr it& operator++() { ++pos_; return *this; }
-            constexpr it  operator++(int) { auto tmp{ *this }; ++(*this); return tmp; }
-            constexpr it& operator--() { --pos_; return *this; }
-            constexpr it  operator--(int) { auto tmp{ *this }; --(*this); return tmp; }
-            constexpr it& operator+=(difference_type n) { pos_ += n; return *this; }
-            constexpr it& operator-=(difference_type n) { pos_ -= n; return *this; }
-
-            constexpr friend bool operator==(const it&, const it&) = default;
-            constexpr friend auto operator<=>(const it&, const it&) = default;
-            constexpr friend it operator+(const it& lhs, difference_type rhs) { return { lhs.ptr_, lhs.pos_ + rhs }; }
-            constexpr friend it operator+(difference_type lhs, const it& rhs) { return { rhs.ptr_, lhs + rhs.pos_ }; }
-            constexpr friend it operator-(const it& lhs, difference_type rhs) { return { lhs.ptr_, lhs.pos_ - rhs }; }
-            constexpr friend difference_type operator-(const it& lhs, const it& rhs) { return rhs.pos_ - lhs.pos_; }
-
-        private:
-            constexpr proxy_iterator(const parent_type* ptr, std::size_t pos) : ptr_{ ptr }, pos_{ pos } {}
-
-            const parent_type* ptr_{ nullptr };
-            std::size_t pos_{ 0 };
-        };
-
-
         /* implementation helpers */
 
         static constexpr bool has_registers{ dfa_t::value.register_count != 0 };
@@ -226,7 +188,7 @@ namespace rx
         static constexpr bool has_match_start{ dfa_t::value.captures.has_match_start() };
 
         explicit constexpr static_regex_match_result(I start)
-            : match_start_{ detail::maybe_type_init<has_match_start>(start)}
+            : match_start_{ start }
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
@@ -275,8 +237,115 @@ namespace rx
         [[no_unique_address]] match_start_type match_start_{};
         I match_end_{};
         [[no_unique_address]] enabled_type enabled_{};
-        [[no_unique_address]] continue_type continue_at_{ detail::maybe_type_init<Flags.is_iterator>(detail::tdfa::no_continue) };
-        [[no_unique_address]] success_type match_success_{ detail::maybe_type_init<has_success>(false) };
+        [[no_unique_address]] continue_type continue_at_{ detail::tdfa::no_continue };
+        [[no_unique_address]] success_type match_success_{ false };
+    };
+
+
+    /* iterator implementation */
+
+    template<std::bidirectional_iterator I, string_literal Pattern, detail::fsm_flags Flags>
+    requires std::default_initializable<I> and std::copyable<I>
+    template<bool Const>
+    class static_regex_match_result<I, Pattern, Flags>::proxy_iterator
+    {
+        friend class static_regex_match_result;
+
+        using Parent      = static_regex_match_result;
+
+    public:
+        using iterator_concept  = std::random_access_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
+#if __cpp_lib_ranges_as_const >= 202311L
+        using value_type        = submatch<std::conditional_t<Const, std::const_iterator<I>, I>>;
+#else
+        using value_type        = submatch<I>; /* semantically incorrect workaround */
+#endif
+        using difference_type   = std::ptrdiff_t;
+
+        proxy_iterator() = default;
+
+        constexpr proxy_iterator(const Parent* ptr, std::size_t pos)
+            : ptr_{ ptr }, pos_{ pos } {}
+
+        constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) requires Const
+            : ptr_{ i.ptr_ }, pos_{ i.pos_ } {}
+
+        constexpr value_type operator*() const
+        {
+            return (*ptr_)[pos_];
+        }
+
+        constexpr value_type operator[](difference_type n) const
+        {
+            return (*ptr_)[pos_ + n];
+        }
+
+        constexpr proxy_iterator& operator++()
+        {
+            ++pos_;
+            return *this;
+        }
+
+        constexpr proxy_iterator operator++(int)
+        {
+            auto tmp{ *this };
+            ++*this;
+            return tmp;
+        }
+
+        constexpr proxy_iterator& operator--()
+        {
+            --pos_;
+            return *this;
+        }
+
+        constexpr proxy_iterator operator--(int)
+        {
+            auto tmp{ *this };
+            --*this;
+            return tmp;
+        }
+
+        constexpr proxy_iterator& operator+=(difference_type n)
+        {
+            pos_ += n;
+            return *this;
+        }
+
+        constexpr proxy_iterator& operator-=(difference_type n)
+        {
+            pos_ -= n;
+            return *this;
+        }
+
+        constexpr friend bool operator==(const proxy_iterator&, const proxy_iterator&) = default;
+
+        constexpr friend auto operator<=>(const proxy_iterator&, const proxy_iterator&) = default;
+
+        constexpr friend proxy_iterator operator+(const proxy_iterator& i, difference_type n)
+        {
+            return { i.ptr_, i.pos_ + n };
+        }
+
+        constexpr friend proxy_iterator operator+(difference_type n, const proxy_iterator& i)
+        {
+            return { i.ptr_, n + i.pos_ };
+        }
+
+        constexpr friend proxy_iterator operator-(const proxy_iterator& i, difference_type n)
+        {
+            return { i.ptr_, i.pos_ - n };
+        }
+
+        constexpr friend difference_type operator-(const proxy_iterator& x, const proxy_iterator& y)
+        {
+            return y.pos_ - x.pos_;
+        }
+
+    private:
+        const Parent* ptr_{ nullptr };
+        std::size_t pos_{ 0 };
     };
 }
 

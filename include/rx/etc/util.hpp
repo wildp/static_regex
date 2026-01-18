@@ -7,6 +7,7 @@
 #pragma once
 
 #include <concepts>
+#include <meta>
 #include <limits>
 #include <variant>
 
@@ -21,6 +22,22 @@ namespace rx::detail
 
     template<typename CharT>
     concept character = one_of<CharT, char, wchar_t, char8_t, char16_t, char32_t>;
+
+    consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta::info templ)
+    {
+        if (not std::meta::is_type(type) or not std::meta::is_class_template(templ))
+            return false;
+
+        auto dealiased{ std::meta::dealias(type) };
+
+        if (not std::meta::has_template_arguments(dealiased))
+            return false;
+        
+        return std::meta::template_of(dealiased) == templ;
+    }
+
+    template<typename T, std::meta::info Template>
+    concept template_instantiation_of = is_template_instantiation_of_impl(^^T, Template);
 
     // TODO: replace with P2996 implementation
     template<typename, typename>
@@ -73,16 +90,12 @@ namespace rx::detail
 
     inline constexpr cstr_sentinel_t cstr_sentinel;
 
-    template<bool Enabled, typename T>
-    using maybe_type_t = std::conditional_t<Enabled, T, std::monostate>;
+    struct terminal_object
+    {
+        template<typename... Ts>
+        constexpr explicit terminal_object(Ts&&...) {}
+    };
 
     template<bool Enabled, typename T>
-    [[clang::always_inline]] constexpr decltype(auto) maybe_type_init(T&& val)
-    {
-        if constexpr (Enabled)
-            return std::forward<T>(val);
-        else
-            return std::monostate{};
-        
-    }
+    using maybe_type_t = std::conditional_t<Enabled, T, terminal_object>;
 }

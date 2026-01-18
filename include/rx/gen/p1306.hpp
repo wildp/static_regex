@@ -25,7 +25,7 @@ namespace rx::detail
     /* p1306 matcher implementation */
 
     template<typename CharT, CharT Lower, CharT Upper>
-    [[clang::always_inline]] constexpr bool tr_possible_interval_impl(CharT c)
+    [[gnu::always_inline]] constexpr bool tr_possible_interval_impl(CharT c)
     {
         if constexpr (Lower == Upper)
             return (c == Lower);
@@ -34,7 +34,7 @@ namespace rx::detail
     }
 
     template<typename CharT, std::pair<CharT, CharT>... Intervals>
-    [[clang::always_inline]] constexpr bool tr_possible_impl(CharT c)
+    [[gnu::always_inline]] constexpr bool tr_possible_impl(CharT c)
     {
         return (tr_possible_interval_impl<CharT, Intervals.first, Intervals.second>(c) or ...);
     }
@@ -51,7 +51,7 @@ namespace rx::detail
 
 
     template<static_transition Tr, typename CharT>
-    [[clang::always_inline]] constexpr bool tr_possible(CharT c)
+    [[gnu::always_inline]] constexpr bool tr_possible(CharT c)
     {
         constexpr auto func{ std::meta::substitute(^^tr_possible_impl, tr_possible_make_refl(Tr)) };
         return [: func :](c);
