@@ -1368,7 +1368,7 @@ namespace rx::detail
     {
         auto& dfn{ nodes_.at(default_final_node) };
         dfn.is_final = true;
-        dfn.is_fallback = (flags.enable_fallback and not flags_.longest_match);
+        dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
 
         if (flags_.is_iterator)
             cont_info_.emplace_back(default_start_node);

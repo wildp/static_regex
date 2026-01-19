@@ -6,6 +6,7 @@
 
 #include <print>
 #include <meta>
+#include <utility>
 
 #include <rx/regex.hpp>
 
@@ -88,16 +89,20 @@ namespace
 
             tree_type tree{ pat, Flags.parse };
 
-            if constexpr (Flags.fsm.is_search) tree.insert_search_prefix();
+            if constexpr (Flags.fsm.is_search)
+                tree.insert_search_prefix();
 
-            if constexpr (Flags.ptree) std::println("Pattern: {}", to_string(tree));
+            if constexpr (Flags.ptree)
+                std::println("Pattern: {}", to_string(tree));
 
-            if constexpr (Flags.ptags) print_capture_info(tree.get_capture_info());
+            if constexpr (Flags.ptags)
+                print_capture_info(tree.get_capture_info());
 
             if constexpr (Flags.otags)
             {
                 tree.optimise_tags();
-                if constexpr (Flags.ptags) print_capture_info(tree.get_capture_info());
+                if constexpr (Flags.ptags)
+                    print_capture_info(tree.get_capture_info());
             }
 
             if constexpr (Flags.stage >= 1)
@@ -109,32 +114,58 @@ namespace
                 {
                     tdfa_type tdfa{ tnfa };
 
-                    if constexpr (Flags.dbgok) std::println("Pattern ok\n");
-                    if constexpr (Flags.ptdfa) { dump_tdfa(tdfa); std::println("\n"); }
+                    if constexpr (Flags.dbgok)
+                        std::println("Pattern ok\n");
+
+                    if constexpr (Flags.ptdfa)
+                    {
+                        dump_tdfa(tdfa);
+                        std::println("\n");
+                    }
 
                     if constexpr (Flags.stage >= 3)
                     {
                         tdfa.optimise_registers();
 
-                        if constexpr (Flags.dbgok) std::println("Opt ok\n");
-                        if constexpr (Flags.pdfao) { dump_tdfa(tdfa); std::println("\n"); } 
+                        if constexpr (Flags.dbgok)
+                            std::println("Opt ok\n");
+
+                        if constexpr (Flags.pdfao)
+                        { 
+                            dump_tdfa(tdfa);
+                            std::println("\n");
+                        } 
 
                         if constexpr (Flags.stage == 4)
                         {
                             namespace rdt = rx::detail::tdfa;
                             rdt::min<char>::compact_regop_blocks(tdfa);
 
-                            if constexpr (Flags.dbgok) std::println("Regcompact ok\n");
-                            if constexpr (Flags.pdfam) { dump_tdfa(tdfa); std::println("\n"); }
+                            if constexpr (Flags.dbgok)
+                                std::println("Regcompact ok\n");
 
-                            if constexpr (Flags.dbghc) { std::println("{}", rdt::min<char>::dry_run(tdfa)); }
+                            if constexpr (Flags.pdfam)
+                            {
+                                dump_tdfa(tdfa);
+                                std::println("\n"); 
+                            }
+
+                            if constexpr (Flags.dbghc)
+                                std::println("{}", rdt::min<char>::dry_run(tdfa));
+
                         }
                         else if constexpr (Flags.stage >= 5)
                         {
                             tdfa.minimise_states();
 
-                            if constexpr (Flags.dbgok) std::println("Min ok\n");
-                            if constexpr (Flags.pdfam) { dump_tdfa(tdfa); std::println("\n"); }
+                            if constexpr (Flags.dbgok)
+                                 std::println("Min ok\n");
+
+                            if constexpr (Flags.pdfam)
+                            {
+                                dump_tdfa(tdfa);
+                                std::println("\n");
+                            }
                         }
                     }
 
@@ -182,11 +213,11 @@ namespace
     }
 
     template<rx::string_literal S>
-    [[maybe_unused]] void starts_with(rx::static_regex<S> m, const std::vector<std::string_view>& test)
+    [[maybe_unused]] void prefix_match(rx::static_regex<S> m, const std::vector<std::string_view>& test)
     {
         for (auto sv : test)
         {
-            if (auto res = m.starts_with(sv))
+            if (auto res = m.prefix_match(sv))
                 std::println("{:?}: Partial Match: {::?}", sv, res);
             else
                 std::println("{:?}: No Match", sv);
@@ -251,9 +282,9 @@ int main()
 
     // search("(ab+c)+?(ab+c)?"_rx, { "abcabbc" });
     // search("(ab+c)+(ab+c)?"_rx, { "abcabbc" });
-    
-    // starts_with("(ab+c)+?(ab+c|.*d)"_rx, { "abcabbcacd__" });
-    // starts_with("(ab+c)+(ab+c|.*d)"_rx, { "abcabbcacd__" });
+
+    // prefix_match("(ab+c)+?(ab+c|.*d)"_rx, { "abcabbcacd__" });
+    // prefix_match("(ab+c)+(ab+c|.*d)"_rx, { "abcabbcacd__" });
 
     // search("(ab+c)+?(ab+c)?"_rx, { "aaabacabcabbcac" });
     // search("(ab+c)+(ab+c)?"_rx, { "aaabacabcabbcac" });
@@ -278,8 +309,8 @@ int main()
     // t2("(a|bcdef|g|ab|c|d|e|efg|fg)*", { "abcdefg" });
     // t4("(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(?:(a|bcdef|g|ab|c|d|e|efg|fg)(a|bcdef|g|ab|c|d|e|efg|fg)*)?)?", { "abcdefg", "bcdefg" });
 
-    // starts_with("(abc)+?a"_rx, { "abcabc", "abcabca" });
-    // starts_with("<!--.*?-->"_rx, { "<!-- Hello -->", "<!-- Hello --> -->" });
+    // prefix_match("(abc)+?a"_rx, { "abcabc", "abcabca" });
+    // prefix_match("<!--.*?-->"_rx, { "<!-- Hello -->", "<!-- Hello --> -->" });
 
     // t2("a{2,5}?", {});
     // t2("a{2,5}?", { "a", "aa", "aaa", "aaaa", "aaaaa" });

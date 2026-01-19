@@ -157,8 +157,13 @@ namespace rx::detail
     template<typename CharT, std::size_t N>
     consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, fsm_flags f)
     {
+        /* set parser flags as appropriate */
+        parser_flags p{};
+        if (f.no_captures) p.enable_captures = false;
+        if (f.return_bool) p.enable_start_tag = false;
+
         /* parse pattern string into tree */
-        expr_tree ast{ pattern.view() };
+        expr_tree ast{ pattern.view(), p };
         if (f.is_search) ast.insert_search_prefix();
         ast.optimise_tags();
 

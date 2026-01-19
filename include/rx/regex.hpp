@@ -35,8 +35,8 @@ namespace rx
         requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto match(const I first, const S last)
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::full_match> matcher;
+            using namespace detail::default_fsm_flags;
+            detail::p1306_matcher<Pattern, full_match> matcher;
             return matcher(first, last);
         }
 
@@ -56,33 +56,33 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto starts_with(const I first, const S last)
+        [[nodiscard]] static constexpr auto prefix_match(const I first, const S last)
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::partial_match> matcher;
+            using namespace detail::default_fsm_flags;
+            detail::p1306_matcher<Pattern, partial_match> matcher;
             return matcher(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
         requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
-        [[nodiscard]] static constexpr auto starts_with(R&& r)
+        [[nodiscard]] static constexpr auto prefix_match(R&& r)
         {
-            return starts_with(std::ranges::begin(r), std::ranges::end(r));
+            return prefix_match(std::ranges::begin(r), std::ranges::end(r));
         }
 
         template<typename CharT>
         requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr auto starts_with(const CharT* cstr)
+        [[nodiscard]] static constexpr auto prefix_match(const CharT* cstr)
         {
-            return starts_with(cstr, detail::cstr_sentinel);
+            return prefix_match(cstr, detail::cstr_sentinel);
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto search(const I first, const S last)
         {
-            using namespace detail;
-            p1306_matcher<Pattern, default_fsm_flags::search_single> matcher;
+            using namespace detail::default_fsm_flags;
+            detail::p1306_matcher<Pattern, search_single> matcher;
             return matcher(first, last);
         }
 
@@ -99,6 +99,75 @@ namespace rx
         {
             return search(cstr, detail::cstr_sentinel);
         }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr bool is_match(const I first, const S last)
+        {
+            using namespace detail::default_fsm_flags;
+            detail::p1306_matcher<Pattern, full_match | return_bool_modifier> matcher;
+            return matcher(first, last);
+        }
+
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        [[nodiscard]] static constexpr bool is_match(R&& r)
+        {
+            return is_match(std::ranges::begin(r), std::ranges::end(r));
+        }
+
+        template<typename CharT>
+        requires std::same_as<CharT, char_type>
+        [[nodiscard]] static constexpr bool is_match(const CharT* cstr)
+        {
+            return is_match(cstr, detail::cstr_sentinel);
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr bool starts_with_match(const I first, const S last)
+        {
+            using namespace detail::default_fsm_flags;
+            detail::p1306_matcher<Pattern, partial_match | return_bool_modifier> matcher;
+            return matcher(first, last);
+        }
+
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        [[nodiscard]] static constexpr bool starts_with_match(R&& r)
+        {
+            return starts_with_match(std::ranges::begin(r), std::ranges::end(r));
+        }
+
+        template<typename CharT>
+        requires std::same_as<CharT, char_type>
+        [[nodiscard]] static constexpr bool starts_with_match(const CharT* cstr)
+        {
+            return starts_with_match(cstr, detail::cstr_sentinel);
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr bool contains_match(const I first, const S last)
+        {
+            using namespace detail::default_fsm_flags;
+            detail::p1306_matcher<Pattern, search_single | return_bool_modifier> matcher;
+            return matcher(first, last);
+        }
+
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+        [[nodiscard]] static constexpr bool contains_match(R&& r)
+        {
+            return contains_match(std::ranges::begin(r), std::ranges::end(r));
+        }
+
+        template<typename CharT>
+        requires std::same_as<CharT, char_type>
+        [[nodiscard]] static constexpr bool contains_match(const CharT* cstr)
+        {
+            return contains_match(cstr, detail::cstr_sentinel);
+        }
     };
 
 
@@ -108,7 +177,6 @@ namespace rx
     {
         static_assert("submatches_view: invalid range");
     };
-
 
 
     template<std::ranges::bidirectional_range V, string_literal Pattern>

@@ -35,6 +35,7 @@ namespace rx::detail
     struct parser_flags
     {
         bool enable_captures    : 1 { true };
+        bool enable_start_tag   : 1 { true };
         bool enable_possessive  : 1 { false };
         bool enable_backrefs    : 1 { false };
         bool enable_branchreset : 1 { false };

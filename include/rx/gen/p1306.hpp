@@ -71,7 +71,7 @@ namespace rx::detail
         struct result
         {
             template<typename... Args>
-            constexpr explicit result(Args... args) noexcept(noexcept(result_type(args...)))
+            constexpr explicit result(Args... args) noexcept(noexcept(result_type{ args... }))
                 : value(std::forward<Args>(args)...) {}
             
             [[no_unique_address]] result_type<I> value;
@@ -102,8 +102,8 @@ namespace rx::detail
             }
         }
 
-        template<std::bidirectional_iterator I>
-        static constexpr void fallback(result<I>& res, std::size_t fallback_state, I fallback_it)
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr void fallback(I /* it */, result<I>& res, const S /* last */, std::size_t fallback_state, I fallback_it)
         requires (Flags.enable_fallback)
         {
             if (fallback_state == fallback_disabled)
@@ -174,7 +174,7 @@ namespace rx::detail
             }
 
             if constexpr (Flags.enable_fallback)
-                return fallback(res, fallback_state, fallback_it);
+                [[clang::musttail]] return fallback(it, res, last, fallback_state, fallback_it);
         }
 
     public:
@@ -201,5 +201,72 @@ namespace rx::detail
 
             return res.value;
         }
+    };
+
+    
+    template<string_literal Pattern, fsm_flags Flags>
+    requires (Flags.return_bool)
+    struct p1306_matcher<Pattern, Flags>
+    {
+        using dfa_t = compiled_dfa<Pattern, Flags>;
+        using char_type = decltype(Pattern)::char_type;
+
+    private:
+        static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool fallback(I /* it */, const S /* last */, std::size_t fallback_state)
+        requires (Flags.enable_fallback)
+        {
+            if (fallback_state == fallback_disabled)
+                return false;
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
+            {
+                if (fallback_state == dfa_t::value.fallback_nodes[i])
+                    return true;
+            }
+
+            return false;
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool state(I it, const S last, std::size_t fallback_state)
+        {
+            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
+                fallback_state = DFAState;
+   
+            if (it == last)
+            {
+                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
+                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
+                    return true;
+            }
+            else
+            {
+                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+                {
+                    if (tr_possible<tr>(*it))
+                        [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(it, last, fallback_state);
+
+            return false;
+        }
+
+    public:
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr bool operator()(const I first, const S last)
+        {
+            return state<dfa_t::value.match_start>(first, last, fallback_disabled);
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
     };
 }

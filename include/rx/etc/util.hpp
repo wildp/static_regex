@@ -74,6 +74,20 @@ namespace rx::detail
     requires (I >= std::variant_size_v<V>)
     struct index_of_impl<V, T, I> {};
 
+    template<typename Derived>
+    struct flag_base
+    {
+        friend constexpr Derived operator|(Derived x, Derived y)
+        {
+            Derived result{};
+            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^Derived), std::meta::access_context::current())))
+            {
+                result.[:member:] = x.[:member:] or y.[:member:];
+            }
+            return result;
+        }
+    };
+
     inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
 
     template<bool Const, typename T>

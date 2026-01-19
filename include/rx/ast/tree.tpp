@@ -344,26 +344,35 @@ namespace rx::detail
         const std::size_t repeater_idx{ expressions_.size() };
         expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, repeater_mode::lazy);
 
-        /* make start tag */
+        /* conditionally make start tag */
         const std::size_t start_tag_idx{ expressions_.size() };
-        const tag_number_t start_tag{ tag_count_++ };
-        if (start_tag < 0)
-            throw tree_error("Capture limit exceed");
-        capture_info_.set_match_start_tag(start_tag);
-        expressions_.emplace_back(std::in_place_type<tag>, start_tag);
+        if (flags_.enable_start_tag)
+        {
+            const tag_number_t start_tag{ tag_count_++ };
+            if (start_tag < 0)
+                throw tree_error("Capture limit exceed");
+            capture_info_.set_match_start_tag(start_tag);
+            expressions_.emplace_back(std::in_place_type<tag>, start_tag);
+        }
 
         /* insert into pattern */
         if (type& ast{ expressions_.at(root_idx_) }; std::holds_alternative<concat>(ast))
         {
             /* root idx is already concat, so we can avoid creating a new concat as root */
             auto& target{ std::get<concat>(ast).idxs };
-            target.insert(target.begin(), { repeater_idx, start_tag_idx });
+            if (flags_.enable_start_tag)
+                target.insert(target.begin(), { repeater_idx, start_tag_idx });
+            else
+                target.insert(target.begin(), { repeater_idx });
         }
         else
         {
             /* make new root node */
             const std::size_t new_root_idx{ expressions_.size() };
-            expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, start_tag_idx, root_idx_ });
+            if (flags_.enable_start_tag)
+                expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, start_tag_idx, root_idx_ });
+            else
+                expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, root_idx_ });
             root_idx_ = new_root_idx;
         }
     }
