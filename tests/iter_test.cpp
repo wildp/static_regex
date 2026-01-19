@@ -1,3 +1,9 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #include <rx/regex.hpp>
 
 #include <deque>
@@ -7,6 +13,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
 
 namespace 
 {
@@ -42,7 +49,6 @@ namespace
     {
         return submatch_count<Pattern, Ints>(std::ranges::subrange(input, rx::detail::cstr_sentinel));
     }
-
 
     template<std::size_t I, std::ranges::bidirectional_range R>
     constexpr bool test(R&& r)
@@ -84,7 +90,7 @@ static_assert(std::ranges::input_range<range_category_test_4>);
 static_assert(std::ranges::input_range<range_category_test_5>);
 static_assert(std::ranges::input_range<range_category_test_6>);
 
-/* static_regex_match_result iterator type tests */ // TODO: fix transform view iterators 
+/* static_regex_match_result iterator type tests */ // TODO: fix transform view iterators
 static_assert(test<1>("Hello"));
 static_assert(test<1>("Hello"sv));
 static_assert(test<1>("Hello World"sv | std::views::take(5)));

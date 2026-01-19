@@ -5,6 +5,10 @@ project(rx
     LANGUAGES CXX
 )
 
+# (for clang-p2996) #
+add_compile_options(-fconstexpr-steps=4294967295)
+add_compile_options(-fconstexpr-backtrace-limit=0)
+
 add_library(rx INTERFACE)
 target_include_directories(rx INTERFACE include/)
 target_compile_features(rx INTERFACE cxx_std_26)
@@ -18,17 +22,19 @@ target_sources(tests
         tests/cset_test.cpp
         tests/expo_test.cpp
         tests/iter_test.cpp
+        tests/srx1_test.cpp
+        tests/srx2_test.cpp
         tests/tdfa_test.cpp
         tests/tnfa_test.cpp
         tests/tree_test.cpp
 )
 target_link_libraries(tests PUBLIC rx)
 
-add_executable(main)
-target_sources(main
+add_executable(testfile)
+target_sources(testfile
     PRIVATE 
         tests/_testfile.cpp
 )
-target_link_libraries(main PUBLIC rx)
+target_link_libraries(testfile PUBLIC rx)
 
 add_subdirectory(bench/ EXCLUDE_FROM_ALL)
