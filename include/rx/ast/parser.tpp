@@ -10,8 +10,8 @@
 
 #include <ranges>
 
-#include "../api/regex_error.hpp"
-#include "../ast/capstack.hpp"
+#include "rx/api/regex_error.hpp"
+#include "rx/ast/capstack.hpp"
 
 
 namespace rx::detail::parser

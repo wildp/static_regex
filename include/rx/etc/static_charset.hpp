@@ -10,10 +10,10 @@
 #include <meta>
 #include <ranges>
 
-#include "../etc/bitcharset.hpp"
-#include "../etc/charset.hpp"
-#include "../etc/static_span.hpp"
-#include "../etc/util.hpp"
+#include "rx/etc/bitcharset.hpp"
+#include "rx/etc/charset.hpp"
+#include "rx/etc/static_span.hpp"
+#include "rx/etc/util.hpp"
 
 
 namespace rx::detail

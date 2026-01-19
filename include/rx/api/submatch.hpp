@@ -14,7 +14,7 @@
 #include <string>
 #include <string_view>
 
-#include "../etc/util.hpp"
+#include "rx/etc/util.hpp"
 
 
 namespace rx

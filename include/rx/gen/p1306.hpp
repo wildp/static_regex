@@ -14,10 +14,10 @@
 #include <meta>
 #include <type_traits>
 
-#include "../etc/string_literal.hpp"
-#include "../fsm/tdfa.hpp"
-#include "../gen/compile.hpp"
-#include "../gen/result.hpp"
+#include "rx/etc/string_literal.hpp"
+#include "rx/fsm/tdfa.hpp"
+#include "rx/gen/compile.hpp"
+#include "rx/gen/result.hpp"
 
 
 namespace rx::detail

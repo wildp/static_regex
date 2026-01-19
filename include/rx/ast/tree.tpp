@@ -16,8 +16,8 @@
 #include <utility>
 #include <variant>
 
-#include "../api/regex_error.hpp"
-#include "../etc/captures.hpp"
+#include "rx/api/regex_error.hpp"
+#include "rx/etc/captures.hpp"
 
 
 namespace rx::detail

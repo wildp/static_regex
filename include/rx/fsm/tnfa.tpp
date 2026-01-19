@@ -18,8 +18,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "../api/regex_error.hpp"
-#include "../etc/static_charset.hpp"
+#include "rx/api/regex_error.hpp"
+#include "rx/etc/static_charset.hpp"
 
 
 namespace rx::detail

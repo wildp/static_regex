@@ -14,8 +14,8 @@
 #include <type_traits>
 #include <variant>
 
-#include "../api/regex_error.hpp"
-#include "../ast/charclass.hpp"
+#include "rx/api/regex_error.hpp"
+#include "rx/ast/charclass.hpp"
 
 
 /* Note: We assume the literal character encoding is a superset of ASCII */

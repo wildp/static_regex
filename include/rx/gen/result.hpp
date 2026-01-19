@@ -14,11 +14,11 @@
 #include <type_traits>
 #include <utility>
 
-#include "../api/submatch.hpp"
-#include "../etc/string_literal.hpp"
-#include "../etc/util.hpp"
-#include "../fsm/flags.hpp"
-#include "../gen/compile.hpp"
+#include "rx/api/submatch.hpp"
+#include "rx/etc/string_literal.hpp"
+#include "rx/etc/util.hpp"
+#include "rx/fsm/flags.hpp"
+#include "rx/gen/compile.hpp"
 
 
 namespace rx::detail

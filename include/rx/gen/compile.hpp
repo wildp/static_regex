@@ -12,12 +12,12 @@
 #include <utility>
 #include <vector>
 
-#include "../ast/tree.hpp"
-#include "../etc/static_span.hpp"
-#include "../etc/string_literal.hpp"
-#include "../fsm/flags.hpp"
-#include "../fsm/tdfa.hpp"
-#include "../fsm/tnfa.hpp"
+#include "rx/ast/tree.hpp"
+#include "rx/etc/static_span.hpp"
+#include "rx/etc/string_literal.hpp"
+#include "rx/fsm/flags.hpp"
+#include "rx/fsm/tdfa.hpp"
+#include "rx/fsm/tnfa.hpp"
 
 
 namespace rx::detail

@@ -10,9 +10,9 @@
 #include <variant>
 #include <vector>
 
-#include "../ast/tok.hpp"
-#include "../etc/captures.hpp"
-#include "../etc/util.hpp"
+#include "rx/ast/tok.hpp"
+#include "rx/etc/captures.hpp"
+#include "rx/etc/util.hpp"
 
 
 namespace rx::detail

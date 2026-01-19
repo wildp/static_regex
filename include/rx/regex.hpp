@@ -15,12 +15,12 @@
 #include <type_traits>
 #include <utility>
 
-#include "api/submatch.hpp"
-#include "etc/string_literal.hpp"
-#include "etc/util.hpp"
-#include "fsm/flags.hpp"
-#include "gen/p1306.hpp"
-#include "gen/result.hpp"
+#include "rx/api/submatch.hpp"
+#include "rx/etc/string_literal.hpp"
+#include "rx/etc/util.hpp"
+#include "rx/fsm/flags.hpp"
+#include "rx/gen/p1306.hpp"
+#include "rx/gen/result.hpp"
 
 
 namespace rx
@@ -175,7 +175,7 @@ namespace rx
     requires std::ranges::view<V>
     class regex_match_view
     {
-        static_assert("submatches_view: invalid range");
+        static_assert("regex_match_view: invalid range");
     };
 
 

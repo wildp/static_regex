@@ -11,9 +11,9 @@
 #include <type_traits>
 #include <vector>
 
-#include "../etc/bitcharset.hpp"
-#include "../etc/charset.hpp"
-#include "../etc/static_charset.hpp"
+#include "rx/etc/bitcharset.hpp"
+#include "rx/etc/charset.hpp"
+#include "rx/etc/static_charset.hpp"
 
 
 namespace rx::detail

@@ -13,9 +13,9 @@
 #include <variant>
 #include <vector>
 
-#include "../etc/captures.hpp"
-#include "../fsm/flags.hpp"
-#include "../fsm/tnfa.hpp"
+#include "rx/etc/captures.hpp"
+#include "rx/fsm/flags.hpp"
+#include "rx/fsm/tnfa.hpp"
 
 
 namespace rx::detail::tdfa
