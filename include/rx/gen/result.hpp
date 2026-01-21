@@ -45,10 +45,8 @@ namespace rx
         using submatch_type          = submatch<I>;
         using iterator               = proxy_iterator<false>;
         using reverse_iterator       = std::reverse_iterator<iterator>;
-#if __cpp_lib_ranges_as_const >= 202311L
         using const_iterator         = proxy_iterator<true>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-#endif
 
         static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
 
@@ -122,11 +120,27 @@ namespace rx
             return std::make_reverse_iterator(this->begin());
         }
 
-        // /* TODO: Implement const iterators with correct semantics */
-        // [[nodiscard]] constexpr const_iterator cbegin() const = delete;
-        // [[nodiscard]] constexpr const_iterator cend() const = delete;
-        // [[nodiscard]] constexpr const_reverse_iterator crbegin() const = delete;
-        // [[nodiscard]] constexpr const_reverse_iterator crend() const = delete;
+        [[nodiscard]] constexpr const_iterator cbegin() const
+        {
+            return this->has_value()
+                   ? const_iterator{ this, 0 }
+                   : this->end();
+        }
+
+        [[nodiscard]] constexpr const_iterator cend() const
+        {
+            return { this, this->size() };
+        }
+
+        [[nodiscard]] constexpr const_reverse_iterator crbegin() const
+        {
+            return std::make_reverse_iterator(this->cend());
+        }
+
+        [[nodiscard]] constexpr const_reverse_iterator crend() const
+        {
+            return std::make_reverse_iterator(this->cbegin());
+        }
 
         /* tuple support */
 
@@ -350,7 +364,7 @@ namespace rx
 }
 
 
-/* structured binding support for compile_time_match_result */
+/* structured binding support for static_regex_match_result */
 
 template<std::bidirectional_iterator Iter, rx::string_literal Pattern, rx::detail::fsm_flags Flags>
 struct std::tuple_size<rx::static_regex_match_result<Iter, Pattern, Flags>>

@@ -1337,6 +1337,10 @@ namespace rx::detail
 
         /* remove lookbehind_1 transitions and empty regular transitions */
 
+        std::ranges::sort(to_remove);
+        const auto [new_end, old_end]{ std::ranges::unique(to_remove) };
+        to_remove.erase(new_end, old_end);
+
         for (const tr_index i : to_remove)
         {
             auto& tr{ transitions_.at(i) };

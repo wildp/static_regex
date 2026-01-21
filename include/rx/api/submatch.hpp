@@ -254,7 +254,7 @@ template<std::size_t N, std::bidirectional_iterator I>
 requires (N < 2)
 struct std::tuple_element<N, rx::submatch<I>>
 {
-    using type = rx::submatch<I>::const_iterator;
+    using type = rx::submatch<I>::iterator;
 };
 
 

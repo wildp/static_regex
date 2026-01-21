@@ -741,7 +741,7 @@ template<std::size_t N, std::bidirectional_iterator I>
 requires (N < 2)
 struct std::tuple_element<N, rx::submatch<I>>
 {
-    using type = rx::submatch<I>::const_iterator;
+    using type = rx::submatch<I>::iterator;
 };
 
 /* formatting support for submatch */
@@ -7057,6 +7057,10 @@ namespace rx::detail
 
         /* remove lookbehind_1 transitions and empty regular transitions */
 
+        std::ranges::sort(to_remove);
+        const auto [new_end, old_end]{ std::ranges::unique(to_remove) };
+        to_remove.erase(new_end, old_end);
+
         for (const tr_index i : to_remove)
         {
             auto& tr{ transitions_.at(i) };
@@ -9035,10 +9039,8 @@ namespace rx
         using submatch_type          = submatch<I>;
         using iterator               = proxy_iterator<false>;
         using reverse_iterator       = std::reverse_iterator<iterator>;
-#if __cpp_lib_ranges_as_const >= 202311L
         using const_iterator         = proxy_iterator<true>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-#endif
 
         static constexpr size_type submatch_count{ dfa_t::value.captures.capture_count() };
 
@@ -9110,6 +9112,28 @@ namespace rx
         [[nodiscard]] constexpr reverse_iterator rend() const
         {
             return std::make_reverse_iterator(this->begin());
+        }
+
+        [[nodiscard]] constexpr const_iterator cbegin() const
+        {
+            return this->has_value()
+                   ? const_iterator{ this, 0 }
+                   : this->end();
+        }
+
+        [[nodiscard]] constexpr const_iterator cend() const
+        {
+            return { this, this->size() };
+        }
+
+        [[nodiscard]] constexpr const_reverse_iterator crbegin() const
+        {
+            return std::make_reverse_iterator(this->cend());
+        }
+
+        [[nodiscard]] constexpr const_reverse_iterator crend() const
+        {
+            return std::make_reverse_iterator(this->cbegin());
         }
 
         /* tuple support */
@@ -9331,7 +9355,7 @@ namespace rx
     };
 }
 
-/* structured binding support for compile_time_match_result */
+/* structured binding support for static_regex_match_result */
 
 template<std::bidirectional_iterator Iter, rx::string_literal Pattern, rx::detail::fsm_flags Flags>
 struct std::tuple_size<rx::static_regex_match_result<Iter, Pattern, Flags>>
