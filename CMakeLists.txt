@@ -15,6 +15,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 add_subdirectory(tests/)
+add_subdirectory(bench/ EXCLUDE_FROM_ALL)
 
 add_custom_command(
     OUTPUT
