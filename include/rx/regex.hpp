@@ -885,10 +885,10 @@ namespace rx
 
     namespace literals
     {
-        template<string_literal P>
-        consteval auto operator ""_rx()
+        template<string_literal Pattern>
+        consteval static_regex<Pattern> operator ""_rx()
         {
-            return static_regex<P>();
+            return {};
         }
     }
 }

@@ -622,7 +622,7 @@ namespace rx::detail::tdfa
 namespace rx::detail
 {
     template<typename CharT>
-    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa& tnfa)
+    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
         : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
     {
         tdfa::factory<char_type>{ tnfa, *this, tag_count_ };

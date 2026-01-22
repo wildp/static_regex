@@ -115,9 +115,8 @@ namespace rx::detail
     {
     public:
         using char_type = CharT;
-        using tagged_nfa = tagged_nfa<char_type>;
 
-        explicit constexpr tagged_dfa(const tagged_nfa& tnfa);
+        explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
         constexpr void minimise_states();
 

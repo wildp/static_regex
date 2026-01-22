@@ -10,8 +10,12 @@ target_include_directories(rx INTERFACE include/)
 target_compile_features(rx INTERFACE cxx_std_26)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(rx INTERFACE -freflection-latest)
     target_compile_options(rx INTERFACE -fconstexpr-steps=4294967295)
     target_compile_options(rx INTERFACE -fconstexpr-backtrace-limit=0)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_compile_options(rx INTERFACE -freflection)
+    target_compile_options(rx INTERFACE -fconstexpr-ops-limit=4294967296)
 endif()
 
 add_subdirectory(tests/)

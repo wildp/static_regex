@@ -103,7 +103,7 @@ namespace rx
         }
 
         [[nodiscard]] constexpr const_iterator cend() const noexcept
-        requires std::bidirectional_iterator<const_iterator>>
+        requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_const_iterator(this->end());
         }

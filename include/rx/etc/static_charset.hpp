@@ -28,20 +28,20 @@ namespace rx::detail
     class static_charset
     {
     public:
-        using charset = charset<CharT>;
-        using char_type = charset::char_type;
-        using char_interval = charset::char_interval;
+        using charset_type = charset<CharT>;
+        using char_type = charset_type::char_type;
+        using char_interval = charset_type::char_interval;
 
         consteval static_charset() noexcept = default;
 
-        consteval explicit static_charset(const charset& cs)
+        consteval explicit static_charset(const charset_type& cs)
             : data_{ std::define_static_array(cs.data_) } {}
 
         template<typename... Args>
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
         constexpr explicit static_charset(Args... args)
         {
-            charset tmp;
+            charset_type tmp;
 
             template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
             {
@@ -86,34 +86,34 @@ namespace rx::detail
 
         /* operators */
 
-        constexpr explicit operator charset() const
+        constexpr explicit operator charset_type() const
         {
-            return charset{ typename charset::underlying_t{ std::from_range, data_ } };
+            return charset_type{ typename charset_type::underlying_t{ std::from_range, data_ } };
         }
 
-        constexpr charset operator~()
+        constexpr charset_type operator~()
         {
-            return charset{ charset::make_absolute_complement(data_) };
+            return charset_type{ charset_type::make_absolute_complement(data_) };
         }
 
-        friend constexpr charset operator&(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
+        friend constexpr charset_type operator&(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
         {
-            return charset{ charset::make_intersection(lhs.data_, rhs.data_) };
+            return charset_type{ charset_type::make_intersection(lhs.data_, rhs.data_) };
         }
 
-        friend constexpr charset operator|(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
+        friend constexpr charset_type operator|(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
         {
-            return charset{ charset::make_union(lhs.data_, rhs.data_) };
+            return charset_type{ charset_type::make_union(lhs.data_, rhs.data_) };
         }
 
-        friend constexpr charset operator^(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
+        friend constexpr charset_type operator^(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
         {
-            return charset{ charset::make_symmetric_difference(lhs.data_, rhs.data_) };
+            return charset_type{ charset_type::make_symmetric_difference(lhs.data_, rhs.data_) };
         }
 
-        friend constexpr charset operator-(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
+        friend constexpr charset_type operator-(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
         {
-            return charset{ charset::make_relative_complement(lhs.data_, rhs.data_) };
+            return charset_type{ charset_type::make_relative_complement(lhs.data_, rhs.data_) };
         }
 
         friend constexpr bool operator==(const charset_like<char_type> auto& lhs, const charset_like<char_type> auto& rhs)
@@ -129,27 +129,27 @@ namespace rx::detail
 
         /* additional operators for charset */
 
-        friend constexpr charset& operator&=(charset& lhs, const static_charset& rhs)
+        friend constexpr charset_type& operator&=(charset_type& lhs, const static_charset& rhs)
         {
-            lhs.data_ = std::move(charset::make_intersection(lhs.data_, rhs.data_));
+            lhs.data_ = std::move(charset_type::make_intersection(lhs.data_, rhs.data_));
             return lhs;
         }
 
-        friend constexpr charset& operator|=(charset& lhs, const static_charset& rhs)
+        friend constexpr charset_type& operator|=(charset_type& lhs, const static_charset& rhs)
         {
-            lhs.data_ = std::move(charset::make_union(lhs.data_, rhs.data_));
+            lhs.data_ = std::move(charset_type::make_union(lhs.data_, rhs.data_));
             return lhs;
         }
 
-        friend constexpr charset& operator^=(charset& lhs, const static_charset& rhs)
+        friend constexpr charset_type& operator^=(charset_type& lhs, const static_charset& rhs)
         {
-            lhs.data_ = std::move(charset::make_symmetric_difference(lhs.data_, rhs.data_));
+            lhs.data_ = std::move(charset_type::make_symmetric_difference(lhs.data_, rhs.data_));
             return lhs;
         }
 
-        friend constexpr charset& operator-=(charset& lhs, const static_charset& rhs)
+        friend constexpr charset_type& operator-=(charset_type& lhs, const static_charset& rhs)
         {
-            lhs.data_ = std::move(charset::make_relative_complement(lhs.data_, rhs.data_));
+            lhs.data_ = std::move(charset_type::make_relative_complement(lhs.data_, rhs.data_));
             return lhs;
         }
 
