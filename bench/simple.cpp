@@ -27,7 +27,7 @@ using namespace rx::literals;
 using namespace ctre::literals;
 
 #define TEST(NAME, PATTERN, INPUT)                             \
-BENCHMARK_CAPTURE(BM_rx_match, NAME, PATTERN ## _rx, INPUT); \
+BENCHMARK_CAPTURE(BM_rx_match, NAME, PATTERN ## _rx, INPUT);   \
 BENCHMARK_CAPTURE(BM_ctre_match, NAME, PATTERN ## _ctre, INPUT);
 
 TEST(email, R"([a-zA-Z0-9._%+\x2D]+@[a-zA-Z0-9.\x2D]+\.[a-zA-Z]{2,})", "john.doe@example.com");

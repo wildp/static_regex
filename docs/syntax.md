@@ -2,16 +2,16 @@
 
 Matching is currently limited to ascii text inputs.
 
-| $e ::=$                         | matches                                                     |
-|:--------------------------------|:------------------------------------------------------------|
-| `a`                             | the character `'a'`                                         |
-| `.`                             | any character except newline (unless *dotall* flag set)     |
-| $e_1$ <code>&#124;</code> $e_2$ | either the pattern $e_1$ or the pattern $e_2$               |
-| $e_1 e_2$                       | the pattern $e_1$ followed by $e_2$                         |
-| $e_1 \textit{rep}$              | the pattern $e_1$ repeated according to $rep$ *(see below)* |
-| $\textit{cc}$                   | the character class $cc$ *(see below)*                      |
-| $\textit{gp}$                   | the group $\textit{gp}$ *(see below)*                       |
-| $\textit{as}$                   | the assertion $\textit{as}$ *(see below)*                   |
+| $e ::=$                         | matches                                                              |
+|:--------------------------------|:---------------------------------------------------------------------|
+| `a`                             | the character `'a'`                                                  |
+| `.`                             | any character except newline (unless *dotall* flag set)              |
+| $e_1$ <code>&#124;</code> $e_2$ | either the pattern $e_1$ or the pattern $e_2$                        |
+| $e_1 e_2$                       | the pattern $e_1$ followed by $e_2$                                  |
+| $e_1 \textit{rep}$              | the pattern $e_1$ repeated according to $\textit{rep}$ *(see below)* |
+| $\textit{cc}$                   | the character class $\textit{cc}$ *(see below)*                      |
+| $\textit{gp}$                   | the group $\textit{gp}$ *(see below)*                                |
+| $\textit{as}$                   | the assertion $\textit{as}$ *(see below)*                            |
 
 Note that `.` currently only matches a single code unit, rather than a single code point.
 

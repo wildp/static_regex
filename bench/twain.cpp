@@ -36,7 +36,7 @@ using namespace ctre::literals;
 using namespace rx::literals;
 
 #define TEST(PATTERN)                                \
-BENCHMARK_CAPTURE(BM_rx, PATTERN, PATTERN ## _rx); \
+BENCHMARK_CAPTURE(BM_rx, PATTERN, PATTERN ## _rx);   \
 BENCHMARK_CAPTURE(BM_ctre, PATTERN, PATTERN ## _ctre);
 
 TEST(R"(Twain)");
