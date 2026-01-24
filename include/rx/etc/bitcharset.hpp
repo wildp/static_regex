@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -152,19 +153,29 @@ namespace rx::detail
         constexpr void insert(char_type first, char_type last) noexcept /* preconditions: first <= last */
         {
             /* widen to accommodate signed chars and to ensure last + 1 > last */
-            const int beg{ static_cast<int>(first) - std::numeric_limits<char_type>::min() };
-            const int end{ static_cast<int>(last) - std::numeric_limits<char_type>::min() + 1 };
+            const std::size_t beg{ static_cast<std::make_unsigned_t<char>>(first) };
+            const std::size_t end{ static_cast<std::make_unsigned_t<char>>(last) + 1u };
 
-            const std::size_t select1{ (beg / integer_bits) };
-            const std::size_t select2{ (end / integer_bits) };
-            const integer_type mask1{ (0b1uz << (beg % integer_bits)) - 1 };
-            const integer_type mask2{ (0b1uz << (end % integer_bits)) - 1 };
+            const std::size_t select1{ beg / integer_bits };
+            const std::size_t select2{ end / integer_bits };
+
+            std::array<std::size_t, array_size> mask1{};
+            mask1[select1] = (0b1uz << (beg % integer_bits)) - 1;
+            std::ranges::fill_n(mask1.begin(), select1, ~0uz);
+
+            if constexpr (std::is_signed_v<char_type>)
+            {
+                if (std::signbit(first) != std::signbit(last))
+                    for (std::size_t i{ 0 }; i < array_size; ++i)
+                        mask1[i] = ~mask1[i];
+            }
+
+            std::array<std::size_t, array_size> mask2{};
+            mask2[select2] ^= (0b1uz << (end % integer_bits)) - 1;
+            std::ranges::fill_n(mask2.begin(), select2, ~0uz);
 
             for (std::size_t i{ 0 }; i < array_size; ++i)
-            {
-                data_[(i + min_offset) % array_size] |= (((i == select1) * mask1) | ((i < select1) * ~0uz))
-                                                        ^ (((i == select2) * mask2) | ((i < select2) * ~0uz));
-            }
+                data_[i] |= mask1[i] ^ mask2[i];
         }
 
 
