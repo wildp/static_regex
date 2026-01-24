@@ -23,7 +23,7 @@ namespace
         char tmp{ std::numeric_limits<char>::min() };
         for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
         {
-            result.insert(tmp, sv[i]);
+            result.insert(tmp, sv[i]);  
             tmp = sv[i + 1];
         }
         result.insert(tmp, std::numeric_limits<char>::max());
@@ -52,9 +52,16 @@ namespace
         return make_bs(arg) == make_bs(result);
     }
 
-    consteval bool test_compl_ext(const char* arg, const char* result)
+    consteval bool test_compl_empty()
     {
-        return (~make_bs(arg)) == make_bs(result);
+        using bcs = rx::detail::bitcharset<char>;
+        return (~bcs{}) == bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max() }};
+    }
+
+    consteval bool test_compl_full()
+    {
+        using bcs = rx::detail::bitcharset<char>;
+        return (~bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max()  }}) == bcs{};
     }
 
     consteval bool test_compl(const char* arg, const char* result)
@@ -120,9 +127,9 @@ static_assert(test_ident("abcd", "ad"));
 static_assert(test_ident("abde", "abde"));
 static_assert(test_ident("deab", "abde"));
 
-/* complement tests (implementation defined) */
-static_assert(test_compl_ext("", "\x80\x7f"));
-static_assert(test_compl_ext("\x80\x7f", ""));
+/* complement tests (entire range) */
+static_assert(test_compl_full());
+static_assert(test_compl_empty());
 
 /* complement tests */
 static_assert(test_compl("", ""));

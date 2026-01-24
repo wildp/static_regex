@@ -27,6 +27,7 @@ namespace rx::detail
         static constexpr std::size_t integer_bits{ std::numeric_limits<integer_type>::digits };
         static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
         static constexpr std::size_t array_size{ total_size / integer_bits };
+        static constexpr std::size_t min_offset{ (std::is_signed_v<CharT>) ? (array_size / 2) : 0z };
 
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
@@ -73,7 +74,7 @@ namespace rx::detail
         [[nodiscard]] constexpr bool contains(char_type c) const noexcept
         {
             /* widen to accommodate signed chars */
-            const auto input{ static_cast<int>(c) - std::numeric_limits<char_type>::min() };
+            const int input{ static_cast<std::make_unsigned_t<char_type>>(c) };
 
             return data_[input / integer_bits] & (0b1uz << (input % integer_bits));
         }
@@ -89,7 +90,7 @@ namespace rx::detail
 
             for (std::size_t i{ 0 }; i < array_size; ++i)
             {
-                integer_type tmp{ data_[i] };
+                integer_type tmp{ data_[(i + min_offset) % array_size] };
                 int offset{ 0 };
 
                 while (true)
@@ -110,10 +111,10 @@ namespace rx::detail
                     position += ones;
                     offset += ones;
 
-                    if (not result.empty() and result.back().second == prev_pos - 1)
-                        result.back().second = position - 1;
+                    if (not result.empty() and result.back().second == static_cast<char_type>(prev_pos - 1))
+                        result.back().second = static_cast<char_type>(position - 1);
                     else
-                        result.emplace_back(prev_pos, position - 1);
+                        result.emplace_back(prev_pos, static_cast<char_type>(position - 1));
 
                     if (offset >= offset_max)
                         break;
@@ -143,7 +144,7 @@ namespace rx::detail
         constexpr void insert(char_type c) noexcept
         {
             /* widen to accommodate signed chars */
-            const auto input{ static_cast<int>(c) - std::numeric_limits<char_type>::min() };
+            const int input{ static_cast<std::make_unsigned_t<char_type>>(c) };
 
             data_[input / integer_bits] |= 0b1uz << (input % integer_bits);
         }
@@ -151,8 +152,8 @@ namespace rx::detail
         constexpr void insert(char_type first, char_type last) noexcept /* preconditions: first <= last */
         {
             /* widen to accommodate signed chars and to ensure last + 1 > last */
-            const auto beg{ static_cast<int>(first) - std::numeric_limits<char_type>::min() };
-            const auto end{ static_cast<int>(last) - std::numeric_limits<char_type>::min() + 1 };
+            const int beg{ static_cast<int>(first) - std::numeric_limits<char_type>::min() };
+            const int end{ static_cast<int>(last) - std::numeric_limits<char_type>::min() + 1 };
 
             const std::size_t select1{ (beg / integer_bits) };
             const std::size_t select2{ (end / integer_bits) };
@@ -161,8 +162,8 @@ namespace rx::detail
 
             for (std::size_t i{ 0 }; i < array_size; ++i)
             {
-                data_[i] |= (((i == select1) * mask1) | ((i < select1) * ~0uz))
-                    ^ (((i == select2) * mask2) | ((i < select2) * ~0uz));
+                data_[(i + min_offset) % array_size] |= (((i == select1) * mask1) | ((i < select1) * ~0uz))
+                                                        ^ (((i == select2) * mask2) | ((i < select2) * ~0uz));
             }
         }
 
@@ -245,10 +246,10 @@ namespace rx::detail
 
         constexpr void make_ascii_case_insensitive() noexcept requires std::same_as<char_type, char>
         {
-            static constexpr auto uppercase_beg{ static_cast<int>('a') - std::numeric_limits<char>::min() };
-            static constexpr auto uppercase_end{ static_cast<int>('z') - std::numeric_limits<char>::min() + 1 };
-            static constexpr auto lowercase_beg{ static_cast<int>('A') - std::numeric_limits<char>::min() };
-            static constexpr auto lowercase_end{ static_cast<int>('Z') - std::numeric_limits<char>::min() + 1 };
+            static constexpr int uppercase_beg{ static_cast<std::make_unsigned_t<char_type>>('a') };
+            static constexpr int uppercase_end{ static_cast<int>(static_cast<std::make_unsigned_t<char_type>>('z')) + 1 };
+            static constexpr int lowercase_beg{ static_cast<std::make_unsigned_t<char_type>>('A') };
+            static constexpr int lowercase_end{ static_cast<int>(static_cast<std::make_unsigned_t<char_type>>('Z')) + 1 };
 
             /* ensure that A-Za-z lies in the same integer_t in bitcharset<char> */
             static constexpr auto index{ uppercase_beg / integer_bits };

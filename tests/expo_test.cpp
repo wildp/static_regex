@@ -19,8 +19,10 @@ namespace
 
         if (captures.empty())
             return match_result.has_value();
+        else if (match_result.has_value())
+            return std::ranges::equal(*match_result | std::views::drop(2), captures);
         else
-            return std::ranges::equal(match_result.value() | std::views::drop(2), captures);
+            return false;
     }
 }
 

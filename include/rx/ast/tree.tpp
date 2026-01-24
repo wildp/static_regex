@@ -335,9 +335,8 @@ namespace rx::detail
     {
         /* make true wildcard */
         const std::size_t wildcard_idx{ expressions_.size() };
-        using uct = char_class::underlying_char_type;
-        char_class cc{ false };
-        cc.data.insert(std::numeric_limits<uct>::min(), std::numeric_limits<uct>::max());
+        char_class cc{ true };
+        cc.data.normalise();
         expressions_.emplace_back(std::in_place_type<char_class>, std::move(cc));
 
         /* make lazy repeater of wildcard */

@@ -324,9 +324,8 @@ namespace rx::testing
                             input = *s.it++;
                         }
 
-                        for (const auto& [lower, upper] : cla.data.intervals())
-                            if (lower <= input and input <= upper)
-                                return rc::match_continue;
+                        if (cla.data.get().contains(input))
+                            return rc::match_continue;
                         return rc::match_failure;
                     }
                 });
