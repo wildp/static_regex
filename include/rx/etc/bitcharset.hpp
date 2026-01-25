@@ -64,6 +64,14 @@ namespace rx::detail
             return (result == 0);
         }
 
+        [[nodiscard]] constexpr bool full() const noexcept
+        {
+            std::size_t result{ 0uz };
+            for (std::size_t i{ 0 }; i < array_size; ++i)
+                result |= ~data_[i];
+            return (result == 0);
+        }
+
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };

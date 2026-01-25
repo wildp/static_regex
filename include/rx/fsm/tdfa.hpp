@@ -101,10 +101,17 @@ namespace rx::detail::tdfa
         charset_t<CharT> cs;
     };
 
+    struct default_transition
+    {
+        std::size_t next;
+        std::size_t op_index; /* use no_transition_regops for no ops */
+    };
+
     template<typename CharT>
     struct node
     {
         std::vector<transition<CharT>> tr;
+        std::optional<default_transition> default_tr;
     };
 }
 
@@ -119,6 +126,7 @@ namespace rx::detail
         explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
         constexpr void minimise_states();
+        constexpr void minimise_transitions();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;

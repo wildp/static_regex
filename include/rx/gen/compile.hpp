@@ -124,6 +124,15 @@ namespace rx::detail
             };
         }
 
+        static consteval auto make_default_transitions(const std::vector<tdfa::node<char_type>>& ns)
+        {
+            std::flat_map<std::size_t, tdfa::default_transition> result;
+            for (std::size_t i{ 0 }; i < ns.size(); ++i)
+                if (const auto& n{ ns[i] }; n.default_tr.has_value())
+                    result.emplace_hint(result.end(), i, *n.default_tr);
+            return result;
+        }
+
     public:
         explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa)
             : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
@@ -132,6 +141,7 @@ namespace rx::detail
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
               final_registers{ dfa.final_registers() },
+              default_transitions{ make_default_transitions(dfa.nodes_) },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
@@ -142,6 +152,7 @@ namespace rx::detail
         static_span<std::size_t> continue_nodes;
         static_map<std::size_t, tdfa::final_node_info> final_nodes;
         static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
+        static_map<std::size_t, tdfa::default_transition> default_transitions;
         static_span<tdfa::reg_t> final_registers;
 
         std::size_t register_count{ 0 };
@@ -171,6 +182,7 @@ namespace rx::detail
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
         dfa.minimise_states();
+        if (f.is_search) dfa.minimise_transitions();
 
         return tdfa_info{ dfa };
     }

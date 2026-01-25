@@ -40,6 +40,13 @@ namespace rx::detail
             return data_.empty();
         }
 
+        [[nodiscard]] constexpr bool full() const noexcept
+        {
+            return data_.size() == 1
+                   and data_[0].first == std::numeric_limits<CharT>::min()
+                   and data_[0].second == std::numeric_limits<CharT>::max();
+        }
+
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };

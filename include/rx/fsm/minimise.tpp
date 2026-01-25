@@ -275,4 +275,39 @@ namespace rx::detail
     {
         std::invoke(tdfa::min<char_type>{}, *this);
     }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::minimise_transitions()
+    {
+        using tr_type = tdfa::transition<char_type>;
+
+        for (auto& node : nodes_)
+        {
+            if (node.tr.empty())
+                continue;
+
+            const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+
+            auto& largest{ node.tr[largest_index] };
+            tdfa::charset_t<char_type> largest_cs{ largest.cs };
+            std::vector<tr_type> new_tr;
+            
+            for (std::size_t i{ 0 }; i < node.tr.size(); ++i)
+            {
+                if (i == largest_index)
+                    continue;
+
+                largest_cs |= node.tr[i].cs;
+                new_tr.emplace_back(std::move(node.tr[i]));                
+            }
+
+            if (largest_cs.full())
+                node.default_tr = { .next = largest.next, .op_index = largest.op_index };
+            else
+                new_tr.emplace_back(std::move(largest));
+
+            node.tr = std::move(new_tr);
+        }
+    }
 }

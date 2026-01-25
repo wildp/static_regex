@@ -176,6 +176,14 @@ namespace rx::testing
 
                 if (success)
                     continue; /* outer */
+
+                if (const auto& dt{ this->get_node(next_state).default_tr }; dt.has_value())
+                {
+                    next_state = dt->next;
+                    regops_implementation(it, dt->op_index, registers, registers_enabled);
+                    ++it;
+                    continue; /* outer */
+                }
             }
 
             if (not enable_fallback or fallback_state == fallback_disabled)

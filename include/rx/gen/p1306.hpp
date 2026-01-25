@@ -166,6 +166,13 @@ namespace rx::detail
                         [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
                     }
                 }
+
+                // TODO: reimplement using std::optional<T&> accessor?
+                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+                {
+                    register_operations<(*dt).second.op_index>(it, res);
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
+                }
             }
 
             if constexpr (Flags.enable_fallback)
@@ -244,6 +251,10 @@ namespace rx::detail
                     if (tr_possible<tr>(*it))
                         [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
                 }
+
+                // TODO: reimplement using std::optional<T&> accessor?
+                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
             }
 
             if constexpr (Flags.enable_fallback)

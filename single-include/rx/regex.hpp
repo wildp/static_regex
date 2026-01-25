@@ -1064,6 +1064,14 @@ namespace rx::detail
             return (result == 0);
         }
 
+        [[nodiscard]] constexpr bool full() const noexcept
+        {
+            std::size_t result{ 0uz };
+            for (std::size_t i{ 0 }; i < array_size; ++i)
+                result |= ~data_[i];
+            return (result == 0);
+        }
+
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };
@@ -1487,6 +1495,13 @@ namespace rx::detail
         [[nodiscard]] constexpr bool empty() const noexcept
         {
             return data_.empty();
+        }
+
+        [[nodiscard]] constexpr bool full() const noexcept
+        {
+            return data_.size() == 1
+                   and data_[0].first == std::numeric_limits<CharT>::min()
+                   and data_[0].second == std::numeric_limits<CharT>::max();
         }
 
         [[nodiscard]] constexpr std::size_t count() const noexcept
@@ -2556,6 +2571,13 @@ namespace rx::detail
         [[nodiscard]] constexpr bool empty() const noexcept
         {
             return data_.empty();
+        }
+
+        [[nodiscard]] constexpr bool full() const noexcept
+        {
+            return data_.size() == 1
+                   and data_[0].first == std::numeric_limits<CharT>::min()
+                   and data_[0].second == std::numeric_limits<CharT>::max();
         }
 
         [[nodiscard]] constexpr std::size_t count() const noexcept
@@ -7280,10 +7302,17 @@ namespace rx::detail::tdfa
         charset_t<CharT> cs;
     };
 
+    struct default_transition
+    {
+        std::size_t next;
+        std::size_t op_index; /* use no_transition_regops for no ops */
+    };
+
     template<typename CharT>
     struct node
     {
         std::vector<transition<CharT>> tr;
+        std::optional<default_transition> default_tr;
     };
 }
 
@@ -7298,6 +7327,7 @@ namespace rx::detail
         explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
         constexpr void minimise_states();
+        constexpr void minimise_transitions();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;
@@ -8946,6 +8976,41 @@ namespace rx::detail
     {
         std::invoke(tdfa::min<char_type>{}, *this);
     }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::minimise_transitions()
+    {
+        using tr_type = tdfa::transition<char_type>;
+
+        for (auto& node : nodes_)
+        {
+            if (node.tr.empty())
+                continue;
+
+            const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+
+            auto& largest{ node.tr[largest_index] };
+            tdfa::charset_t<char_type> largest_cs{ largest.cs };
+            std::vector<tr_type> new_tr;
+
+            for (std::size_t i{ 0 }; i < node.tr.size(); ++i)
+            {
+                if (i == largest_index)
+                    continue;
+
+                largest_cs |= node.tr[i].cs;
+                new_tr.emplace_back(std::move(node.tr[i]));                
+            }
+
+            if (largest_cs.full())
+                node.default_tr = { .next = largest.next, .op_index = largest.op_index };
+            else
+                new_tr.emplace_back(std::move(largest));
+
+            node.tr = std::move(new_tr);
+        }
+    }
 }
 
 namespace rx::detail
@@ -9052,6 +9117,15 @@ namespace rx::detail
             };
         }
 
+        static consteval auto make_default_transitions(const std::vector<tdfa::node<char_type>>& ns)
+        {
+            std::flat_map<std::size_t, tdfa::default_transition> result;
+            for (std::size_t i{ 0 }; i < ns.size(); ++i)
+                if (const auto& n{ ns[i] }; n.default_tr.has_value())
+                    result.emplace_hint(result.end(), i, *n.default_tr);
+            return result;
+        }
+
     public:
         explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa)
             : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
@@ -9060,6 +9134,7 @@ namespace rx::detail
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
               final_registers{ dfa.final_registers() },
+              default_transitions{ make_default_transitions(dfa.nodes_) },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
@@ -9070,6 +9145,7 @@ namespace rx::detail
         static_span<std::size_t> continue_nodes;
         static_map<std::size_t, tdfa::final_node_info> final_nodes;
         static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
+        static_map<std::size_t, tdfa::default_transition> default_transitions;
         static_span<tdfa::reg_t> final_registers;
 
         std::size_t register_count{ 0 };
@@ -9098,6 +9174,7 @@ namespace rx::detail
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
         dfa.minimise_states();
+        if (f.is_search) dfa.minimise_transitions();
 
         return tdfa_info{ dfa };
     }
@@ -9601,6 +9678,12 @@ namespace rx::detail
                         [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
                     }
                 }
+
+                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+                {
+                    register_operations<(*dt).second.op_index>(it, res);
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
+                }
             }
 
             if constexpr (Flags.enable_fallback)
@@ -9677,6 +9760,9 @@ namespace rx::detail
                     if (tr_possible<tr>(*it))
                         [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
                 }
+
+                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
             }
 
             if constexpr (Flags.enable_fallback)
