@@ -49,8 +49,8 @@ namespace rx::detail
                 }
             }
 
-            captures = std::define_static_array(captures_tmp);
-            overflow = std::define_static_array(overflow_tmp);
+            captures = static_span{ captures_tmp };
+            overflow = static_span{ overflow_tmp };
         }
 
         [[nodiscard]] consteval std::size_t capture_count() const noexcept
@@ -74,8 +74,8 @@ namespace rx::detail
         }
 
         /* data members (public so that final_capture_info is structural) */
-        static_span<const capture_info::tag_pair_t> captures; /* use invalid tag pairs to point towards overflow being used */
-        static_span<const capture_info::tag_pair_t> overflow;
+        static_span<capture_info::tag_pair_t> captures; /* use invalid tag pairs to point towards overflow being used */
+        static_span<capture_info::tag_pair_t> overflow;
     };
 
     struct register_operation
@@ -91,7 +91,7 @@ namespace rx::detail
     {
         std::size_t next;
         std::size_t op_index;
-        static_span<const std::pair<CharT, CharT>> cs;
+        static_span<std::pair<CharT, CharT>> cs;
     };
 
     template<typename CharT>
@@ -102,17 +102,17 @@ namespace rx::detail
     private:
         static consteval auto make_static_transition(const tdfa::transition<char_type>& tr)
         {
-            return static_transition{ tr.next, tr.op_index, static_span{ std::define_static_array(tr.cs.get_intervals()) } };
+            return static_transition{ tr.next, tr.op_index, static_span{ tr.cs.get_intervals() } };
         }
 
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)
         {
-            return static_span<const static_transition<char_type>>{ std::define_static_array(n.tr | std::views::transform(make_static_transition)) };
+            return static_span{ n.tr | std::views::transform(make_static_transition) };
         }
 
-        static consteval auto make_register_operations(const tdfa::regops_t& o) -> static_span<const register_operation>
+        static consteval auto make_register_operations(const tdfa::regops_t& o)
         {
-            return std::define_static_array(o | std::views::transform(
+            return static_span{ o | std::views::transform(
                 [](const tdfa::regop& op) consteval -> register_operation {
                     if (const auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
                         return { .dst = op.dst, .cpy_src = 0, .set_val = set->val, .is_copy = false };
@@ -120,33 +120,29 @@ namespace rx::detail
                         return { .dst = op.dst, .cpy_src = cpy->src, .set_val = false, .is_copy = true };
                     else
                         std::unreachable();
-                }
-            ));
+                })
+            };
         }
 
     public:
         explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa)
-            : nodes{ std::define_static_array(dfa.nodes_ | std::views::transform(make_node_transitions)) },
-              regops{ std::define_static_array(dfa.regops_ | std::views::transform(make_register_operations)) },
-              continue_nodes{ std::define_static_array(dfa.continue_nodes()) },
-              final_nodes{ std::define_static_array(dfa.final_nodes().keys()) },
-              final_node_regops{ std::define_static_array(dfa.final_nodes().values()) },
-              fallback_nodes{ std::define_static_array(dfa.fallback_nodes().keys()) },
-              fallback_node_regops{ std::define_static_array(dfa.fallback_nodes().values()) },
-              final_registers{ std::define_static_array(dfa.final_registers()) },
+            : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
+              regops{ dfa.regops_ | std::views::transform(make_register_operations) },
+              continue_nodes{ dfa.continue_nodes() },
+              final_nodes{ dfa.final_nodes() },
+              fallback_nodes{ dfa.fallback_nodes() },
+              final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
 
         /* data members (public so that tdfa_info is structural) */
-        static_span<const static_span<const static_transition<char_type>>> nodes;
-        static_span<const static_span<const register_operation>> regops;
-        static_span<const std::size_t> continue_nodes;
-        static_span<const std::size_t> final_nodes;
-        static_span<const tdfa::final_node_info> final_node_regops;
-        static_span<const std::size_t> fallback_nodes;
-        static_span<const tdfa::fallback_node_info> fallback_node_regops;
-        static_span<const tdfa::reg_t> final_registers;
+        static_span<static_span<static_transition<char_type>>> nodes;
+        static_span<static_span<register_operation>> regops;
+        static_span<std::size_t> continue_nodes;
+        static_map<std::size_t, tdfa::final_node_info> final_nodes;
+        static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
+        static_span<tdfa::reg_t> final_registers;
 
         std::size_t register_count{ 0 };
         std::size_t match_start{ 0 };

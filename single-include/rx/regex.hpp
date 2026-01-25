@@ -2352,13 +2352,12 @@ namespace rx::detail
 
 namespace rx::detail
 {
-    template<class T>
-    requires std::is_const_v<T>
+    template<typename T>
     class static_span
     {
     public:
         /* types */
-        using element_type           = T;
+        using element_type           = std::add_const_t<T>;
         using value_type             = std::remove_cv_t<element_type>;
         using size_type              = std::size_t;
         using difference_type        = std::ptrdiff_t;
@@ -2372,19 +2371,16 @@ namespace rx::detail
         using reverse_iterator       = const_reverse_iterator;
 
         /* constructors and assignment */
-        constexpr static_span() noexcept = default;
+        consteval static_span() noexcept = default;
 
         template<std::size_t N = std::dynamic_extent>
-        consteval static_span(std::span<T, N> span) noexcept
+        consteval static_span(std::span<element_type, N> span) noexcept
             : data_{ span.data() }, size_{ span.size() } {}
 
-        template<std::size_t N = std::dynamic_extent>
-        consteval static_span& operator=(std::span<T, N> span) noexcept
-        {
-            data_ = span.data();
-            size_ = span.size();
-            return *this;
-        }
+        template<typename R>
+        requires (not std::same_as<R, static_span>)
+        consteval static_span(R&& r) noexcept
+            :  static_span(std::define_static_array(std::forward<R>(r))) {}
 
         /* size observers */
         [[nodiscard]] constexpr size_type size() const noexcept { return size_; }
@@ -2422,7 +2418,99 @@ namespace rx::detail
     };
 
     template<class R>
-    static_span(R&&) -> static_span<std::add_const_t<std::remove_reference_t<std::ranges::range_reference_t<R>>>>;
+    static_span(R&&) -> static_span<std::remove_reference_t<std::ranges::range_reference_t<R>>>;
+
+    template<typename Key, typename T, typename Compare = std::less<std::remove_cv_t<Key>>>
+    class static_map
+    {
+    public:
+        /* types */
+        using key_type               = Key;
+        using mapped_type            = T;
+        using element_type           = const std::pair<key_type, mapped_type>;
+        using value_type             = std::remove_cv_t<element_type>;
+        using key_compare            = Compare;
+        using const_reference        = const value_type&;
+        using reference              = const_reference;
+        using size_type              = size_t;
+        using difference_type        = ptrdiff_t;
+        using const_iterator         = const value_type*;
+        using iterator               = const_iterator;
+        using reverse_iterator       = std::reverse_iterator<iterator>;
+        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+        /* constructors and assignment */
+        consteval static_map() noexcept : static_map(key_compare()) {}
+        consteval explicit static_map(const key_compare& comp) noexcept : data_{} , compare_{ comp } {}
+
+        template<typename K, typename V, typename Cmp, typename KeyCont, typename MappedCont>
+        consteval explicit static_map(const std::flat_map<K, V, Cmp, KeyCont, MappedCont>& map)
+            : data_{ std::vector<value_type>{ std::from_range, map } }, compare_{ map.key_comp() } {}
+
+        /* size and other observers */
+        [[nodiscard]] constexpr bool empty() const noexcept { return data_.keys.empty(); }
+        [[nodiscard]] constexpr size_type size() const noexcept { return data_.keys.size(); }
+        [[nodiscard]] constexpr key_compare key_comp() const { return compare_; }
+
+        /* iterators */
+        [[nodiscard]] constexpr const_iterator begin() const noexcept { return data_.begin(); }
+        [[nodiscard]] constexpr const_iterator end() const noexcept { return data_.end(); }
+        [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return this->begin(); }
+        [[nodiscard]] constexpr const_iterator cend() const noexcept { return this->end(); }
+        [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(this->begin()); }
+        [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept { return std::make_reverse_iterator(this->end()); }
+        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept { return this->rbegin(); }
+        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept { return this->rend(); }
+
+        /* element access */
+        [[nodiscard]] constexpr const mapped_type& at(const key_type& x) const
+        {
+            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
+                throw std::out_of_range("static_map::at");
+            return it->second;
+        }
+
+        /* map operations */
+        [[nodiscard]] constexpr const_iterator find(const key_type& x) const
+        {
+            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
+                return data_.end();
+            return it;
+        }
+
+        [[nodiscard]] constexpr size_type count(const key_type& x) const
+        {
+            return this->contains(x);
+        }
+
+        [[nodiscard]] constexpr bool contains(const key_type& x) const
+        {
+            return std::ranges::binary_search(data_, x, compare_, &element_type::first);
+        }
+
+        [[nodiscard]] constexpr const_iterator lower_bound(const key_type& x) const
+        {
+            return std::ranges::lower_bound(data_, x, compare_, &element_type::first);
+        }
+
+        [[nodiscard]] constexpr const_iterator upper_bound(const key_type& x) const
+        {
+            return std::ranges::upper_bound(data_, x, compare_, &element_type::first);
+        }
+
+        [[nodiscard]] constexpr std::pair<const_iterator, const_iterator> equal_range(const key_type& x) const
+        {
+            return std::ranges::equal_range(data_, x, compare_, &element_type::first);
+        }
+
+        static_span<element_type> data_;
+        [[no_unique_address]] key_compare compare_;
+    };
+
+    template<typename K, typename V, typename C, typename KeyCont, typename MappedCont>
+    static_map(const std::flat_map<const K, V, C, KeyCont, MappedCont>& mapped_cont) -> static_map<const K, V, C>;
 }
 
 namespace rx::detail
@@ -2444,7 +2532,7 @@ namespace rx::detail
         consteval static_charset() noexcept = default;
 
         consteval explicit static_charset(const charset_type& cs)
-            : data_{ std::define_static_array(cs.data_) } {}
+            : data_{ cs.data_ } {}
 
         template<typename... Args>
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
@@ -2460,7 +2548,7 @@ namespace rx::detail
                     tmp.insert(args...[i].first, args...[i].second);
             }
 
-            data_ = std::define_static_array(tmp.data_);
+            data_ = static_span{ tmp.data_ };
         }
 
         /* observers */
@@ -2486,7 +2574,7 @@ namespace rx::detail
             return c >= it->first;
         }
 
-        [[nodiscard]] constexpr const static_span<const char_interval>& get_intervals() const noexcept
+        [[nodiscard]] constexpr const static_span<char_interval>& get_intervals() const noexcept
         {
             return data_;
         }
@@ -2560,7 +2648,7 @@ namespace rx::detail
         }
 
     private:
-        static_span<const char_interval> data_;
+        static_span<char_interval> data_;
     };
 
     template<typename T>
@@ -8889,8 +8977,8 @@ namespace rx::detail
                 }
             }
 
-            captures = std::define_static_array(captures_tmp);
-            overflow = std::define_static_array(overflow_tmp);
+            captures = static_span{ captures_tmp };
+            overflow = static_span{ overflow_tmp };
         }
 
         [[nodiscard]] consteval std::size_t capture_count() const noexcept
@@ -8914,8 +9002,8 @@ namespace rx::detail
         }
 
         /* data members (public so that final_capture_info is structural) */
-        static_span<const capture_info::tag_pair_t> captures; /* use invalid tag pairs to point towards overflow being used */
-        static_span<const capture_info::tag_pair_t> overflow;
+        static_span<capture_info::tag_pair_t> captures; /* use invalid tag pairs to point towards overflow being used */
+        static_span<capture_info::tag_pair_t> overflow;
     };
 
     struct register_operation
@@ -8931,7 +9019,7 @@ namespace rx::detail
     {
         std::size_t next;
         std::size_t op_index;
-        static_span<const std::pair<CharT, CharT>> cs;
+        static_span<std::pair<CharT, CharT>> cs;
     };
 
     template<typename CharT>
@@ -8942,17 +9030,17 @@ namespace rx::detail
     private:
         static consteval auto make_static_transition(const tdfa::transition<char_type>& tr)
         {
-            return static_transition{ tr.next, tr.op_index, static_span{ std::define_static_array(tr.cs.get_intervals()) } };
+            return static_transition{ tr.next, tr.op_index, static_span{ tr.cs.get_intervals() } };
         }
 
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)
         {
-            return static_span<const static_transition<char_type>>{ std::define_static_array(n.tr | std::views::transform(make_static_transition)) };
+            return static_span{ n.tr | std::views::transform(make_static_transition) };
         }
 
-        static consteval auto make_register_operations(const tdfa::regops_t& o) -> static_span<const register_operation>
+        static consteval auto make_register_operations(const tdfa::regops_t& o)
         {
-            return std::define_static_array(o | std::views::transform(
+            return static_span{ o | std::views::transform(
                 [](const tdfa::regop& op) consteval -> register_operation {
                     if (const auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
                         return { .dst = op.dst, .cpy_src = 0, .set_val = set->val, .is_copy = false };
@@ -8960,33 +9048,29 @@ namespace rx::detail
                         return { .dst = op.dst, .cpy_src = cpy->src, .set_val = false, .is_copy = true };
                     else
                         std::unreachable();
-                }
-            ));
+                })
+            };
         }
 
     public:
         explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa)
-            : nodes{ std::define_static_array(dfa.nodes_ | std::views::transform(make_node_transitions)) },
-              regops{ std::define_static_array(dfa.regops_ | std::views::transform(make_register_operations)) },
-              continue_nodes{ std::define_static_array(dfa.continue_nodes()) },
-              final_nodes{ std::define_static_array(dfa.final_nodes().keys()) },
-              final_node_regops{ std::define_static_array(dfa.final_nodes().values()) },
-              fallback_nodes{ std::define_static_array(dfa.fallback_nodes().keys()) },
-              fallback_node_regops{ std::define_static_array(dfa.fallback_nodes().values()) },
-              final_registers{ std::define_static_array(dfa.final_registers()) },
+            : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
+              regops{ dfa.regops_ | std::views::transform(make_register_operations) },
+              continue_nodes{ dfa.continue_nodes() },
+              final_nodes{ dfa.final_nodes() },
+              fallback_nodes{ dfa.fallback_nodes() },
+              final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
 
         /* data members (public so that tdfa_info is structural) */
-        static_span<const static_span<const static_transition<char_type>>> nodes;
-        static_span<const static_span<const register_operation>> regops;
-        static_span<const std::size_t> continue_nodes;
-        static_span<const std::size_t> final_nodes;
-        static_span<const tdfa::final_node_info> final_node_regops;
-        static_span<const std::size_t> fallback_nodes;
-        static_span<const tdfa::fallback_node_info> fallback_node_regops;
-        static_span<const tdfa::reg_t> final_registers;
+        static_span<static_span<static_transition<char_type>>> nodes;
+        static_span<static_span<register_operation>> regops;
+        static_span<std::size_t> continue_nodes;
+        static_map<std::size_t, tdfa::final_node_info> final_nodes;
+        static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
+        static_span<tdfa::reg_t> final_registers;
 
         std::size_t register_count{ 0 };
         std::size_t match_start{ 0 };
@@ -9265,10 +9349,6 @@ namespace rx
     template<bool Const>
     class static_regex_match_result<I, Pattern, Flags>::proxy_iterator
     {
-        friend class static_regex_match_result;
-
-        using Parent      = static_regex_match_result;
-
     public:
         using iterator_concept  = std::random_access_iterator_tag;
         using iterator_category = std::input_iterator_tag;
@@ -9281,7 +9361,7 @@ namespace rx
 
         proxy_iterator() = default;
 
-        constexpr proxy_iterator(const Parent* ptr, std::size_t pos)
+        constexpr proxy_iterator(const static_regex_match_result* ptr, std::size_t pos)
             : ptr_{ ptr }, pos_{ pos } {}
 
         constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) requires Const
@@ -9335,32 +9415,32 @@ namespace rx
             return *this;
         }
 
-        constexpr friend bool operator==(const proxy_iterator&, const proxy_iterator&) = default;
+        friend constexpr bool operator==(const proxy_iterator&, const proxy_iterator&) = default;
 
-        constexpr friend auto operator<=>(const proxy_iterator&, const proxy_iterator&) = default;
+        friend constexpr auto operator<=>(const proxy_iterator&, const proxy_iterator&) = default;
 
-        constexpr friend proxy_iterator operator+(const proxy_iterator& i, difference_type n)
+        friend constexpr proxy_iterator operator+(const proxy_iterator& i, difference_type n)
         {
             return { i.ptr_, i.pos_ + n };
         }
 
-        constexpr friend proxy_iterator operator+(difference_type n, const proxy_iterator& i)
+        friend constexpr proxy_iterator operator+(difference_type n, const proxy_iterator& i)
         {
             return { i.ptr_, n + i.pos_ };
         }
 
-        constexpr friend proxy_iterator operator-(const proxy_iterator& i, difference_type n)
+        friend constexpr proxy_iterator operator-(const proxy_iterator& i, difference_type n)
         {
             return { i.ptr_, i.pos_ - n };
         }
 
-        constexpr friend difference_type operator-(const proxy_iterator& x, const proxy_iterator& y)
+        friend constexpr difference_type operator-(const proxy_iterator& x, const proxy_iterator& y)
         {
             return y.pos_ - x.pos_;
         }
 
     private:
-        const Parent* ptr_{ nullptr };
+        const static_regex_match_result* ptr_{ nullptr };
         std::size_t pos_{ 0 };
     };
 }
@@ -9465,17 +9545,13 @@ namespace rx::detail
             if (fallback_state == fallback_disabled)
                 return;
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
+            template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
             {
-                static constexpr auto state{ dfa_t::value.fallback_nodes[i] };
-                if (fallback_state == state)
+                if (fallback_state == pair.first)
                 {
-                    static constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, state) };
-                    static_assert(key != dfa_t::value.final_nodes.end() and *key == state);
-                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
-                    static constexpr auto fbni{ dfa_t::value.fallback_node_regops.at(i) };
+                    static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
 
-                    register_operations<fbni.op_index>(fallback_it, res);
+                    register_operations<pair.second.op_index>(fallback_it, res);
                     res.value.match_end_ = std::ranges::prev(fallback_it, fni.final_offset);
 
                     if constexpr (not std::contiguous_iterator<I>)
@@ -9483,8 +9559,8 @@ namespace rx::detail
 
                     if constexpr (Flags.is_iterator)
                     {
-                        if constexpr (fbni.continue_at != tdfa::no_continue)
-                            res.value.continue_at_ = fbni.continue_at;
+                        if constexpr (pair.second.continue_at != tdfa::no_continue)
+                            res.value.continue_at_ = pair.second.continue_at;
                     }
 
                     return;
@@ -9495,7 +9571,7 @@ namespace rx::detail
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr void state(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
         {
-            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
                 fallback_state = DFAState;
                 fallback_it = it;
@@ -9503,13 +9579,11 @@ namespace rx::detail
 
             if (it == last)
             {
-                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
-                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
-                {
-                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
 
-                    register_operations<fni.op_index>(it, res);
-                    res.value.match_end_ = std::ranges::prev(it, fni.final_offset);
+                if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
+                {
+                    register_operations<(*fn).second.op_index>(it, res);
+                    res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
 
                     if constexpr (not std::contiguous_iterator<I>)
                         res.value.match_success_ = true;
@@ -9576,9 +9650,9 @@ namespace rx::detail
             if (fallback_state == fallback_disabled)
                 return false;
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
+            template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
             {
-                if (fallback_state == dfa_t::value.fallback_nodes[i])
+                if (fallback_state == pair.first)
                     return true;
             }
 
@@ -9588,13 +9662,12 @@ namespace rx::detail
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(I it, const S last, std::size_t fallback_state)
         {
-            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
                 fallback_state = DFAState;
 
             if (it == last)
             {
-                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
-                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
+                if constexpr (dfa_t::value.final_nodes.contains(DFAState))
                     return true;
             }
             else

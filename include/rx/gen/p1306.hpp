@@ -109,17 +109,14 @@ namespace rx::detail
             if (fallback_state == fallback_disabled)
                 return;
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
+            // TODO: change to use structured binding when supported
+            template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
             {
-                static constexpr auto state{ dfa_t::value.fallback_nodes[i] };
-                if (fallback_state == state)
+                if (fallback_state == pair.first)
                 {
-                    static constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, state) };
-                    static_assert(key != dfa_t::value.final_nodes.end() and *key == state);
-                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
-                    static constexpr auto fbni{ dfa_t::value.fallback_node_regops.at(i) };
+                    static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
 
-                    register_operations<fbni.op_index>(fallback_it, res);
+                    register_operations<pair.second.op_index>(fallback_it, res);
                     res.value.match_end_ = std::ranges::prev(fallback_it, fni.final_offset);
 
                     if constexpr (not std::contiguous_iterator<I>)
@@ -127,8 +124,8 @@ namespace rx::detail
 
                     if constexpr (Flags.is_iterator)
                     {
-                        if constexpr (fbni.continue_at != tdfa::no_continue)
-                            res.value.continue_at_ = fbni.continue_at;
+                        if constexpr (pair.second.continue_at != tdfa::no_continue)
+                            res.value.continue_at_ = pair.second.continue_at;
                     }
 
                     return;
@@ -139,7 +136,7 @@ namespace rx::detail
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr void state(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
         {
-            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
                 fallback_state = DFAState;
                 fallback_it = it;
@@ -147,13 +144,11 @@ namespace rx::detail
 
             if (it == last)
             {
-                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
-                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
+                // TODO: reimplement using std::optional<T&> accessor?
+                if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
                 {
-                    static constexpr auto fni{ dfa_t::value.final_node_regops.at(key - dfa_t::value.final_nodes.begin()) };
-
-                    register_operations<fni.op_index>(it, res);
-                    res.value.match_end_ = std::ranges::prev(it, fni.final_offset);
+                    register_operations<(*fn).second.op_index>(it, res);
+                    res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
 
                     if constexpr (not std::contiguous_iterator<I>)
                         res.value.match_success_ = true;
@@ -221,9 +216,10 @@ namespace rx::detail
             if (fallback_state == fallback_disabled)
                 return false;
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.fallback_nodes.size()))
+            // TODO: change to use structured binding when supported
+            template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
             {
-                if (fallback_state == dfa_t::value.fallback_nodes[i])
+                if (fallback_state == pair.first)
                     return true;
             }
 
@@ -233,13 +229,12 @@ namespace rx::detail
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(I it, const S last, std::size_t fallback_state)
         {
-            if constexpr (Flags.enable_fallback and std::ranges::binary_search(dfa_t::value.fallback_nodes, DFAState))
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
                 fallback_state = DFAState;
    
             if (it == last)
             {
-                if constexpr (constexpr auto key{ std::ranges::lower_bound(dfa_t::value.final_nodes, DFAState) };
-                              key != dfa_t::value.final_nodes.end() and *key == DFAState)
+                if constexpr (dfa_t::value.final_nodes.contains(DFAState))
                     return true;
             }
             else

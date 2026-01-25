@@ -35,7 +35,7 @@ namespace rx::detail
         consteval static_charset() noexcept = default;
 
         consteval explicit static_charset(const charset_type& cs)
-            : data_{ std::define_static_array(cs.data_) } {}
+            : data_{ cs.data_ } {}
 
         template<typename... Args>
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
@@ -51,7 +51,7 @@ namespace rx::detail
                     tmp.insert(args...[i].first, args...[i].second);
             }
 
-            data_ = std::define_static_array(tmp.data_);
+            data_ = static_span{ tmp.data_ };
         }
 
 
@@ -78,7 +78,7 @@ namespace rx::detail
             return c >= it->first;
         }
 
-        [[nodiscard]] constexpr const static_span<const char_interval>& get_intervals() const noexcept
+        [[nodiscard]] constexpr const static_span<char_interval>& get_intervals() const noexcept
         {
             return data_;
         }
@@ -154,7 +154,7 @@ namespace rx::detail
         }
 
     private:
-        static_span<const char_interval> data_;
+        static_span<char_interval> data_;
     };
 
 

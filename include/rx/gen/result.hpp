@@ -263,10 +263,6 @@ namespace rx
     template<bool Const>
     class static_regex_match_result<I, Pattern, Flags>::proxy_iterator
     {
-        friend class static_regex_match_result;
-
-        using Parent      = static_regex_match_result;
-
     public:
         using iterator_concept  = std::random_access_iterator_tag;
         using iterator_category = std::input_iterator_tag;
@@ -279,7 +275,7 @@ namespace rx
 
         proxy_iterator() = default;
 
-        constexpr proxy_iterator(const Parent* ptr, std::size_t pos)
+        constexpr proxy_iterator(const static_regex_match_result* ptr, std::size_t pos)
             : ptr_{ ptr }, pos_{ pos } {}
 
         constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) requires Const
@@ -333,32 +329,32 @@ namespace rx
             return *this;
         }
 
-        constexpr friend bool operator==(const proxy_iterator&, const proxy_iterator&) = default;
+        friend constexpr bool operator==(const proxy_iterator&, const proxy_iterator&) = default;
 
-        constexpr friend auto operator<=>(const proxy_iterator&, const proxy_iterator&) = default;
+        friend constexpr auto operator<=>(const proxy_iterator&, const proxy_iterator&) = default;
 
-        constexpr friend proxy_iterator operator+(const proxy_iterator& i, difference_type n)
+        friend constexpr proxy_iterator operator+(const proxy_iterator& i, difference_type n)
         {
             return { i.ptr_, i.pos_ + n };
         }
 
-        constexpr friend proxy_iterator operator+(difference_type n, const proxy_iterator& i)
+        friend constexpr proxy_iterator operator+(difference_type n, const proxy_iterator& i)
         {
             return { i.ptr_, n + i.pos_ };
         }
 
-        constexpr friend proxy_iterator operator-(const proxy_iterator& i, difference_type n)
+        friend constexpr proxy_iterator operator-(const proxy_iterator& i, difference_type n)
         {
             return { i.ptr_, i.pos_ - n };
         }
 
-        constexpr friend difference_type operator-(const proxy_iterator& x, const proxy_iterator& y)
+        friend constexpr difference_type operator-(const proxy_iterator& x, const proxy_iterator& y)
         {
             return y.pos_ - x.pos_;
         }
 
     private:
-        const Parent* ptr_{ nullptr };
+        const static_regex_match_result* ptr_{ nullptr };
         std::size_t pos_{ 0 };
     };
 }
