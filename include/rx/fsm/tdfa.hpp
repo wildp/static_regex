@@ -90,6 +90,7 @@ namespace rx::detail::tdfa
 
     inline constexpr continue_at_t no_continue{ std::numeric_limits<continue_at_t>::max() };
     inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
+    inline constexpr std::size_t   default_transition_is_not_state{ std::numeric_limits<std::size_t>::max() - 1 };
 
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
 
@@ -99,12 +100,16 @@ namespace rx::detail::tdfa
         std::size_t next;
         std::size_t op_index; /* use no_transition_regops for no ops */
         charset_t<CharT> cs;
+
+        friend constexpr bool operator==(const transition&, const transition&) = default;
     };
 
     struct default_transition
     {
         std::size_t next;
-        std::size_t op_index; /* use no_transition_regops for no ops */
+        std::size_t op_index; /* use no_transition_regops for no ops, and default_transition_is_not_state for jumps */
+
+        friend constexpr bool operator==(const default_transition&, const default_transition&) = default;
     };
 
     template<typename CharT>
@@ -112,6 +117,8 @@ namespace rx::detail::tdfa
     {
         std::vector<transition<CharT>> tr;
         std::optional<default_transition> default_tr;
+
+        friend constexpr bool operator==(const node&, const node&) = default;
     };
 }
 
@@ -127,7 +134,8 @@ namespace rx::detail
         constexpr void optimise_registers();
         constexpr void minimise_states();
         constexpr void minimise_transition_edges();
-        constexpr void make_default_tr_if_possible();
+        constexpr void make_default_transitions();
+        constexpr void make_shared_transitions();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;

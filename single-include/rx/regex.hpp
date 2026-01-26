@@ -467,6 +467,53 @@ namespace rx::detail
     requires (I >= std::variant_size_v<V>)
     struct index_of_impl<V, T, I> {};
 
+    namespace hash
+    {
+        static constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
+        static constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
+
+        consteval std::size_t init() { return fnv_offset_basis; }
+
+        template<typename T>
+        concept memberwise_hashable = std::is_class_v<T> and not std::ranges::range<T>;
+
+        template<std::integral T>
+        constexpr void append(std::size_t& hash, const T& value);
+
+        template<std::ranges::range T>
+        constexpr void append(std::size_t& hash, T&& value);
+
+        template<memberwise_hashable T>
+        constexpr void append(std::size_t& hash, const T& value);
+
+        template<std::integral T>
+        constexpr void append(std::size_t& hash, const T& value)
+        {
+            for (unsigned char byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(value))
+            {
+                hash ^= byte;
+                hash *= fnv_prime;
+            }
+        }
+
+        template<std::ranges::range T>
+        constexpr void append(std::size_t& hash, T&& value)
+        {
+            for (auto&& elem : value)
+                append(hash, elem);
+        }
+
+        template<memberwise_hashable T>
+        constexpr void append(std::size_t& hash, const T& value)
+        {
+            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^T), std::meta::access_context::unchecked())))
+            {
+                const auto& ref = value.[:member:]; 
+                append(hash, ref);
+            }
+        }
+    };
+
     template<typename Derived>
     struct flag_base
     {
@@ -7452,6 +7499,7 @@ namespace rx::detail::tdfa
 
     inline constexpr continue_at_t no_continue{ std::numeric_limits<continue_at_t>::max() };
     inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
+    inline constexpr std::size_t   default_transition_is_not_state{ std::numeric_limits<std::size_t>::max() - 1 };
 
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
 
@@ -7461,12 +7509,16 @@ namespace rx::detail::tdfa
         std::size_t next;
         std::size_t op_index; /* use no_transition_regops for no ops */
         charset_t<CharT> cs;
+
+        friend constexpr bool operator==(const transition&, const transition&) = default;
     };
 
     struct default_transition
     {
         std::size_t next;
-        std::size_t op_index; /* use no_transition_regops for no ops */
+        std::size_t op_index; /* use no_transition_regops for no ops, and default_transition_is_not_state for jumps */
+
+        friend constexpr bool operator==(const default_transition&, const default_transition&) = default;
     };
 
     template<typename CharT>
@@ -7474,6 +7526,8 @@ namespace rx::detail::tdfa
     {
         std::vector<transition<CharT>> tr;
         std::optional<default_transition> default_tr;
+
+        friend constexpr bool operator==(const node&, const node&) = default;
     };
 }
 
@@ -7489,7 +7543,8 @@ namespace rx::detail
         constexpr void optimise_registers();
         constexpr void minimise_states();
         constexpr void minimise_transition_edges();
-        constexpr void make_default_tr_if_possible();
+        constexpr void make_default_transitions();
+        constexpr void make_shared_transitions();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;
@@ -9129,6 +9184,17 @@ namespace rx::detail::tdfa
                     result[i].emplace_back(j);
         return result;
     }
+
+    template<std::input_iterator I, std::sentinel_for<I> S, typename T>
+    constexpr std::size_t hash_node(I first, const S last, const std::optional<T>& opt)
+    {
+        std::size_t hash{ hash::init() };
+        for (; first != last; ++first)
+            hash::append(hash, *first);
+        if (opt.has_value())
+            hash::append(hash, *opt);
+        return hash;
+    }
 }
 
 namespace rx::detail
@@ -9210,7 +9276,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr void tagged_dfa<CharT>::make_default_tr_if_possible()
+    constexpr void tagged_dfa<CharT>::make_default_transitions()
     {
         using tr_type = tdfa::transition<char_type>;
 
@@ -9242,6 +9308,71 @@ namespace rx::detail
 
             node.tr = std::move(new_tr);
         }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::make_shared_transitions()
+    {
+        using node_type = tdfa::node<char_type>;
+
+        std::vector keys{ std::from_range, nodes_ | std::views::transform([](const node_type& n) { return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr); }) };
+        std::vector values{ std::from_range, std::views::iota(0uz, nodes_.size()) };
+
+        static constexpr auto value_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; 
+        std::ranges::sort(std::views::zip(keys, values), {}, value_proj); 
+
+        data_t new_nodes{};
+        new_nodes.reserve(nodes_.size());
+
+        for (std::size_t current_index{ 0 }; current_index < nodes_.size(); ++current_index)
+        {
+            const auto& current{ nodes_[current_index] };
+
+            const auto beg{ current.tr.begin() };
+            const auto end{ current.tr.end() };
+
+            bool inserted{ false };
+
+            const auto zv{ std::views::zip(keys, values) }; 
+
+            for (auto it{ beg }; it != end; ++it)
+            {
+                const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
+
+                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, value_proj) }; fst != snd; ++fst)  
+                {
+                    auto [_, index]{ *fst };
+
+                    if (index == current_index)
+                        break; /* prevent replacement with self */
+
+                    if (const auto& other{ nodes_.at(index) };
+                        not (std::ranges::equal(it, end, other.tr.begin(), other.tr.end())
+                        and current.default_tr == other.default_tr))
+                    {
+                        continue;
+                    }
+
+                    new_nodes.emplace_back(
+                        std::vector<tdfa::transition<char_type>>(beg, it),
+                        tdfa::default_transition{ .next = index, .op_index = tdfa::default_transition_is_not_state }
+                    );
+
+                    inserted = true;
+                    break;
+                }
+
+                if (inserted)
+                    break;
+            }
+
+            if (inserted)
+                continue;
+
+            new_nodes.emplace_back(current);
+        }
+
+        nodes_ = std::move(new_nodes);
     }
 }
 
@@ -9881,6 +10012,35 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr void transition(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
+        {
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible<tr>(*it))
+                {
+                    register_operations<tr.op_index>(it, res);
+                    [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
+                }
+            }
+
+            if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+            {
+                if constexpr ((*dt).second.op_index == tdfa::default_transition_is_not_state)
+                {
+                    [[clang::musttail]] return transition<(*dt).second.next>(it, res, last, fallback_state, fallback_it);
+                }
+                else
+                {
+                    register_operations<(*dt).second.op_index>(it, res);
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(it, res, last, fallback_state, fallback_it);
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr void state(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
@@ -9889,36 +10049,18 @@ namespace rx::detail
                 fallback_it = it;
             }
 
-            if (it == last)
+            if (it != last) [[likely]]
+                [[clang::musttail]] return transition<DFAState>(it, res, last, fallback_state, fallback_it);
+
+            if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
             {
+                register_operations<(*fn).second.op_index>(it, res);
+                res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
 
-                if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
-                {
-                    register_operations<(*fn).second.op_index>(it, res);
-                    res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
+                if constexpr (not std::contiguous_iterator<I>)
+                    res.value.match_success_ = true;
 
-                    if constexpr (not std::contiguous_iterator<I>)
-                        res.value.match_success_ = true;
-
-                    return;
-                }
-            }
-            else
-            {
-                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-                {
-                    if (tr_possible<tr>(*it))
-                    {
-                        register_operations<tr.op_index>(it, res);
-                        [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
-                    }
-                }
-
-                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
-                {
-                    register_operations<(*dt).second.op_index>(it, res);
-                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
-                }
+                return;
             }
 
             if constexpr (Flags.enable_fallback)
@@ -9978,27 +10120,39 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool transition(I it, const S last, std::size_t fallback_state)
+        {
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible<tr>(*it))
+                    [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
+            }
+
+            if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+            {
+                if constexpr ((*dt).second.op_index == tdfa::default_transition_is_not_state)
+                    [[clang::musttail]] return transition<(*dt).second.next>(it, last, fallback_state);
+                else
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(it, last, fallback_state);
+
+            return false;
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(I it, const S last, std::size_t fallback_state)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
                 fallback_state = DFAState;
 
-            if (it == last)
-            {
-                if constexpr (dfa_t::value.final_nodes.contains(DFAState))
-                    return true;
-            }
-            else
-            {
-                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-                {
-                    if (tr_possible<tr>(*it))
-                        [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
-                }
+            if (it != last) [[likely]]
+                [[clang::musttail]] return transition<DFAState>(it, last, fallback_state);
 
-                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
-                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
-            }
+            if constexpr (dfa_t::value.final_nodes.contains(DFAState))
+                return true;
 
             if constexpr (Flags.enable_fallback)
                 [[clang::musttail]] return fallback(it, last, fallback_state);

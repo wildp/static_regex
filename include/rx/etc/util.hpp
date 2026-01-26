@@ -32,7 +32,7 @@ namespace rx::detail
 
         if (not std::meta::has_template_arguments(dealiased))
             return false;
-        
+
         return std::meta::template_of(dealiased) == templ;
     }
 
@@ -73,6 +73,53 @@ namespace rx::detail
     template<typename V, typename T, std::size_t I>
     requires (I >= std::variant_size_v<V>)
     struct index_of_impl<V, T, I> {};
+
+    namespace hash
+    {
+        static constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
+        static constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
+
+        consteval std::size_t init() { return fnv_offset_basis; }
+
+        template<typename T>
+        concept memberwise_hashable = std::is_class_v<T> and not std::ranges::range<T>;
+
+        template<std::integral T>
+        constexpr void append(std::size_t& hash, const T& value);
+
+        template<std::ranges::range T>
+        constexpr void append(std::size_t& hash, T&& value);
+
+        template<memberwise_hashable T>
+        constexpr void append(std::size_t& hash, const T& value);
+
+        template<std::integral T>
+        constexpr void append(std::size_t& hash, const T& value)
+        {
+            for (unsigned char byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(value))
+            {
+                hash ^= byte;
+                hash *= fnv_prime;
+            }
+        }
+
+        template<std::ranges::range T>
+        constexpr void append(std::size_t& hash, T&& value)
+        {
+            for (auto&& elem : value)
+                append(hash, elem);
+        }
+
+        template<memberwise_hashable T>
+        constexpr void append(std::size_t& hash, const T& value)
+        {
+            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^T), std::meta::access_context::unchecked())))
+            {
+                const auto& ref = value.[:member:]; // TODO: replace with `append(hash, value.[:member:])`
+                append(hash, ref);
+            }
+        }
+    };
 
     template<typename Derived>
     struct flag_base

@@ -73,7 +73,7 @@ namespace rx::detail
             template<typename... Args>
             constexpr explicit result(Args... args) noexcept(noexcept(result_type{ args... }))
                 : value(std::forward<Args>(args)...) {}
-            
+
             [[no_unique_address]] result_type<I> value;
         };
 
@@ -134,6 +134,36 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr void transition(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
+        {
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible<tr>(*it))
+                {
+                    register_operations<tr.op_index>(it, res);
+                    [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
+                }
+            }
+
+            // TODO: reimplement using std::optional<T&> accessor?
+            if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+            {
+                if constexpr ((*dt).second.op_index == tdfa::default_transition_is_not_state)
+                {
+                    [[clang::musttail]] return transition<(*dt).second.next>(it, res, last, fallback_state, fallback_it);
+                }
+                else
+                {
+                    register_operations<(*dt).second.op_index>(it, res);
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(it, res, last, fallback_state, fallback_it);
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr void state(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
@@ -142,37 +172,19 @@ namespace rx::detail
                 fallback_it = it;
             }
 
-            if (it == last)
+            if (it != last) [[likely]]
+                [[clang::musttail]] return transition<DFAState>(it, res, last, fallback_state, fallback_it);
+
+            // TODO: reimplement using std::optional<T&> accessor?
+            if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
             {
-                // TODO: reimplement using std::optional<T&> accessor?
-                if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
-                {
-                    register_operations<(*fn).second.op_index>(it, res);
-                    res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
+                register_operations<(*fn).second.op_index>(it, res);
+                res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
 
-                    if constexpr (not std::contiguous_iterator<I>)
-                        res.value.match_success_ = true;
+                if constexpr (not std::contiguous_iterator<I>)
+                    res.value.match_success_ = true;
 
-                    return;
-                }
-            }
-            else
-            {
-                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-                {
-                    if (tr_possible<tr>(*it))
-                    {
-                        register_operations<tr.op_index>(it, res);
-                        [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
-                    }
-                }
-
-                // TODO: reimplement using std::optional<T&> accessor?
-                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
-                {
-                    register_operations<(*dt).second.op_index>(it, res);
-                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
-                }
+                return;
             }
 
             if constexpr (Flags.enable_fallback)
@@ -205,7 +217,7 @@ namespace rx::detail
         }
     };
 
-    
+
     template<string_literal Pattern, fsm_flags Flags>
     requires (Flags.return_bool)
     struct p1306_matcher<Pattern, Flags>
@@ -234,28 +246,41 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool transition(I it, const S last, std::size_t fallback_state)
+        {
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible<tr>(*it))
+                    [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
+            }
+
+            // TODO: reimplement using std::optional<T&> accessor?
+            if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
+            {
+                if constexpr ((*dt).second.op_index == tdfa::default_transition_is_not_state)
+                    [[clang::musttail]] return transition<(*dt).second.next>(it, last, fallback_state);
+                else
+                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
+            }
+
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(it, last, fallback_state);
+
+            return false;
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(I it, const S last, std::size_t fallback_state)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
                 fallback_state = DFAState;
-   
-            if (it == last)
-            {
-                if constexpr (dfa_t::value.final_nodes.contains(DFAState))
-                    return true;
-            }
-            else
-            {
-                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-                {
-                    if (tr_possible<tr>(*it))
-                        [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
-                }
 
-                // TODO: reimplement using std::optional<T&> accessor?
-                if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
-                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
-            }
+            if (it != last) [[likely]]
+                [[clang::musttail]] return transition<DFAState>(it, last, fallback_state);
+
+            if constexpr (dfa_t::value.final_nodes.contains(DFAState))
+                return true;
 
             if constexpr (Flags.enable_fallback)
                 [[clang::musttail]] return fallback(it, last, fallback_state);

@@ -311,7 +311,19 @@ namespace rx::testing
             }
 
             if (node.default_tr.has_value())
-                std::println(target, "     q{} -> q{} [label={:?}];", i, node.default_tr->next, ".");
+            {
+                if (const auto op_index{ node.default_tr->op_index }; op_index == detail::tdfa::default_transition_is_not_state)
+                {
+                    std::println(target, "     q{} -> q{} [style=\"dotted\"];", i, node.default_tr->next);
+                }
+                else
+                {
+                    std::string label{ "." };
+                    if (op_index != tdfa::no_transition_regops)
+                        label += std::format(" /{}", op_index);
+                    std::println(target, "     q{} -> q{} [label={:?}];", i, node.default_tr->next, label);
+                }
+            }
         }
 
         std::println(target, "}}");

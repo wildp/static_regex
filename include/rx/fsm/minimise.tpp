@@ -9,9 +9,12 @@
 #include "tdfa.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <vector>
+
+#include "rx/etc/util.hpp"
 
 
 namespace rx::detail::tdfa
@@ -267,6 +270,17 @@ namespace rx::detail::tdfa
                     result[i].emplace_back(j);
         return result;
     }
+
+    template<std::input_iterator I, std::sentinel_for<I> S, typename T>
+    constexpr std::size_t hash_node(I first, const S last, const std::optional<T>& opt)
+    {
+        std::size_t hash{ hash::init() };
+        for (; first != last; ++first)
+            hash::append(hash, *first);
+        if (opt.has_value())
+            hash::append(hash, *opt);
+        return hash;
+    }
 }
 
 namespace rx::detail
@@ -348,7 +362,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr void tagged_dfa<CharT>::make_default_tr_if_possible()
+    constexpr void tagged_dfa<CharT>::make_default_transitions()
     {
         using tr_type = tdfa::transition<char_type>;
 
@@ -380,5 +394,75 @@ namespace rx::detail
 
             node.tr = std::move(new_tr);
         }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::make_shared_transitions()
+    {
+        using node_type = tdfa::node<char_type>;
+
+        std::vector keys{ std::from_range, nodes_ | std::views::transform([](const node_type& n) { return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr); }) };
+        std::vector values{ std::from_range, std::views::iota(0uz, nodes_.size()) };
+
+        // TODO: switch to using std::flat_multimap instead when constexpr is supported
+        //       (but an unordered flat set would be much better)
+        // const std::flat_multimap map{ std::move(keys), std::move(values) };
+        static constexpr auto value_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; // TODO: remove
+        std::ranges::sort(std::views::zip(keys, values), {}, value_proj); // TODO: remove
+
+        data_t new_nodes{};
+        new_nodes.reserve(nodes_.size());
+
+        for (std::size_t current_index{ 0 }; current_index < nodes_.size(); ++current_index)
+        {
+            const auto& current{ nodes_[current_index] };
+
+            const auto beg{ current.tr.begin() };
+            const auto end{ current.tr.end() };
+
+            bool inserted{ false };
+
+            const auto zv{ std::views::zip(keys, values) }; // TODO: remove
+
+            for (auto it{ beg }; it != end; ++it)
+            {
+                const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
+
+                // for (auto [fst, snd]{ map.equal_range(keys) }; fst != snd; ++fst)
+                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, value_proj) }; fst != snd; ++fst)  // TODO: remove
+                {
+                    auto [_, index]{ *fst };
+
+                    if (index == current_index)
+                        break; /* prevent replacement with self */
+
+
+                    if (const auto& other{ nodes_.at(index) };
+                        not (std::ranges::equal(it, end, other.tr.begin(), other.tr.end())
+                        and current.default_tr == other.default_tr))
+                    {
+                        continue;
+                    }
+
+                    new_nodes.emplace_back(
+                        std::vector<tdfa::transition<char_type>>(beg, it),
+                        tdfa::default_transition{ .next = index, .op_index = tdfa::default_transition_is_not_state }
+                    );
+
+                    inserted = true;
+                    break;
+                }
+
+                if (inserted)
+                    break;
+            }
+
+            if (inserted)
+                continue;
+
+            new_nodes.emplace_back(current);
+        }
+
+        nodes_ = std::move(new_nodes);
     }
 }
