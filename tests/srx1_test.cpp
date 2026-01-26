@@ -215,7 +215,7 @@ static_assert(prefix_match("abcdef|abc"_rx, "abcdef", { 0, 6 }));
 static_assert(prefix_match("abc|abcdef"_rx, "abcdef", { 0, 3 }));
 static_assert(prefix_match("abcdef|abc"_rx, "abcde", { 0, 3 }));
 
-/* lazy partial matching tests */
+/* lazy prefix matching tests */
 static_assert(prefix_match("(abc)+"_rx, "abcabc", { 0, 6, 3, 6 }));
 static_assert(prefix_match("(abc)+?"_rx, "abcabc", { 0, 3, 0, 3 }));
 static_assert(prefix_match("(abc)+?a"_rx, "abcabc", { 0, 4, 0, 3 }));

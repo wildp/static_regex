@@ -220,7 +220,7 @@ namespace rx
     private:
         V base_{};
     };
-    
+
     template<std::ranges::bidirectional_range V, string_literal Pattern>
     requires std::ranges::view<V>
     template<bool Const>
@@ -246,12 +246,12 @@ namespace rx
         requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
             : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, result_{ std::move(i.result_) } {}
 
-        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<Base>& base() && 
+        constexpr std::ranges::iterator_t<Base>& base() &&
         {
             return std::move(current_);
         }
@@ -315,13 +315,13 @@ namespace rx
         }
 
         template<std::ranges::input_range W, int...>
-        requires std::ranges::view<W> 
+        requires std::ranges::view<W>
         friend class submatches_view;
 
     private:
         std::ranges::iterator_t<Base> current_{};
         [[no_unique_address]] std::ranges::sentinel_t<Base> end_{};
-        [[no_unique_address]] Matcher matcher_; 
+        [[no_unique_address]] Matcher matcher_;
         value_type result_;
     };
 
@@ -423,12 +423,12 @@ namespace rx
             : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, index_{ i.index_ },
               result_{ std::move(i.result_) }, suffix_start_{ std::move(i.suffix_start_)} {}
 
-        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<Base>& base() && 
+        constexpr std::ranges::iterator_t<Base>& base() &&
         {
             return std::move(current_);
         }
@@ -494,7 +494,7 @@ namespace rx
             if constexpr (has_suffix_iterator)
                 return not x.current_->has_value() and x.index_ == submatches.size();
             else
-                return not x.current_->has_value();     
+                return not x.current_->has_value();
         }
 
     private:
@@ -510,7 +510,7 @@ namespace rx
                 if (submatches[index_] == -1)
                 {
                     using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
-                    
+
                     if (current_->has_value())
                     {
                         result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
@@ -645,12 +645,12 @@ namespace rx
             : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, index_{ i.index_ },
               result_{ std::move(i.result_) }, suffix_start_{ std::move(i.suffix_start_)} {}
 
-        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<Base>& base() && 
+        constexpr std::ranges::iterator_t<Base>& base() &&
         {
             return std::move(current_);
         }
@@ -717,7 +717,7 @@ namespace rx
             if (parent_->submatches_.at(index_) == -1)
             {
                 using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
-                
+
                 if (current_->has_value())
                 {
                     result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());

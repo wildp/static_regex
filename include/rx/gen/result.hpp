@@ -30,7 +30,7 @@ namespace rx::detail
 namespace rx
 {
     template<std::bidirectional_iterator I, string_literal Pattern, detail::fsm_flags Flags>
-    requires std::default_initializable<I> and std::copyable<I> 
+    requires std::default_initializable<I> and std::copyable<I>
     class static_regex_match_result
     {
         using factory = detail::submatch_factory<I>;
@@ -72,7 +72,7 @@ namespace rx
         {
             return this->has_value();
         }
-        
+
         [[nodiscard]] constexpr size_type size() const
         {
             return (this->has_value()) ? submatch_count : 0;

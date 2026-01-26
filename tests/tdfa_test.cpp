@@ -208,7 +208,7 @@ static_assert(prefix_match("abcdef|abc", "abcdef", { 0, 6 }));
 static_assert(prefix_match("abc|abcdef", "abcdef", { 0, 3 }));
 static_assert(prefix_match("abcdef|abc", "abcde", { 0, 3 }));
 
-/* lazy partial matching tests */
+/* lazy prefix matching tests */
 static_assert(prefix_match("(abc)+", "abcabc", { 0, 6, 3, 6 }));
 static_assert(prefix_match("(abc)+?", "abcabc", { 0, 3, 0, 3 }));
 static_assert(prefix_match("(abc)+?a", "abcabc", { 0, 4, 0, 3 }));

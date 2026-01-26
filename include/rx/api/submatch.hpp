@@ -229,7 +229,7 @@ namespace rx
         }
 
     private:
-        static constexpr bool use_bool{ not std::contiguous_iterator<I> };  
+        static constexpr bool use_bool{ not std::contiguous_iterator<I> };
         using maybe_bool = detail::maybe_type_t<use_bool, bool>;
 
         constexpr submatch(I first, I last)

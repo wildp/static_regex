@@ -325,7 +325,7 @@ namespace rx::detail
             if (n >= this->size())
                 throw std::out_of_range("tag_vector::range_check: n >= this->size()");
         }
-        
+
         [[no_unique_address]]
         allocator_type alloc_;
 

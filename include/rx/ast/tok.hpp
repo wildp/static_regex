@@ -469,7 +469,7 @@ namespace rx::detail
 
                 if (next == '}')
                     break;
-                
+
                 if (not ('0' <= next and next <= '9'))
                     throw pattern_error("Incomplete escape sequence");;
 
@@ -716,7 +716,7 @@ namespace rx::detail
                 case 'x': nc = parse_hex(0); break;
                 case 'u': nc = parse_hex(4); break;
                 case 'U': nc = parse_hex(8); break;
-                        
+
                 /* perl character classes */
 
                 case 'd': selected_cc = { ncc::digits, false }; break;
@@ -825,7 +825,7 @@ namespace rx::detail
 
         if (it_ == end_ or *it_ != ':')
             throw pattern_error("Invalid POSIX Character Class");
-        
+
         ++it_;
 
         if (it_ != end_)

@@ -453,7 +453,7 @@ namespace rx::detail
                 }
                 break;
             }
-            
+
 
             case ast_index<typename ast_t::backref>:
                 throw tnfa_error("Backreferences are unsupported");

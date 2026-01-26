@@ -107,11 +107,11 @@ namespace rx::detail
         using iterator               = const_iterator;
         using reverse_iterator       = std::reverse_iterator<iterator>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-    
+
         /* constructors and assignment */
         consteval static_map() noexcept : static_map(key_compare()) {}
         consteval explicit static_map(const key_compare& comp) noexcept : data_{} , compare_{ comp } {}
-    
+
         template<typename K, typename V, typename Cmp, typename KeyCont, typename MappedCont>
         consteval explicit static_map(const std::flat_map<K, V, Cmp, KeyCont, MappedCont>& map)
             : data_{ std::vector<value_type>{ std::from_range, map } }, compare_{ map.key_comp() } {}
@@ -120,7 +120,7 @@ namespace rx::detail
         [[nodiscard]] constexpr bool empty() const noexcept { return data_.keys.empty(); }
         [[nodiscard]] constexpr size_type size() const noexcept { return data_.keys.size(); }
         [[nodiscard]] constexpr key_compare key_comp() const { return compare_; }
-    
+
         /* iterators */
         [[nodiscard]] constexpr const_iterator begin() const noexcept { return data_.begin(); }
         [[nodiscard]] constexpr const_iterator end() const noexcept { return data_.end(); }
@@ -130,7 +130,7 @@ namespace rx::detail
         [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept { return std::make_reverse_iterator(this->end()); }
         [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept { return this->rbegin(); }
         [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept { return this->rend(); }
-    
+
         /* element access */
         [[nodiscard]] constexpr const mapped_type& at(const key_type& x) const
         {
@@ -139,7 +139,7 @@ namespace rx::detail
                 throw std::out_of_range("static_map::at");
             return it->second;
         }
-    
+
         /* map operations */
         [[nodiscard]] constexpr const_iterator find(const key_type& x) const
         {
@@ -163,12 +163,12 @@ namespace rx::detail
         {
             return std::ranges::lower_bound(data_, x, compare_, &element_type::first);
         }
-    
+
         [[nodiscard]] constexpr const_iterator upper_bound(const key_type& x) const
         {
             return std::ranges::upper_bound(data_, x, compare_, &element_type::first);
         }
-    
+
         [[nodiscard]] constexpr std::pair<const_iterator, const_iterator> equal_range(const key_type& x) const
         {
             return std::ranges::equal_range(data_, x, compare_, &element_type::first);

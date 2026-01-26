@@ -765,7 +765,7 @@ namespace rx
         }
 
     private:
-        static constexpr bool use_bool{ not std::contiguous_iterator<I> };  
+        static constexpr bool use_bool{ not std::contiguous_iterator<I> };
         using maybe_bool = detail::maybe_type_t<use_bool, bool>;
 
         constexpr submatch(I first, I last)
@@ -5928,7 +5928,7 @@ namespace rx::detail::tnfa
         >;
 
         state_t         src, dst;
-        transition_type type; 
+        transition_type type;
 
         template<typename... Args>
         constexpr transition(state_t q0, state_t qf, Args&&... args)
@@ -7769,7 +7769,7 @@ namespace rx::detail::tdfa
 
         if (flags_.longest_match)
         {
-            /* this version is needed for full matches, but below is needed for laziness in partial matches */
+            /* this version is needed for full matches, but below is needed for laziness in prefix matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
                 if (tnfa_ptr_->get_node(ce.tnfa_state).is_fallback) return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
@@ -9561,7 +9561,7 @@ namespace rx::detail
 namespace rx
 {
     template<std::bidirectional_iterator I, string_literal Pattern, detail::fsm_flags Flags>
-    requires std::default_initializable<I> and std::copyable<I> 
+    requires std::default_initializable<I> and std::copyable<I>
     class static_regex_match_result
     {
         using factory = detail::submatch_factory<I>;
@@ -10395,12 +10395,12 @@ namespace rx
         requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
             : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, result_{ std::move(i.result_) } {}
 
-        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<Base>& base() && 
+        constexpr std::ranges::iterator_t<Base>& base() &&
         {
             return std::move(current_);
         }
@@ -10464,13 +10464,13 @@ namespace rx
         }
 
         template<std::ranges::input_range W, int...>
-        requires std::ranges::view<W> 
+        requires std::ranges::view<W>
         friend class submatches_view;
 
     private:
         std::ranges::iterator_t<Base> current_{};
         [[no_unique_address]] std::ranges::sentinel_t<Base> end_{};
-        [[no_unique_address]] Matcher matcher_; 
+        [[no_unique_address]] Matcher matcher_;
         value_type result_;
     };
 
@@ -10572,12 +10572,12 @@ namespace rx
             : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, index_{ i.index_ },
               result_{ std::move(i.result_) }, suffix_start_{ std::move(i.suffix_start_)} {}
 
-        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<Base>& base() && 
+        constexpr std::ranges::iterator_t<Base>& base() &&
         {
             return std::move(current_);
         }
@@ -10643,7 +10643,7 @@ namespace rx
             if constexpr (has_suffix_iterator)
                 return not x.current_->has_value() and x.index_ == submatches.size();
             else
-                return not x.current_->has_value();     
+                return not x.current_->has_value();
         }
 
     private:
@@ -10792,12 +10792,12 @@ namespace rx
             : current_{ std::move(i.current_) }, end_{ std::move(i.end_) }, index_{ i.index_ },
               result_{ std::move(i.result_) }, suffix_start_{ std::move(i.suffix_start_)} {}
 
-        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept 
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<Base>& base() && 
+        constexpr std::ranges::iterator_t<Base>& base() &&
         {
             return std::move(current_);
         }

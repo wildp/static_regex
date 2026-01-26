@@ -53,7 +53,7 @@ namespace rx::detail::tdfa
             : tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) }, new_tag_seq{ std::move(newseq) } {}
 
         constexpr closure_entry() = default;
-        
+
         static constexpr configuration next_config(const closure_entry& ce)
         {
             return { ce.tnfa_state, ce.registers, ce.new_tag_seq };
@@ -204,7 +204,7 @@ namespace rx::detail::tdfa
 
         if (flags_.longest_match)
         {
-            /* this version is needed for full matches, but below is needed for laziness in partial matches */
+            /* this version is needed for full matches, but below is needed for laziness in prefix matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
                 if (tnfa_ptr_->get_node(ce.tnfa_state).is_fallback) return false;
                 return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,

@@ -167,7 +167,7 @@ namespace rx::detail::parser
         using char_type = CharT;
         using terminal = ll1_stack<char_type>::terminal;
         using elem_t = std::variant<std::size_t, typename lexer<char_type>::token_t, repeater_mode>;
-        
+
         [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
         constexpr void push(elem_t&& elems) { data_.push_back(std::move(elems)); }
 

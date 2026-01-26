@@ -69,7 +69,7 @@ namespace rx::detail::tnfa
         charset_t<CharT> cs;
     };
 
-    // struct lookahead_tr 
+    // struct lookahead_tr
     // {
     //     state_t p0, pf;
     //     bool negate;
@@ -92,7 +92,7 @@ namespace rx::detail::tnfa
         >;
 
         state_t         src, dst;
-        transition_type type; 
+        transition_type type;
 
         template<typename... Args>
         constexpr transition(state_t q0, state_t qf, Args&&... args)
@@ -206,7 +206,7 @@ namespace rx::detail
         /* transition creation */
 
         constexpr void make_epsilon(state_t q0, state_t qf, int priority = 0, int tag = 0);
-        
+
         constexpr void make_transition(state_t q0, state_t qf, char_type c);
 
         template<typename CharSet>
