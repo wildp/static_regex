@@ -24,7 +24,7 @@ namespace rx {
 ```
 
 
-## `rx::static_regex`
+## Class template `rx::static_regex`
 
 `static_regex` represents a compile-time regular expression pattern.
 
@@ -87,7 +87,7 @@ With these, the requirement for `R` to satisfy `std::ranges::borrowed_range` is 
 Depending on the regular expression involved, using these functions may allow for a smaller DFA to be generated.
 
 
-## `rx::static_regex_match_result`
+## Class template `rx::static_regex_match_result`
 
 `static_regex_match_result` stores the results of a single compile-time regular expression match.
 
@@ -143,7 +143,7 @@ Whenever an individual capturing group is not matched, a default-constructed sub
 Note: `size()` returns `submatch_count` when `has_value()` is `true`, and `0` otherwise.
 
 
-## `rx::submatch`
+## Class template `rx::submatch`
 
 `submatch` identifies a single regular expression submatch.
 
@@ -219,7 +219,7 @@ Note: `matched()` and `operator bool()` both return `true` when the `submatch` o
 while `empty()` returns `true` additionally when the `submatch` object has matched an empty string.
 
 
-## Class `rx::string_literal`
+## Class template `rx::string_literal`
 
 `string_literal` exists as a minimal placeholder for the proposed [`std::basic_fixed_string`](wg21.link/p3094), and allows for strings to be passed as template parameters.
 
