@@ -126,7 +126,8 @@ namespace rx::detail
         explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
         constexpr void minimise_states();
-        constexpr void minimise_transitions();
+        constexpr void minimise_transition_edges();
+        constexpr void make_default_tr_if_possible();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <concepts>
+#include <limits>
 #include <meta>
 #include <ranges>
 
@@ -23,7 +24,7 @@ namespace rx::detail
 
     template<typename T, typename CharT>
     concept charset_like = one_of<T, charset<CharT>, static_charset<CharT>>;
-    
+
     template<typename CharT>
     class static_charset
     {
@@ -75,6 +76,34 @@ namespace rx::detail
             for (const auto [first, second] : data_)
                 result += (first + 1 - second);
             return result;
+        }
+
+        [[nodiscard]] constexpr std::size_t interval_count() const noexcept
+        {
+            return data_.size();
+        }
+
+        [[nodiscard]] constexpr int score_intervals() const noexcept
+        {
+            int score{ 0 };
+
+            for (const auto& [beg, end] : data_)
+            {
+                if (beg == end)
+                    score += 1;
+                else
+                    score += 2;
+            }
+
+            if (not data_.empty())
+            {
+                if (const auto [beg, end]{ data_.front() }; beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                    --score;
+                if (const auto [beg, end]{ data_.back() }; end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                    --score;
+            }
+
+            return score;
         }
 
         [[nodiscard]] constexpr bool contains(char_type c) const

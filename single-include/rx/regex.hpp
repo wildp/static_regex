@@ -1030,6 +1030,7 @@ namespace rx::detail
         static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
         static constexpr std::size_t array_size{ total_size / integer_bits };
         static constexpr std::size_t min_offset{ (std::is_signed_v<CharT>) ? (array_size / 2) : 0z };
+        static constexpr auto offset_max{ static_cast<int>(integer_bits) };
 
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
@@ -1080,6 +1081,107 @@ namespace rx::detail
             return result;
         }
 
+        [[nodiscard]] constexpr std::size_t interval_count() const noexcept
+        {
+            std::size_t interval_count{ 0 };
+            bool carry{ false };
+
+            for (std::size_t i{ 0 }; i < array_size; ++i)
+            {
+                integer_type tmp{ data_[(i + min_offset) % array_size] };
+                int offset{ 0 };
+
+                while (true)
+                {
+                    const int zeros{ std::countr_zero(tmp) };
+
+                    offset += zeros;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = false;
+                        break;
+                    }
+
+                    tmp >>= zeros;
+
+                    const int ones{ std::countr_one(tmp) }; /* note: ones >= 1 is always true */
+
+                    if (not (zeros == 0 and carry))
+                        ++interval_count;
+
+                    carry = false;
+                    offset += ones;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = true;
+                        break;
+                    }
+
+                    tmp >>= ones;
+                }
+            }
+
+            return interval_count;
+        }
+
+        [[nodiscard]] constexpr int score_intervals() const noexcept
+        {
+            int score{ 0 };
+            bool carry{ false };
+
+            for (std::size_t i{ 0 }; i < array_size; ++i)
+            {
+                integer_type tmp{ data_[(i + min_offset) % array_size] };
+                int offset{ 0 };
+
+                while (true)
+                {
+                    const int zeros{ std::countr_zero(tmp) };
+
+                    offset += zeros;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = false;
+                        break;
+                    }
+
+                    tmp >>= zeros;
+
+                    const int ones{ std::countr_one(tmp) }; /* note: ones >= 1 is always true */
+
+                    if (not (zeros == 0 and carry))
+                    {
+                        if (ones == 1)
+                            score += 1;
+                        else
+                            score += 2;
+                    }
+
+                    carry = false;
+                    offset += ones;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = true;
+                        break;
+                    }
+
+                    tmp >>= ones;
+                }
+            }
+
+            if (contains(std::numeric_limits<char_type>::min()) and contains(std::numeric_limits<char_type>::min() + 1))
+                --score;
+
+            if (contains(std::numeric_limits<char_type>::max()) and contains(std::numeric_limits<char_type>::max() - 1))
+                --score;
+
+            return score;
+        }
+
         [[nodiscard]] constexpr bool contains(char_type c) const noexcept
         {
             /* widen to accommodate signed chars */
@@ -1090,8 +1192,6 @@ namespace rx::detail
 
         [[nodiscard]] constexpr std::vector<char_interval> get_intervals() const
         {
-            static constexpr auto offset_max{ static_cast<int>(integer_bits) };
-
             std::vector<char_interval> result;
 
             /* widen to allow position to equal std::numeric_limits<char_type>::max() + 1 */
@@ -1512,6 +1612,34 @@ namespace rx::detail
             return result;
         }
 
+        [[nodiscard]] constexpr std::size_t interval_count() const noexcept
+        {
+            return data_.size();
+        }
+
+        [[nodiscard]] constexpr int score_intervals() const noexcept
+        {
+            int score{ 0 };
+
+            for (const auto& [beg, end] : data_)
+            {
+                if (beg == end)
+                    score += 1;
+                else
+                    score += 2;
+            }
+
+            if (not data_.empty())
+            {
+                if (const auto [beg, end]{ data_.front() }; beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                    --score;
+                if (const auto [beg, end]{ data_.back() }; end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                    --score;
+            }
+
+            return score;
+        }
+
         [[nodiscard]] constexpr bool contains(char_type c) const
         {
             const auto it{ std::ranges::lower_bound(data_, c, {}, &char_interval::second) };
@@ -1523,6 +1651,11 @@ namespace rx::detail
         [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const noexcept
         {
             return data_;
+        }
+
+        [[nodiscard]] constexpr std::vector<char_interval> get_intervals() && noexcept
+        {
+            return std::move(data_);
         }
 
         /* modifiers */
@@ -2586,6 +2719,34 @@ namespace rx::detail
             for (const auto [first, second] : data_)
                 result += (first + 1 - second);
             return result;
+        }
+
+        [[nodiscard]] constexpr std::size_t interval_count() const noexcept
+        {
+            return data_.size();
+        }
+
+        [[nodiscard]] constexpr int score_intervals() const noexcept
+        {
+            int score{ 0 };
+
+            for (const auto& [beg, end] : data_)
+            {
+                if (beg == end)
+                    score += 1;
+                else
+                    score += 2;
+            }
+
+            if (not data_.empty())
+            {
+                if (const auto [beg, end]{ data_.front() }; beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                    --score;
+                if (const auto [beg, end]{ data_.back() }; end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                    --score;
+            }
+
+            return score;
         }
 
         [[nodiscard]] constexpr bool contains(char_type c) const
@@ -7327,7 +7488,8 @@ namespace rx::detail
         explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
         constexpr void minimise_states();
-        constexpr void minimise_transitions();
+        constexpr void minimise_transition_edges();
+        constexpr void make_default_tr_if_possible();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;
@@ -8978,7 +9140,77 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr void tagged_dfa<CharT>::minimise_transitions()
+    constexpr void tagged_dfa<CharT>::minimise_transition_edges()
+    {
+        /* Note: this function relaxes the requirement for a character to appear at most once in any
+                 transition edge, and requires the transitions to be checked in the provided order */
+
+        /* DO NOT USE THIS WITH A TABLE OR SWITCH BASED MATCHER */
+
+        using tr_type = tdfa::transition<char_type>;
+
+        for (auto& node : nodes_)
+        {
+            if (node.tr.empty())
+                continue;
+
+            const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+
+            std::vector scored_pairs{
+                std::from_range, 
+                std::views::zip(std::views::iota(0uz), node.tr | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
+                | std::views::filter([largest_index](const auto& x) { return std::get<0>(x) != largest_index; })
+            };
+
+            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return std::get<1>(x); });
+            scored_pairs.emplace_back(largest_index, 0 /* unimportant */);
+
+            std::vector<tr_type> new_tr;
+            std::vector<tdfa::charset_t<char_type>> dont_cares;
+            tdfa::charset_t<char_type> acc;
+
+            for (const auto [i, _] : scored_pairs)
+            {
+                auto& tr{ node.tr.at(i) };
+                dont_cares.emplace_back(acc);
+                acc |= tr.cs;
+                new_tr.emplace_back(std::move(tr));
+            }
+
+            if (acc.full())
+            {
+                const auto& largest{ new_tr.back() };
+                node.default_tr = { .next = largest.next, .op_index = largest.op_index };
+                new_tr.pop_back();
+            }
+
+            /* fill gaps where possible */
+
+            for (const auto& [tr_ref, dont_cares] : std::views::zip(std::ranges::ref_view(new_tr), dont_cares))
+            {
+                tr_type& tr{ tr_ref };
+
+                using interval_t = tdfa::charset_t<char_type>::char_interval;
+                std::vector<interval_t> to_insert;
+
+                std::ranges::set_intersection((~tr.cs).get_intervals(), dont_cares.get_intervals(), std::back_inserter(to_insert));
+
+                for (const auto [beg, end] : to_insert)
+                {
+                    if (beg == end)
+                        tr.cs.insert(beg);
+                    else
+                        tr.cs.insert(beg, end);
+                }
+            }
+
+            node.tr = std::move(new_tr);
+        }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::make_default_tr_if_possible()
     {
         using tr_type = tdfa::transition<char_type>;
 
@@ -9000,7 +9232,7 @@ namespace rx::detail
                     continue;
 
                 largest_cs |= node.tr[i].cs;
-                new_tr.emplace_back(std::move(node.tr[i]));                
+                new_tr.emplace_back(std::move(node.tr[i]));
             }
 
             if (largest_cs.full())
@@ -9076,7 +9308,7 @@ namespace rx::detail
         tdfa::reg_t dst;
         tdfa::reg_t cpy_src;
         bool        set_val;
-        bool        is_copy; /* true if cpy, false if set */ 
+        bool        is_copy; /* true if cpy, false if set */
     };
 
     template<typename CharT>
@@ -9133,8 +9365,8 @@ namespace rx::detail
               continue_nodes{ dfa.continue_nodes() },
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
-              final_registers{ dfa.final_registers() },
               default_transitions{ make_default_transitions(dfa.nodes_) },
+              final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
@@ -9174,7 +9406,10 @@ namespace rx::detail
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
         dfa.minimise_states();
-        if (f.is_search) dfa.minimise_transitions();
+
+        /* optimise transition edges and their order to produce fewest comparisons */
+        /* (if using tables, do `dfa.make_default_tr_if_possible()` instead) */
+        dfa.minimise_transition_edges();
 
         return tdfa_info{ dfa };
     }

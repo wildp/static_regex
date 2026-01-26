@@ -29,6 +29,7 @@ namespace rx::detail
         static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
         static constexpr std::size_t array_size{ total_size / integer_bits };
         static constexpr std::size_t min_offset{ (std::is_signed_v<CharT>) ? (array_size / 2) : 0z };
+        static constexpr auto offset_max{ static_cast<int>(integer_bits) };
 
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
@@ -80,6 +81,107 @@ namespace rx::detail
             return result;
         }
 
+        [[nodiscard]] constexpr std::size_t interval_count() const noexcept
+        {
+            std::size_t interval_count{ 0 };
+            bool carry{ false };
+
+            for (std::size_t i{ 0 }; i < array_size; ++i)
+            {
+                integer_type tmp{ data_[(i + min_offset) % array_size] };
+                int offset{ 0 };
+
+                while (true)
+                {
+                    const int zeros{ std::countr_zero(tmp) };
+
+                    offset += zeros;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = false;
+                        break;
+                    }
+
+                    tmp >>= zeros;
+
+                    const int ones{ std::countr_one(tmp) }; /* note: ones >= 1 is always true */
+
+                    if (not (zeros == 0 and carry))
+                        ++interval_count;
+
+                    carry = false;
+                    offset += ones;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = true;
+                        break;
+                    }
+
+                    tmp >>= ones;
+                }
+            }
+
+            return interval_count;
+        }
+
+        [[nodiscard]] constexpr int score_intervals() const noexcept
+        {
+            int score{ 0 };
+            bool carry{ false };
+
+            for (std::size_t i{ 0 }; i < array_size; ++i)
+            {
+                integer_type tmp{ data_[(i + min_offset) % array_size] };
+                int offset{ 0 };
+
+                while (true)
+                {
+                    const int zeros{ std::countr_zero(tmp) };
+
+                    offset += zeros;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = false;
+                        break;
+                    }
+
+                    tmp >>= zeros;
+
+                    const int ones{ std::countr_one(tmp) }; /* note: ones >= 1 is always true */
+
+                    if (not (zeros == 0 and carry))
+                    {
+                        if (ones == 1)
+                            score += 1;
+                        else
+                            score += 2;
+                    }
+
+                    carry = false;
+                    offset += ones;
+
+                    if (offset >= offset_max)
+                    {
+                        carry = true;
+                        break;
+                    }
+
+                    tmp >>= ones;
+                }
+            }
+
+            if (contains(std::numeric_limits<char_type>::min()) and contains(std::numeric_limits<char_type>::min() + 1))
+                --score;
+
+            if (contains(std::numeric_limits<char_type>::max()) and contains(std::numeric_limits<char_type>::max() - 1))
+                --score;
+
+            return score;
+        }
+
         [[nodiscard]] constexpr bool contains(char_type c) const noexcept
         {
             /* widen to accommodate signed chars */
@@ -90,8 +192,6 @@ namespace rx::detail
 
         [[nodiscard]] constexpr std::vector<char_interval> get_intervals() const
         {
-            static constexpr auto offset_max{ static_cast<int>(integer_bits) };
-
             std::vector<char_interval> result;
 
             /* widen to allow position to equal std::numeric_limits<char_type>::max() + 1 */

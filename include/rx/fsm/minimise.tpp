@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <ranges>
 #include <vector>
 
 
@@ -277,7 +278,77 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr void tagged_dfa<CharT>::minimise_transitions()
+    constexpr void tagged_dfa<CharT>::minimise_transition_edges()
+    {
+        /* Note: this function relaxes the requirement for a character to appear at most once in any
+                 transition edge, and requires the transitions to be checked in the provided order */
+
+        /* DO NOT USE THIS WITH A TABLE OR SWITCH BASED MATCHER */
+
+        using tr_type = tdfa::transition<char_type>;
+
+        for (auto& node : nodes_)
+        {
+            if (node.tr.empty())
+                continue;
+
+            const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+
+            std::vector scored_pairs{
+                std::from_range, // TODO: switch to using views::enumerate when supported by clang
+                std::views::zip(std::views::iota(0uz), node.tr | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
+                | std::views::filter([largest_index](const auto& x) { return std::get<0>(x) != largest_index; })
+            };
+
+            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return std::get<1>(x); });
+            scored_pairs.emplace_back(largest_index, 0 /* unimportant */);
+
+            std::vector<tr_type> new_tr;
+            std::vector<tdfa::charset_t<char_type>> dont_cares;
+            tdfa::charset_t<char_type> acc;
+
+            for (const auto [i, _] : scored_pairs)
+            {
+                auto& tr{ node.tr.at(i) };
+                dont_cares.emplace_back(acc);
+                acc |= tr.cs;
+                new_tr.emplace_back(std::move(tr));
+            }
+
+            if (acc.full())
+            {
+                const auto& largest{ new_tr.back() };
+                node.default_tr = { .next = largest.next, .op_index = largest.op_index };
+                new_tr.pop_back();
+            }
+
+            /* fill gaps where possible */
+
+            for (const auto& [tr_ref, dont_cares] : std::views::zip(std::ranges::ref_view(new_tr), dont_cares))
+            {
+                tr_type& tr{ tr_ref };
+
+                using interval_t = tdfa::charset_t<char_type>::char_interval;
+                std::vector<interval_t> to_insert;
+
+                std::ranges::set_intersection((~tr.cs).get_intervals(), dont_cares.get_intervals(), std::back_inserter(to_insert));
+
+                for (const auto [beg, end] : to_insert)
+                {
+                    if (beg == end)
+                        tr.cs.insert(beg);
+                    else
+                        tr.cs.insert(beg, end);
+                }
+            }
+
+            node.tr = std::move(new_tr);
+        }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::make_default_tr_if_possible()
     {
         using tr_type = tdfa::transition<char_type>;
 
@@ -292,14 +363,14 @@ namespace rx::detail
             auto& largest{ node.tr[largest_index] };
             tdfa::charset_t<char_type> largest_cs{ largest.cs };
             std::vector<tr_type> new_tr;
-            
+
             for (std::size_t i{ 0 }; i < node.tr.size(); ++i)
             {
                 if (i == largest_index)
                     continue;
 
                 largest_cs |= node.tr[i].cs;
-                new_tr.emplace_back(std::move(node.tr[i]));                
+                new_tr.emplace_back(std::move(node.tr[i]));
             }
 
             if (largest_cs.full())

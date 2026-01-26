@@ -94,6 +94,12 @@ namespace
         return make_bs(arg).get_intervals() == make_pairvec(result);
     }
 
+    consteval bool test_interval_count(const char* arg)
+    {
+        auto bs{ make_bs(arg) };
+        return bs.interval_count() == bs.get_intervals().size();
+    }
+
     consteval bool test_caseless(const char* arg, const char* result)
     {
         auto bs{ make_bs(arg) };
@@ -184,6 +190,12 @@ static_assert(test_intervals("0a9z", "0z"));
 static_assert(test_intervals("accd", "ad"));
 static_assert(test_intervals("acef", "acef"));
 static_assert(test_intervals("0Aaz", "0Aaz"));
+
+/* bitcharset-specific tests (interval counts) */
+static_assert(test_interval_count("ac"));
+static_assert(test_interval_count("09az"));
+static_assert(test_interval_count("acefhi"));
+static_assert(test_interval_count("0Dad"));
 
 /* bitcharset-specific tests (case insensitivity) */
 static_assert(test_caseless("09", "09"));

@@ -309,6 +309,9 @@ namespace rx::testing
 
                 std::println(target, "     q{} -> q{} [label={:?}];", i, tr.next, label);
             }
+
+            if (node.default_tr.has_value())
+                std::println(target, "     q{} -> q{} [label={:?}];", i, node.default_tr->next, ".");
         }
 
         std::println(target, "}}");

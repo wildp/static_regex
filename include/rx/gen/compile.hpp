@@ -83,7 +83,7 @@ namespace rx::detail
         tdfa::reg_t dst;
         tdfa::reg_t cpy_src;
         bool        set_val;
-        bool        is_copy; /* true if cpy, false if set */ 
+        bool        is_copy; /* true if cpy, false if set */
     };
 
     template<typename CharT>
@@ -140,8 +140,8 @@ namespace rx::detail
               continue_nodes{ dfa.continue_nodes() },
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
-              final_registers{ dfa.final_registers() },
               default_transitions{ make_default_transitions(dfa.nodes_) },
+              final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
@@ -182,7 +182,10 @@ namespace rx::detail
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
         dfa.minimise_states();
-        if (f.is_search) dfa.minimise_transitions();
+
+        /* optimise transition edges and their order to produce fewest comparisons */
+        /* (if using tables, do `dfa.make_default_tr_if_possible()` instead) */
+        dfa.minimise_transition_edges();
 
         return tdfa_info{ dfa };
     }

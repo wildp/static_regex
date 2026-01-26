@@ -55,6 +55,34 @@ namespace rx::detail
             return result;
         }
 
+        [[nodiscard]] constexpr std::size_t interval_count() const noexcept
+        {
+            return data_.size();
+        }
+
+        [[nodiscard]] constexpr int score_intervals() const noexcept
+        {
+            int score{ 0 };
+
+            for (const auto& [beg, end] : data_)
+            {
+                if (beg == end)
+                    score += 1;
+                else
+                    score += 2;
+            }
+
+            if (not data_.empty())
+            {
+                if (const auto [beg, end]{ data_.front() }; beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                    --score;
+                if (const auto [beg, end]{ data_.back() }; end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                    --score;
+            }
+
+            return score;
+        }
+
         [[nodiscard]] constexpr bool contains(char_type c) const
         {
             const auto it{ std::ranges::lower_bound(data_, c, {}, &char_interval::second) };
@@ -66,6 +94,11 @@ namespace rx::detail
         [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const noexcept
         {
             return data_;
+        }
+
+        [[nodiscard]] constexpr std::vector<char_interval> get_intervals() && noexcept
+        {
+            return std::move(data_);
         }
 
 
