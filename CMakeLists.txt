@@ -5,17 +5,33 @@ project(rx
     LANGUAGES CXX
 )
 
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
 add_library(rx INTERFACE)
-target_include_directories(rx INTERFACE include/)
 target_compile_features(rx INTERFACE cxx_std_26)
+target_sources(rx
+    INTERFACE
+    FILE_SET
+        HEADERS
+    BASE_DIRS
+        include/
+    FILES
+        include/rx/regex.h
+)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(rx INTERFACE -freflection-latest)
-    target_compile_options(rx INTERFACE -fconstexpr-steps=4294967295)
-    target_compile_options(rx INTERFACE -fconstexpr-backtrace-limit=0)
+    target_compile_options(rx
+        INTERFACE
+            -freflection-latest
+            -fconstexpr-steps=4294967295
+            -fconstexpr-backtrace-limit=0
+    )
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    target_compile_options(rx INTERFACE -freflection)
-    target_compile_options(rx INTERFACE -fconstexpr-ops-limit=4294967296)
+    target_compile_options(rx
+        INTERFACE
+            -freflection
+            -fconstexpr-ops-limit=4294967296
+    )
 endif()
 
 add_subdirectory(tests/)
@@ -26,7 +42,7 @@ add_custom_command(
     OUTPUT
         single-include/rx/regex.hpp
     COMMAND
-        ${CMAKE_CURRENT_SOURCE_DIR}/make-single-include.sh 
+        ${CMAKE_CURRENT_SOURCE_DIR}/make-single-include.sh
     WORKING_DIRECTORY
         ${PROJECT_SOURCE_DIR}
 )
