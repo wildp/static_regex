@@ -20,6 +20,7 @@ endif()
 
 add_subdirectory(tests/)
 add_subdirectory(bench/ EXCLUDE_FROM_ALL)
+add_subdirectory(trace/ EXCLUDE_FROM_ALL)
 
 add_custom_command(
     OUTPUT
