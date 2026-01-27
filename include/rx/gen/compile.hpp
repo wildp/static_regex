@@ -60,7 +60,7 @@ namespace rx::detail
 
         [[nodiscard]] consteval bool has_match_start() const
         {
-            for (const auto [fst, snd] : captures)
+            for (const auto& [fst, snd] : captures)
             {
                 if (fst.tag_number == end_of_input_tag and snd.tag_number == start_of_input_tag)
                     continue;

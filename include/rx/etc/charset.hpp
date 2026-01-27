@@ -91,7 +91,7 @@ namespace rx::detail
             return c >= it->first;
         }
 
-        [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const noexcept
+        [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const& noexcept
         {
             return data_;
         }

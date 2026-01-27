@@ -1695,7 +1695,7 @@ namespace rx::detail
             return c >= it->first;
         }
 
-        [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const noexcept
+        [[nodiscard]] constexpr const std::vector<char_interval>& get_intervals() const& noexcept
         {
             return data_;
         }
@@ -9416,7 +9416,7 @@ namespace rx::detail
 
         [[nodiscard]] consteval bool has_match_start() const
         {
-            for (const auto [fst, snd] : captures)
+            for (const auto& [fst, snd] : captures)
             {
                 if (fst.tag_number == end_of_input_tag and snd.tag_number == start_of_input_tag)
                     continue;
