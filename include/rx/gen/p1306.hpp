@@ -65,7 +65,7 @@ namespace rx::detail
         using char_type = decltype(Pattern)::char_type;
 
         template<typename I>
-        using result_type = static_regex_match_result<I, Pattern, Flags>;
+        using result_type = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
 
         template<typename I>
         struct result

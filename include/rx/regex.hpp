@@ -234,7 +234,7 @@ namespace rx
     public:
         using iterator_category = std::input_iterator_tag;
         using iterator_concept  = std::input_iterator_tag;
-        using value_type        = static_regex_match_result<std::ranges::iterator_t<Base>, Pattern, detail::default_fsm_flags::search_all>;
+        using value_type        = Matcher::template result_type<std::ranges::iterator_t<Base>>;
         using difference_type   = std::ranges::range_difference_t<Base>;
 
         iterator() requires std::default_initializable<std::ranges::iterator_t<Base>> = default;

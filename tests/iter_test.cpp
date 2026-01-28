@@ -74,7 +74,7 @@ using namespace std::literals;
 using namespace rx::literals;
 
 /* iterator category tests */
-static_assert(std::random_access_iterator<rx::static_regex_match_result<const char*, "", rx::detail::default_fsm_flags::search_all>::iterator>);
+static_assert(std::random_access_iterator<rx::detail::p1306_matcher<"", rx::detail::default_fsm_flags::search_all>::template result_type<const char*>::iterator>);
 
 /* range category tests */
 using range_category_test_1 = decltype(std::declval<std::string>() | rx::views::regex_match(""_rx));

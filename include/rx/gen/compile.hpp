@@ -78,6 +78,14 @@ namespace rx::detail
         static_span<capture_info::tag_pair_t> overflow;
     };
 
+    struct static_match_result_info
+    {
+        final_capture_info fci;
+        static_span<tdfa::reg_t> final_registers;
+        std::size_t register_count{ 0 };
+        bool has_continue{ false };
+    };
+
     struct register_operation
     {
         tdfa::reg_t dst;
@@ -145,6 +153,11 @@ namespace rx::detail
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
               captures{ dfa.get_capture_info() } {}
+
+        consteval static_match_result_info make_match_result_info(bool has_continue) const
+        {
+            return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue };
+        }
 
         /* data members (public so that tdfa_info is structural) */
         static_span<static_span<static_transition<char_type>>> nodes;
