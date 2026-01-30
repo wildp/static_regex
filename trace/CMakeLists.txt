@@ -42,3 +42,9 @@ foreach(PATTERN ${PATTERNS})
     MAKE_TRACE("${PATTERN}" "${COUNTER}")
 endforeach()
 
+
+find_package(benchmark REQUIRED)
+
+add_executable(profile-target)
+target_sources(profile-target PRIVATE profile_target.cpp)
+target_link_libraries(profile-target PUBLIC rx benchmark::benchmark)
