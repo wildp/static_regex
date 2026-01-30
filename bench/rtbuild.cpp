@@ -17,7 +17,7 @@ static void test(benchmark::State& state, const std::string_view pattern)
 
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
-        dfa.minimise_states();
+        // dfa.minimise_states();
         dfa.minimise_transition_edges();
 
         benchmark::DoNotOptimize(dfa);

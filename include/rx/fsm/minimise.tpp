@@ -118,6 +118,8 @@ namespace rx::detail::tdfa
     constexpr auto min<CharT>::hopcroft(const tdfa_t& dfa) -> partition_t
     {
         // Adapted from https://en.wikipedia.org/wiki/DFA_minimization#Hopcroft's_algorithm
+        // WARNING: this function is extremely slow
+        // TODO: rewrite and switch to using boost::dynamic_bitset or similar?
 
         const std::size_t bitset_size{ dfa.node_count() };
 

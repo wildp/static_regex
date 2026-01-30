@@ -181,7 +181,7 @@ namespace rx::detail
         /* convert to tdfa */
         tagged_dfa dfa{ nfa };
         dfa.optimise_registers();
-        dfa.minimise_states();
+        // dfa.minimise_states();
 
         /* optimise transition edges and their order to produce fewest comparisons */
         /* (if using tables, do `dfa.make_default_tr_if_possible()` instead) */
