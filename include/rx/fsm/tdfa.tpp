@@ -71,12 +71,9 @@ namespace rx::detail::tdfa
     using multistep_closure_t = multistep_closures_t<CharT>::value_type;
 
 
-    using precedence_t = std::monostate;
-
     struct node_info
     {
         config_set_t config;
-        precedence_t precedence;
         bool         is_fallback{ false };
 
         friend constexpr bool operator==(const node_info&, const node_info&) = default;
@@ -127,7 +124,7 @@ namespace rx::detail::tdfa
 
     private:
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
-        [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o);
+        [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, regops_t& o);
         [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
         [[nodiscard]] constexpr regops_t transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const;
         [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
@@ -150,6 +147,9 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
+        // TODO: maybe switch to boost::dynamic_bitset or similar
+        using bitset_t = std::vector<bool>;
+
         static constexpr auto compose = [](const auto& g, const auto& f) {
             return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
@@ -161,7 +161,7 @@ namespace rx::detail::tdfa
         closure_t stack{ std::move(c) };
         std::erase_if(stack, [](const closure_entry& ce) { return not ce.new_tag_seq.empty(); });
         std::ranges::reverse(stack);
-        std::vector<bool> visited(tnfa_ptr_->node_count(), false);
+        bitset_t visited(tnfa_ptr_->node_count(), false);
 
         while (not stack.empty())
         {
@@ -233,9 +233,9 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
-    constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, const precedence_t& p, regops_t& o) -> std::size_t
+    constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> std::size_t
     {
-        node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) }, .precedence = p };
+        node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) } };
 
         const std::size_t new_state{ static_cast<std::size_t>(std::ranges::distance(state_info_.begin(), std::ranges::find(state_info_, current_info))) };
 
@@ -569,7 +569,7 @@ namespace rx::detail::tdfa
         initial_cfg.emplace_back(tnfa_state, initial_reg);
         initial_cfg = e_closure(std::move(initial_cfg));
         regops_t regs;
-        return add_state(result, initial_cfg, precedence_t{ /* cfg0 */ }, regs);
+        return add_state(result, initial_cfg, regs);
     }
 
     template<typename CharT>
@@ -598,7 +598,7 @@ namespace rx::detail::tdfa
             {
                 cfg = e_closure(std::move(cfg));
                 auto o{ transition_regops(cfg, result.register_count_, map) };
-                const auto s{ add_state(result, cfg, precedence_t{ /* cfg */ }, o) };
+                const auto s{ add_state(result, cfg, o) };
 
                 /* Add transition to tdfa */
                 if (o.empty())
