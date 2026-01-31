@@ -132,21 +132,20 @@ namespace rx::detail::tdfa
     class liveness_matrix
     {
     public:
-        explicit constexpr liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count * reg_count, false), reg_count_{ reg_count } {}
-        [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) { return data_[(block_idx * reg_count_) + reg]; }
-        [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) const { return data_[(block_idx * reg_count_) + reg]; }
-        [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) { return data_.at((block_idx * reg_count_) + reg); }
-        [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) const { return data_.at((block_idx * reg_count_) + reg); }
-        [[nodiscard]] constexpr auto row_begin(std::size_t block_idx) { return data_.begin() + static_cast<std::ptrdiff_t>(block_idx * reg_count_); }
-        [[nodiscard]] constexpr auto row_end(std::size_t block_idx) { return row_begin(block_idx + 1); }
-        [[nodiscard]] constexpr auto row_begin(std::size_t block_idx) const { return data_.begin() + static_cast<std::ptrdiff_t>(block_idx * reg_count_); }
-        [[nodiscard]] constexpr auto row_end(std::size_t block_idx) const { return row_begin(block_idx + 1); }
-        [[nodiscard]] constexpr reg_t reg_count() const { return reg_count_; }
-        [[nodiscard]] constexpr bool block_valid(std::size_t block_idx) const { return (block_idx * reg_count_) < data_.size(); }
+        explicit constexpr liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count, bitset_t(reg_count, false)) {}
+        [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) { return data_[block_idx][reg]; }
+        [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) const { return data_[block_idx][reg]; }
+        [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) { return data_.at(block_idx).at(reg); }
+        [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) const { return data_.at(block_idx).at(reg); }
+        [[nodiscard]] constexpr auto& row(std::size_t block_idx) { return data_.at(block_idx); }
+        [[nodiscard]] constexpr const auto& row(std::size_t block_idx) const { return data_.at(block_idx); }
+        [[nodiscard]] constexpr bool block_valid(std::size_t block_idx) const { return block_idx < data_.size(); }
 
     private:
-        std::vector<bool> data_;
-        reg_t reg_count_;
+        // TODO: maybe switch to boost::dynamic_bitset or similar
+        using bitset_t = std::vector<bool>;
+
+        std::vector<bitset_t> data_;
     };
 
     class square_matrix
@@ -166,7 +165,10 @@ namespace rx::detail::tdfa
         }
 
     private:
-        std::vector<bool> data_;
+        // TODO: maybe switch to boost::dynamic_bitset or similar
+        using bitset_t = std::vector<bool>;
+
+        bitset_t data_;
         std::size_t reg_count_;
     };
 
@@ -176,6 +178,9 @@ namespace rx::detail::tdfa
     {
     public:
         using tdfa_t = tagged_dfa<CharT>;
+
+        // TODO: maybe switch to boost::dynamic_bitset or similar
+        using bitset_t = std::vector<bool>;
 
         constexpr explicit opt(std::size_t i = 2) noexcept : iterations_{ i } {}
         constexpr void operator()(tdfa_t& dfa);
@@ -268,7 +273,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto opt<CharT>::compact_registers(const tdfa_t& dfa) -> remap_t
     {
-        std::vector<bool> visited(dfa.register_count_, false);
+        bitset_t visited(dfa.register_count_, false);
         remap_t remap_result(dfa.register_count_, std::numeric_limits<reg_t>::max());
 
         for (auto& block : dfa.regops_)
@@ -322,7 +327,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
     {
-        /* unfortunately coroutines can't be constexpr */
+        /* unfortunately coroutines can't be constexpr yet */
 
         class postorder_visitor
         {
@@ -367,12 +372,14 @@ namespace rx::detail::tdfa
 
         private:
             std::vector<std::pair<std::size_t, std::size_t>> stack;
-            std::vector<bool> block_added;
+            bitset_t block_added;
         };
 
         /* resume liveness implementation */
 
-        liveness_matrix liveness(dfa.regops_.size(), dfa.register_count_);
+        const std::size_t block_count{ dfa.regops_.size() };
+        const std::size_t reg_count{ dfa.register_count_ };
+        liveness_matrix liveness(block_count, reg_count);
 
         /* make registers assigned to in final transitions live */
 
@@ -383,7 +390,7 @@ namespace rx::detail::tdfa
         for (bool loop{ true }; loop;)
         {
             loop = false;
-            postorder_visitor vis{ block_graph_start_, dfa.regops_.size() };
+            postorder_visitor vis{ block_graph_start_, block_count };
 
             while (true)
             {
@@ -393,11 +400,11 @@ namespace rx::detail::tdfa
 
                 const auto block_idx{ opt.value() };
 
-                std::vector<bool> current_row_copy(liveness.row_begin(block_idx), liveness.row_end(block_idx));
+                bitset_t current_row_copy{ liveness.row(block_idx) };
 
                 for (const std::size_t sblock_idx : block_graph_.at(block_idx))
                 {
-                    std::vector<bool> successor_row_copy(liveness.row_begin(sblock_idx), liveness.row_end(sblock_idx));
+                    bitset_t successor_row_copy{ liveness.row(sblock_idx) };
 
                     for (const auto& op : dfa.regops_.at(sblock_idx) | std::views::reverse) /* todo: in post order? */
                     {
@@ -427,9 +434,9 @@ namespace rx::detail::tdfa
                         current_row_copy[i] = current_row_copy[i] or successor_row_copy[i];
                 }
 
-                if (not std::equal(current_row_copy.begin(), current_row_copy.end(), liveness.row_begin(block_idx)))
+                if (not std::ranges::equal(current_row_copy, liveness.row(block_idx)))
                 {
-                    std::copy(current_row_copy.begin(), current_row_copy.end(), liveness.row_begin(block_idx));
+                    liveness.row(block_idx) = std::move(current_row_copy);
                     loop = true;
                 }
             }
@@ -437,11 +444,11 @@ namespace rx::detail::tdfa
 
         for (const auto [fallback_state, fbni] : dfa.fallback_nodes_)
         {
-            std::vector<bool> current_row;
+            bitset_t current_row;
 
             if (fbni.op_index == no_transition_regops)
             {
-                current_row.assign(liveness.reg_count(), false);
+                current_row = bitset_t(reg_count, false);
 
                 for (const std::size_t final_reg : dfa.final_registers_)
                     current_row.at(final_reg) = true;
@@ -451,7 +458,7 @@ namespace rx::detail::tdfa
                 for (const std::size_t final_reg : dfa.final_registers_)
                     liveness.at(fbni.op_index, final_reg) = true;
 
-                current_row.assign(liveness.row_begin(fbni.op_index), liveness.row_end(fbni.op_index));
+                current_row = liveness.row(fbni.op_index);
 
                 for (const auto& op : dfa.regops_.at(fbni.op_index))
                     current_row.at(op.dst) = false;
@@ -463,7 +470,7 @@ namespace rx::detail::tdfa
 
             /* traverse nodes that can possibly fallback to fallback_state */
 
-            std::vector<bool> added(dfa.nodes_.size(), false);
+            bitset_t added(dfa.nodes_.size(), false);
             std::vector<std::pair<std::size_t, std::size_t>> stack;
             stack.emplace_back(fallback_state, 0);
             added.at(fallback_state) = true;
@@ -484,7 +491,7 @@ namespace rx::detail::tdfa
                     *       not a total function, making a fallback possible from every non-final state */
 
                     if (liveness.block_valid(tr.op_index))
-                        for (std::size_t j{ 0 }; j < liveness.reg_count(); ++j)
+                        for (std::size_t j{ 0 }; j < block_count; ++j)
                             liveness[tr.op_index, j] = liveness[tr.op_index, j] or current_row[j];
 
                     ++i;
@@ -506,7 +513,7 @@ namespace rx::detail::tdfa
         for (std::size_t block_idx{ 0 }; block_idx < dfa.regops_.size(); ++block_idx)
         {
             auto& block{ dfa.regops_.at(block_idx) };
-            std::vector<bool> current_row_copy(liveness.row_begin(block_idx), liveness.row_end(block_idx));
+            bitset_t current_row_copy{ liveness.row(block_idx) };
 
             for (std::size_t i{ block.size() }; i > 0; --i)
             {
@@ -556,7 +563,7 @@ namespace rx::detail::tdfa
 
             for (const auto& op : block)
             {
-                std::vector<bool> current_row_copy(liveness.row_begin(block_idx), liveness.row_end(block_idx));
+                bitset_t current_row_copy{ liveness.row(block_idx) };
 
                 if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
                     current_row_copy.at(op.dst) = false;
