@@ -6,7 +6,7 @@ int main()
 {
     using namespace rx::detail;
 
-    constexpr int iterations{ 10 };
+    constexpr int iterations{ 50 };
     const std::string_view pattern{ R"(.{2,4}(Tom|Sawyer|Huckleberry|Finn))" };
 
     for (int i{ 0 }; i < iterations; ++i)

@@ -15,6 +15,8 @@
 #include <utility>
 #include <variant>
 
+#include <boost/dynamic_bitset.hpp>
+
 
 // TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
 
@@ -142,8 +144,7 @@ namespace rx::detail::tdfa
         [[nodiscard]] constexpr bool block_valid(std::size_t block_idx) const { return block_idx < data_.size(); }
 
     private:
-        // TODO: maybe switch to boost::dynamic_bitset or similar
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         std::vector<bitset_t> data_;
     };
@@ -165,8 +166,7 @@ namespace rx::detail::tdfa
         }
 
     private:
-        // TODO: maybe switch to boost::dynamic_bitset or similar
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         bitset_t data_;
         std::size_t reg_count_;
@@ -178,9 +178,7 @@ namespace rx::detail::tdfa
     {
     public:
         using tdfa_t = tagged_dfa<CharT>;
-
-        // TODO: maybe switch to boost::dynamic_bitset or similar
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         constexpr explicit opt(std::size_t i = 2) noexcept : iterations_{ i } {}
         constexpr void operator()(tdfa_t& dfa);
@@ -426,15 +424,10 @@ namespace rx::detail::tdfa
                         }
                     }
 
-                    // /* This is apparently slower than using a naive loop */
-                    // std::transform(current_row_copy.begin(), current_row_copy.end(),
-                    //                successor_row_copy.begin(), current_row_copy.begin(), std::logical_and{});
-
-                    for (std::size_t i{ 0 }; i < current_row_copy.size(); ++i)
-                        current_row_copy[i] = current_row_copy[i] or successor_row_copy[i];
+                    current_row_copy |= successor_row_copy;
                 }
 
-                if (not std::ranges::equal(current_row_copy, liveness.row(block_idx)))
+                if (current_row_copy != liveness.row(block_idx))
                 {
                     liveness.row(block_idx) = std::move(current_row_copy);
                     loop = true;
@@ -491,8 +484,7 @@ namespace rx::detail::tdfa
                     *       not a total function, making a fallback possible from every non-final state */
 
                     if (liveness.block_valid(tr.op_index))
-                        for (std::size_t j{ 0 }; j < block_count; ++j)
-                            liveness[tr.op_index, j] = liveness[tr.op_index, j] or current_row[j];
+                        liveness.row(tr.op_index) |= current_row;
 
                     ++i;
                     if (not added.at(tr.next))

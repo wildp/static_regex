@@ -23,7 +23,7 @@ namespace
         char tmp{ std::numeric_limits<char>::min() };
         for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
         {
-            result.insert(tmp, sv[i]);  
+            result.insert(tmp, sv[i]);
             tmp = sv[i + 1];
         }
         result.insert(tmp, std::numeric_limits<char>::max());
@@ -225,7 +225,6 @@ static_assert(test_part({ "ae", "ac" }, { "de", "ac" }));
 static_assert(test_part({ "ae", "bc" }, { "aade", "bc" }));
 static_assert(test_part({ "bc", "ae" }, { "aade", "bc" }));
 static_assert(test_part({ "aj", "bdfg" }, { "aaeehj", "bdfg" }));
-static_assert(test_part({ "aj", "em" }, { "ad", "km", "ej" }));
 static_assert(test_part({ "aj", "em" }, { "ad", "km", "ej" }));
 static_assert(test_part({ "em", "aj" }, { "km", "ad", "ej" }));
 static_assert(test_part({ "adgh", "dfhj" }, { "acgg", "efij", "ddhh" }));

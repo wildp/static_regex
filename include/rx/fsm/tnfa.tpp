@@ -18,6 +18,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <boost/dynamic_bitset.hpp>
+
 #include "rx/api/regex_error.hpp"
 #include "rx/etc/static_charset.hpp"
 
@@ -472,11 +474,12 @@ namespace rx::detail
     constexpr auto tagged_nfa<CharT>::closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const
     {
         using result_t = maybe_type_t<B, std::vector<state_t>>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         std::vector to_visit{ std::forward<Vec>(qs) };
         std::ranges::reverse(to_visit);
 
-        std::vector<bool> visited(node_count(), false);
+        bitset_t visited(node_count(), false);
         result_t result;
 
         for (const auto q : to_visit)
@@ -545,6 +548,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::remove_dead_and_unreachable_states()
     {
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+
         /* determine reachable states */
 
         std::vector<state_t> initial_nodes{ start_node_ };
@@ -567,10 +572,9 @@ namespace rx::detail
 
         /* remove transitions containing dead and unreachable nodes */
 
-        std::vector<bool> live_and_reachable(nodes_.size(), false);
-        std::ranges::transform(live_nodes, reachable_nodes, live_and_reachable.begin(), std::logical_and{});
+        const auto live_and_reachable{ live_nodes & reachable_nodes };
 
-        std::vector<bool> removed_transitions(transitions_.size(), false);
+        bitset_t removed_transitions(transitions_.size(), false);
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
@@ -588,7 +592,7 @@ namespace rx::detail
 
         /* remove dead and unreachable nodes and transitions from nodes */
 
-        const auto pred = [&](const std::size_t i) { return removed_transitions.at(i); };
+        const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i) { return rt.at(i); };
 
         for (state_t q{ 0 }; q < nodes_.size(); ++q)
         {
@@ -688,7 +692,7 @@ namespace rx::detail
             return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookahead_1_tr>(tr.type);
         };
 
-        std::vector<bool> bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
+        const auto bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
 
         std::vector<state_t> initial;
         std::vector<tr_index> to_revisit;
@@ -941,6 +945,8 @@ namespace rx::detail
         if (cont_info_.size() > 1)
             throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: cont_info_.size() > 1");
 
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+
         using transition_map_t = std::flat_map<charset_type, std::vector<tr_index>>;
         using state_map_t = std::flat_map<state_t, state_t>;
         using all_states_map_t = std::flat_map<charset_type, state_map_t>;
@@ -1059,7 +1065,7 @@ namespace rx::detail
 
         /* determine closure start bitvec */
 
-        std::vector<bool> is_closure_start(transitions_.size(), false);
+        bitset_t is_closure_start(transitions_.size(), false);
 
         for (const auto& [_, lb] : lb_closures)
             for (const tr_index i : lb.tr_into)

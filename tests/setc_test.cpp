@@ -173,7 +173,6 @@ static_assert(test_part({ "ae", "bc" }, { "aade", "bc" }));
 static_assert(test_part({ "bc", "ae" }, { "aade", "bc" }));
 static_assert(test_part({ "aj", "bdfg" }, { "aaeehj", "bdfg" }));
 static_assert(test_part({ "aj", "em" }, { "ad", "km", "ej" }));
-static_assert(test_part({ "aj", "em" }, { "ad", "km", "ej" }));
 static_assert(test_part({ "em", "aj" }, { "km", "ad", "ej" }));
 static_assert(test_part({ "adgh", "dfhj" }, { "acgg", "efij", "ddhh" }));
 static_assert(test_part({ "adgh", "dfhj", "dh" }, { "ac", "ij", "gg", "ef", "ddhh" }));

@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include <boost/dynamic_bitset.hpp>
+
 
 namespace rx::detail
 {
@@ -227,7 +229,8 @@ namespace rx::detail
 
     private:
         using underlying_t = std::vector<char_interval>;
-        using partition_entry = std::pair<char_interval, std::vector<bool>>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+        using partition_entry = std::pair<char_interval, bitset_t>;
         using partitioned_intervals = std::vector<partition_entry>;
 
         constexpr explicit charset(underlying_t&& data) : data_{ std::move(data) } {}
@@ -245,7 +248,7 @@ namespace rx::detail
         static constexpr void part_sort_lookahead_and_insert(partitioned_intervals& part, std::size_t current_idx, partition_entry&& to_insert);
         static constexpr void part_sort_and_dedup(partitioned_intervals& sorted_part);
         static constexpr void part_merge_intervals(partitioned_intervals& sorted_part);
-        static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<std::vector<bool>, charset>;
+        static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<bitset_t, charset>;
 
         underlying_t data_;
     };
@@ -760,10 +763,7 @@ namespace rx::detail
                      */
 
                     lookahead.first = current.second + 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        current_mask[j] = current_mask[j] or lookahead_mask[j];
-
+                    current_mask |= lookahead_mask;
                     part_sort_lookahead(part, i);
                 }
                 else
@@ -772,9 +772,7 @@ namespace rx::detail
                      * ---------
                      */
 
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        current_mask[j] = current_mask[j] or lookahead_mask[j];
-
+                    current_mask |= lookahead_mask;
                     part.erase(part.begin() + i + 1); /* dedup */
                 }
             }
@@ -790,10 +788,7 @@ namespace rx::detail
                      */
 
                     current.second = lookahead.first - 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
-
+                    lookahead_mask |= current_mask;
                     part_sort_lookahead(part, i);
                 }
                 else if (current.second < lookahead.second)
@@ -805,10 +800,7 @@ namespace rx::detail
                     partition_entry to_insert{ { current.second + 1, lookahead.second }, lookahead_mask };
                     lookahead.second = current.second;
                     current.second = lookahead.first - 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
-
+                    lookahead_mask |= current_mask;
                     part_sort_lookahead_and_insert(part, i, std::move(to_insert));
                 }
                 else
@@ -819,10 +811,7 @@ namespace rx::detail
 
                     partition_entry to_insert{ { lookahead.second + 1, current.second }, current_mask };
                     current.second = lookahead.first - 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
-
+                    lookahead_mask |= current_mask;
                     part_sort_lookahead_and_insert(part, i, std::move(to_insert));
                 }
             }
@@ -834,9 +823,9 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::part_make_map(const partitioned_intervals& part) -> std::flat_map<std::vector<bool>, charset>
+    constexpr auto charset<CharT>::part_make_map(const partitioned_intervals& part) -> std::flat_map<bitset_t, charset>
     {
-        std::flat_map<std::vector<bool>, charset> map;
+        std::flat_map<bitset_t, charset> map;
 
         for (const auto& [interval, mask] : part)
         {
@@ -860,8 +849,8 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
-            std::vector<bool> mask(input.size(), false);
-            mask[input.size() - i - 1] = true;
+            bitset_t mask(input.size(), false);
+            mask[i] = true;
             for (const auto& pair : input[i].get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -886,8 +875,8 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
-            std::vector<bool> mask(input.size(), false);
-            mask[input.size() - i - 1] = true;
+            bitset_t mask(input.size(), false);
+            mask[i] = true;
             for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -902,7 +891,7 @@ namespace rx::detail
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
             for (std::size_t i{ 0 }; i < input.size(); ++i)
-                if (it->first.at(input.size() - i - 1))
+                if (it->first.at(i))
                     result.back().second.emplace_back(input[i].second);
         }
 
@@ -923,8 +912,8 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
-            std::vector<bool> mask(input.size(), false);
-            mask[input.size() - i - 1] = true;
+            bitset_t mask(input.size(), false);
+            mask[i] = true;
             for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -939,7 +928,7 @@ namespace rx::detail
         {
             result.emplace_back();
             for (std::size_t i{ 0 }; i < input.size(); ++i)
-                if (it->first.at(input.size() - i - 1))
+                if (it->first.at(i))
                     result.back().emplace_back(input[i].second);
         }
 

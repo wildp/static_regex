@@ -16,6 +16,8 @@
 #include <utility>
 #include <variant>
 
+#include <boost/dynamic_bitset.hpp>
+
 
 namespace rx::detail::tdfa
 {
@@ -123,6 +125,8 @@ namespace rx::detail::tdfa
         constexpr explicit factory(const tnfa_t& input, tdfa_t& result, std::size_t tag_count);
 
     private:
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, regops_t& o);
         [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
@@ -147,9 +151,6 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
-        // TODO: maybe switch to boost::dynamic_bitset or similar
-        using bitset_t = std::vector<bool>;
-
         static constexpr auto compose = [](const auto& g, const auto& f) {
             return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
@@ -478,8 +479,8 @@ namespace rx::detail::tdfa
             /* determine clobbered registers */
 
             // maybe switch to sets?
-            std::vector<bool> added(result.nodes_.size(), false);
-            std::vector<bool> clobbered(result.register_count_, false);
+            bitset_t added(result.nodes_.size(), false);
+            bitset_t clobbered(result.register_count_, false);
 
             std::vector<std::pair<std::size_t, std::size_t>> stack;
             stack.emplace_back(state, 0);

@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include <boost/dynamic_bitset.hpp>
+
 
 namespace rx::detail
 {
@@ -34,6 +36,8 @@ namespace rx::detail
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
         static_assert(sizeof(CharT) < sizeof(int));
+
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
     public:
         using char_type = CharT;
@@ -464,7 +468,7 @@ namespace rx::detail
     template<typename T>
     constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>
     {
-        using part_pair = std::pair<bitcharset, std::vector<bool>>;
+        using part_pair = std::pair<bitcharset, bitset_t>;
 
         if (input.empty())
             return {};
@@ -486,7 +490,7 @@ namespace rx::detail
                 if (auto cs{ v & complement }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(false);
+                    next_gen.back().second.push_back(false);
                 }
             }
 
@@ -495,7 +499,7 @@ namespace rx::detail
                 if (auto cs{ v & val.get() }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(true);
+                    next_gen.back().second.push_back(true);
                 }
             }
 
@@ -503,7 +507,7 @@ namespace rx::detail
         }
 
         partition_pair_result<T> result;
-        const std::vector<bool> empty(input.size(), false);
+        const bitset_t empty(input.size(), false);
 
         for (const auto& [v, from] : partitions)
         {
@@ -523,7 +527,7 @@ namespace rx::detail
     template<typename T>
     constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>
     {
-        using part_pair = std::pair<bitcharset, std::vector<bool>>;
+        using part_pair = std::pair<bitcharset, bitset_t>;
 
         if (input.empty())
             return {};
@@ -545,7 +549,7 @@ namespace rx::detail
                 if (auto cs{ v & complement }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(false);
+                    next_gen.back().second.push_back(false);
                 }
             }
 
@@ -554,7 +558,7 @@ namespace rx::detail
                 if (auto cs{ v & val.get() }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(true);
+                    next_gen.back().second.push_back(true);
                 }
             }
 
@@ -562,7 +566,7 @@ namespace rx::detail
         }
 
         std::vector<std::vector<T>> result;
-        const std::vector<bool> empty(input.size(), false);
+        const bitset_t empty(input.size(), false);
 
         for (const auto& [v, from] : partitions)
         {

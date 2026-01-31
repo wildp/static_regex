@@ -14,6 +14,8 @@
 #include <ranges>
 #include <vector>
 
+#include <boost/dynamic_bitset.hpp>
+
 #include "rx/etc/util.hpp"
 
 
@@ -31,8 +33,7 @@ namespace rx::detail::tdfa
         static constexpr std::vector<std::vector<std::size_t>> dry_run(const tdfa_t& dfa);
 
     private:
-        // TODO: switch to boost::dynamic_bitset
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         // TODO: maybe switch to using unordered_set or flat_set?
         using partition_t = std::vector<bitset_t>;
@@ -153,17 +154,11 @@ namespace rx::detail::tdfa
 
                     for (std::size_t p{ 0 }; p < partitions.size(); ++p)
                     {
-                        bitset_t intersection(bitset_size, false);
-                        bitset_t rel_complement(bitset_size, false);
+                        bitset_t intersection{ partitions[p] & transitions_from };
+                        bitset_t rel_complement{ partitions[p] - transitions_from };
 
-                        for (std::size_t i{ 0 }; i < bitset_size; ++i)
-                        {
-                            intersection[i] = partitions[p][i] and transitions_from[i];
-                            rel_complement[i] = partitions[p][i] and not transitions_from[i];
-                        }
-
-                        const auto i_count{ std::ranges::count(intersection, true) };
-                        const auto c_count{ std::ranges::count(rel_complement, true) };
+                        const auto i_count{ intersection.count() };
+                        const auto c_count{ rel_complement.count() };
 
                         using gt = std::ranges::greater;
 
