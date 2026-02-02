@@ -134,6 +134,7 @@ namespace rx::detail::tdfa
         [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
         [[nodiscard]] constexpr regop::op_t regop_rhs(const std::vector<bool>& hist) const;
         [[nodiscard]] constexpr std::vector<bool> history(const tag_sequence_t& hist, tag_t tag) const;
+        [[nodiscard]] constexpr bool has_history(const tag_sequence_t& hist, tag_t tag) const;
         [[nodiscard]] constexpr bool mappable(const node_info& state, std::size_t mapped_state, regops_t& o, reg_t regcount) const;
 
         constexpr void fallback_regops(tdfa_t& result);
@@ -389,6 +390,12 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
+    constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, tag_t tag) const
+    {
+        return std::ranges::contains(h, tag, [](auto x) { return x < 0 ? -x : x; });
+    }
+
+    template<typename CharT>
     constexpr bool factory<CharT>::mappable(const node_info& state, std::size_t mapped_state, regops_t& o, const reg_t regcount) const
     {
         const auto& mapped_state_info{ state_info_.at(mapped_state) };
@@ -412,17 +419,26 @@ namespace rx::detail::tdfa
 
                 for (tag_t t{ 1 }; std::cmp_less_equal(t, tag_count_); ++t)
                 {
-                    auto h{ history(ce1.tag_seq, t) };
+                    if (has_history(ce1.tag_seq, t))
+                        continue;
 
-                    if (h.empty())
+                    const reg_t i{ ce1.registers.at(t - 1) };
+                    const reg_t j{ ce2.registers.at(t - 1) };
+
+                    const auto it{ map.lower_bound(i) };
+                    const auto jt{ rmap.lower_bound(j) };
+
+                    bool not_i_match{ it == map.end() or (*it).first != i };
+                    bool not_j_match{ jt == rmap.end() or (*jt).first != j };
+
+                    if (not_i_match and not_j_match)
                     {
-                        const reg_t i{ ce1.registers.at(t - 1) };
-                        const reg_t j{ ce2.registers.at(t - 1) };
-
-                        if (not map.contains(i) and not rmap.contains(j))
-                            map[i] = j, rmap[j] = i;
-                        else if (not (map.contains(i) and map.at(i) == j) or not (rmap.contains(j) and rmap.at(j) == i))
-                            return false;
+                        map.emplace_hint(it, i, j);
+                        rmap.emplace_hint(jt, j, i);
+                    }
+                    else if (not_i_match or not_j_match or (*it).second != j or (*jt).second != i)
+                    {
+                        return false;
                     }
                 }
             }
@@ -434,15 +450,18 @@ namespace rx::detail::tdfa
         {
             const auto i{ it->dst };
 
-            if (not map.contains(i))
+            const auto map_it{ map.find(i) };
+            const auto map_end{ map.end() };
+
+            if (map_it == map_end)
             {
                 /* skip mapping registers with history */
                 it = o_copy.erase(it);
                 continue;
             }
 
-            it->dst = map.at(i);
-            map.erase(i);
+            it->dst = (*map_it).second;
+            map.erase(map_it);
             ++it;
         }
 
