@@ -18,6 +18,8 @@
 
 #include <boost/dynamic_bitset.hpp>
 
+#include "rx/api/regex_error.hpp"
+
 
 namespace rx::detail::tdfa
 {
@@ -127,6 +129,11 @@ namespace rx::detail::tdfa
     private:
         using bitset_t = boost::dynamic_bitset<std::size_t>;
 
+        using epsilon_tr_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
+        using normal_tr_t  = std::pair<tnfa::state_t, std::reference_wrapper<const tnfa::charset_t<char_type>>>;
+        using epsilon_tr_info_t = std::vector<std::vector<epsilon_tr_t>>;
+        using normal_tr_info_t  = std::vector<std::vector<normal_tr_t>>;
+
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, regops_t& o);
         [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
@@ -142,9 +149,13 @@ namespace rx::detail::tdfa
 
         constexpr std::size_t make_initial_state(tdfa_t& result, tnfa::state_t tnfa_state);
 
+        constexpr void factory_init();
+
         const tnfa_t* tnfa_ptr_;
         state_info_t state_info_;
         continue_info_t cont_info_;
+        epsilon_tr_info_t epsilon_transitions_;
+        normal_tr_info_t normal_transitions_;
         reg_t tag_count_;
         fsm_flags flags_;
     };
@@ -152,12 +163,6 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
-        static constexpr auto compose = [](const auto& g, const auto& f) {
-            return [=]<typename T>(T&& arg) {
-                return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
-            };
-        };
-
         closure_t new_closure;
 
         closure_t stack{ std::move(c) };
@@ -179,28 +184,15 @@ namespace rx::detail::tdfa
             const closure_entry& ce{ new_closure.back() };
             visited.at(ce.tnfa_state) = true;
 
-            // TODO: maybe reimplement to be more efficient, using getif?
-            // also maybe sort e-transitions and avoid looking at node.out_tr and node.in_tr
-            using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
-            std::vector et{
-                std::from_range,
-                tnfa_ptr_->get_node(ce.tnfa_state).out_tr
-                | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
-                | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
-                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; })
-            };
-
-            std::ranges::sort(et, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_t::second));
-
-            for (const auto& [next, e] : et)
+            for (const auto& [next, e] : epsilon_transitions_.at(ce.tnfa_state))
             {
-                if (not visited.at(next))
-                {
-                    auto newer_tag_seq{ ce.new_tag_seq };
-                    if (e.tag != 0)
-                        newer_tag_seq.push_back(e.tag);
-                    stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
-                }
+                if (visited.at(next))
+                    continue;
+
+                auto newer_tag_seq{ ce.new_tag_seq };
+                if (e.tag != 0)
+                    newer_tag_seq.push_back(e.tag);
+                stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
             }
         }
 
@@ -208,9 +200,10 @@ namespace rx::detail::tdfa
         {
             /* this version is needed for full matches, but below is needed for laziness in prefix matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
-                if (tnfa_ptr_->get_node(ce.tnfa_state).is_fallback) return false;
-                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
-                                                  [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
+                const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
+                if (node.is_final or node.is_fallback)
+                    return false;
+                return normal_transitions_.at(ce.tnfa_state).empty();
             });
         }
         else
@@ -226,8 +219,7 @@ namespace rx::detail::tdfa
                     return false;
                 }
                 if (node.is_final) return false;
-                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
-                                                  [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
+                return normal_transitions_.at(ce.tnfa_state).empty();
             });
         }
 
@@ -299,24 +291,13 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::multistep(std::size_t state) const -> multistep_closures_t<char_type>
     {
-        auto configs{ state_info_.at(state).config };
-        // const auto& p{ state_info_.at(state).precedence };
-
-        // std::ranges::sort(configs, [&p](std::size_t lhs, std::size_t rhs){ return p(lhs) < p(rhs); }, &configuration::tnfa_state);
-
         using elem_t = tnfa::charset_t<char_type>::template ref_pair<closure_entry>;
 
         std::vector<elem_t> transitions;
 
-        for (const auto& cfg : configs)
-        {
-            for (std::size_t tr_idx : tnfa_ptr_->get_node(cfg.tnfa_state).out_tr)
-            {
-                const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
-                if (const auto* const ptr{ std::get_if<tnfa::normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
-                    transitions.emplace_back(std::cref(ptr->cs), closure_entry{ tr.dst, cfg.registers, cfg.tag_seq });
-            }
-        }
+        for (const auto& cfg : state_info_.at(state).config)
+            for (const auto& [dst, cs] : normal_transitions_.at(cfg.tnfa_state))
+                transitions.emplace_back(cs, closure_entry{ dst, cfg.registers, cfg.tag_seq });
 
         return charset_t<char_type>::partition_ext(transitions);
     }
@@ -384,9 +365,11 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::history(const tag_sequence_t& h, tag_t tag) const -> std::vector<bool>
     {
-        return h | std::views::filter([tag](tag_t i) { return /* std::abs(i) == tag */ (i == -tag) or (i == tag); }) // TODO: replace implementation when supported
-                 | std::views::transform([](tag_t i) -> bool { return i >= 0; })
-                 | std::ranges::to<std::vector>();
+        std::vector<bool> result;
+        for (const tag_t x : h)
+            if (tag == (x < 0 ? -x : x))
+                result.push_back(x >= 0);
+        return result;
     }
 
     template<typename CharT>
@@ -593,9 +576,51 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
+    constexpr void factory<CharT>::factory_init()
+    {
+        static constexpr auto compose = [](const auto& g, const auto& f) {
+            return [=]<typename T>(T&& arg) {
+                return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+            };
+        };
+
+        const std::size_t node_count{ tnfa_ptr_->node_count() };
+        epsilon_transitions_.resize(node_count);
+        normal_transitions_.resize(node_count);
+
+        for (std::size_t q{ 0 }; q < node_count; ++q)
+        {
+            auto& current_etr{ epsilon_transitions_.at(q) };
+            auto& current_tr{ normal_transitions_.at(q) };
+
+            for (const auto tr_idx : tnfa_ptr_->get_node(q).out_tr)
+            {
+                const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
+
+                if (const auto* const ptr{ std::get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                {
+                    current_tr.emplace_back(tr.dst, std::cref(ptr->cs));
+                }
+                else if (const auto* const ptr{ std::get_if<tnfa::epsilon_tr>(&tr.type) }; ptr != nullptr)
+                {
+                    current_etr.emplace_back(tr.dst, *ptr);
+                }
+                else
+                {
+                    throw tnfa_error("Input contains un-rewritten assertions");
+                }
+            }
+
+            std::ranges::sort(current_etr, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_tr_t::second));
+        }
+    }
+
+    template<typename CharT>
     constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
         : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
     {
+        factory_init();
+
         result.register_count_ = tag_count_ * 2;
         result.final_registers_.resize(tag_count_);
         std::ranges::iota(result.final_registers_, tag_count_);
