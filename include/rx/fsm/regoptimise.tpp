@@ -775,5 +775,6 @@ namespace rx::detail
     constexpr void tagged_dfa<CharT>::optimise_registers()
     {
         std::invoke(tdfa::opt<char_type>{}, *this);
+        compact_regop_blocks();
     }
 }

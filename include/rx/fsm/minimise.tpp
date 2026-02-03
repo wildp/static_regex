@@ -29,7 +29,6 @@ namespace rx::detail::tdfa
         using tdfa_t = tagged_dfa<CharT>;
 
         static constexpr void operator()(tdfa_t& dfa);
-        static constexpr void compact_regop_blocks(tdfa_t& dfa);
         static constexpr std::vector<std::vector<std::size_t>> dry_run(const tdfa_t& dfa);
 
     private:
@@ -41,38 +40,6 @@ namespace rx::detail::tdfa
         static constexpr partition_t init_hopcroft_partition(const tdfa_t& dfa);
         static constexpr partition_t hopcroft(const tdfa_t& dfa);
     };
-
-    template<typename CharT>
-    constexpr void min<CharT>::compact_regop_blocks(tdfa_t& dfa)
-    {
-        std::vector<std::size_t> regop_block_map(dfa.regops_.size());
-        std::flat_map<regops_t, std::size_t> regop_map;
-        typename tdfa_t::regop_data_t new_regops;
-
-        for (std::size_t i{ 0 }; i < dfa.regops_.size(); ++i)
-        {
-            auto [it, inserted]{ regop_map.try_emplace(dfa.regops_[i], new_regops.size()) };
-
-            if (inserted)
-                new_regops.emplace_back(dfa.regops_[i]);
-
-            regop_block_map[i] = it->second;
-        }
-
-        /* remap regop block indicies in dfa */
-
-        for (auto& node : dfa.nodes_)
-            for (auto& tr : node.tr)
-                tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : no_transition_regops;
-
-        for (auto it{ dfa.final_nodes_.begin() }, last{ dfa.final_nodes_.end() }; it != last; ++it)
-            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : no_transition_regops;
-
-        for (auto it{ dfa.fallback_nodes_.begin() }, last{ dfa.fallback_nodes_.end() }; it != last; ++it)
-            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : no_transition_regops;
-
-        dfa.regops_ = std::move(new_regops);
-    }
 
     template<typename CharT>
     constexpr auto min<CharT>::init_hopcroft_partition(const tdfa_t& dfa) -> partition_t
@@ -207,7 +174,6 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr void min<CharT>::operator()(tdfa_t& dfa)
     {
-        compact_regop_blocks(dfa);
         const partition_t partitions{ hopcroft(dfa) };
 
         /* create map for node remapping */
@@ -283,6 +249,38 @@ namespace rx::detail::tdfa
 namespace rx::detail
 {
     template<typename CharT>
+    constexpr void tagged_dfa<CharT>::compact_regop_blocks()
+    {
+        std::vector<std::size_t> regop_block_map(regops_.size());
+        std::flat_map<tdfa::regops_t, std::size_t> regop_map;
+        regop_data_t new_regops;
+
+        for (std::size_t i{ 0 }; i < regops_.size(); ++i)
+        {
+            auto [it, inserted]{ regop_map.try_emplace(regops_[i], new_regops.size()) };
+
+            if (inserted)
+                new_regops.emplace_back(regops_[i]);
+
+            regop_block_map[i] = it->second;
+        }
+
+        /* remap regop block indicies in dfa */
+
+        for (auto& node : nodes_)
+            for (auto& tr : node.tr)
+                tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : tdfa::no_transition_regops;
+
+        for (auto it{ final_nodes_.begin() }, last{ final_nodes_.end() }; it != last; ++it)
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
+
+        for (auto it{ fallback_nodes_.begin() }, last{ fallback_nodes_.end() }; it != last; ++it)
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
+
+        regops_ = std::move(new_regops);
+    }
+
+    template<typename CharT>
     constexpr void tagged_dfa<CharT>::minimise_states()
     {
         std::invoke(tdfa::min<char_type>{}, *this);
@@ -291,6 +289,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::minimise_transition_edges()
     {
+        /* mutually exclusive with make_default_transitions */
+
         /* Note: this function relaxes the requirement for a character to appear at most once in any
                  transition edge, and requires the transitions to be checked in the provided order */
 
@@ -361,6 +361,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::make_default_transitions()
     {
+        /* mutually exclusive with minimise_transition_edges */
+
         using tr_type = tdfa::transition<char_type>;
 
         for (auto& node : nodes_)

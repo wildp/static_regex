@@ -132,6 +132,7 @@ namespace rx::detail
 
         explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
+        constexpr void compact_regop_blocks();
         constexpr void minimise_states();
         constexpr void minimise_transition_edges();
         constexpr void make_default_transitions();

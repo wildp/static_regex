@@ -15,7 +15,7 @@
 #include <vector>
 
 
-namespace 
+namespace
 {
     template<int... Is>
     using ints = std::integer_sequence<int, Is...>;
