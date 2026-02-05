@@ -283,7 +283,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::minimise_states()
     {
-        std::invoke(tdfa::min<char_type>{}, *this);
+        tdfa::min<char_type> minimise{};
+        minimise(*this);
     }
 
     template<typename CharT>
@@ -371,7 +372,7 @@ namespace rx::detail
                 continue;
 
             const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
-            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(sizes.begin(), std::ranges::max_element(sizes))) };
 
             auto& largest{ node.tr[largest_index] };
             tdfa::charset_t<char_type> largest_cs{ largest.cs };
@@ -406,8 +407,8 @@ namespace rx::detail
         // TODO: switch to using std::flat_multimap instead when constexpr is supported
         //       (but an unordered flat set would be much better)
         // const std::flat_multimap map{ std::move(keys), std::move(values) };
-        static constexpr auto value_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; // TODO: remove
-        std::ranges::sort(std::views::zip(keys, values), {}, value_proj); // TODO: remove
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; // TODO: remove
+        std::ranges::sort(std::views::zip(keys, values), {}, key_proj); // TODO: remove
 
         data_t new_nodes{};
         new_nodes.reserve(nodes_.size());
@@ -428,7 +429,7 @@ namespace rx::detail
                 const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
 
                 // for (auto [fst, snd]{ map.equal_range(keys) }; fst != snd; ++fst)
-                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, value_proj) }; fst != snd; ++fst)  // TODO: remove
+                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, key_proj) }; fst != snd; ++fst)  // TODO: remove
                 {
                     auto [_, index]{ *fst };
 

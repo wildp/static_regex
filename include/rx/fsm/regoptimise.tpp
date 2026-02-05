@@ -26,63 +26,128 @@ namespace rx::detail::tdfa
 
     constexpr bool toposort_regops(const regops_t::iterator beg, const regops_t::iterator end, const reg_t regcount)
     {
-        std::vector<std::size_t> indeg(regcount, 0);
+        static constexpr reg_t regop_threshold{ 64 };
 
-        for (auto it{ beg }; it != end; ++it)
+        if (regcount < regop_threshold) [[likely]]
         {
-            if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
-                ++indeg.at(copy->src);
-        }
+            std::vector<unsigned int> indeg(regcount, 0);
 
-        regops_t o_new;
-        regops_t o_copy{ beg, end };
-        bool cycle_detected{ false };
-
-        while (not o_copy.empty())
-        {
-            bool added{ false };
-
-            for (auto it{ o_copy.begin() }; it != o_copy.end();)
+            for (auto it{ beg }; it != end; ++it)
             {
-                if (indeg.at(it->dst) == 0)
-                {
-                    if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
-                        --indeg.at(copy->src);
-
-                    o_new.emplace_back(*it);
-                    it = o_copy.erase(it);
-                    added = true;
-                }
-                else
-                {
-                    ++it;
-                }
+                if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                    ++indeg.at(copy->src);
             }
 
-            if (not added and not o_copy.empty())
+            regops_t o_new;
+            regops_t o_copy{ beg, end };
+            bool cycle_detected{ false };
+
+            while (not o_copy.empty())
             {
-                for (const auto& oc : o_copy)
+                bool added{ false };
+
+                for (auto it{ o_copy.begin() }; it != o_copy.end();)
                 {
-                    /* ignore copying to self */
-                    if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                    if (indeg.at(it->dst) == 0)
                     {
-                        cycle_detected = true;
-                        break;
+                        if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                            --indeg.at(copy->src);
+
+                        o_new.emplace_back(*it);
+                        it = o_copy.erase(it);
+                        added = true;
+                    }
+                    else
+                    {
+                        ++it;
                     }
                 }
 
-                o_new.append_range(o_copy);
-                break;
+                if (not added and not o_copy.empty())
+                {
+                    for (const auto& oc : o_copy)
+                    {
+                        /* ignore copying to self */
+                        if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                        {
+                            cycle_detected = true;
+                            break;
+                        }
+                    }
+
+                    o_new.append_range(o_copy);
+                    break;
+                }
             }
+
+            if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
+                cycle_detected = true; /* unknown error */
+
+            if (not cycle_detected)
+                std::ranges::move(o_copy, beg);
+
+            return not cycle_detected;
         }
+        else
+        {
+            std::flat_map<reg_t, unsigned int> indeg;
 
-        if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
-            cycle_detected = true; /* unknown error */
+            for (auto it{ beg }; it != end; ++it)
+            {
+                if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                    ++indeg[copy->src];
+            }
 
-        if (not cycle_detected)
-            std::ranges::move(o_copy, beg);
+            regops_t o_new;
+            regops_t o_copy{ beg, end };
+            bool cycle_detected{ false };
 
-        return not cycle_detected;
+            while (not o_copy.empty())
+            {
+                bool added{ false };
+
+                for (auto it{ o_copy.begin() }; it != o_copy.end();)
+                {
+                    if (indeg[it->dst] == 0)
+                    {
+                        if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                            --indeg[copy->src];
+
+                        o_new.emplace_back(*it);
+                        it = o_copy.erase(it);
+                        added = true;
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+
+                if (not added and not o_copy.empty())
+                {
+                    for (const auto& oc : o_copy)
+                    {
+                        /* ignore copying to self */
+                        if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                        {
+                            cycle_detected = true;
+                            break;
+                        }
+                    }
+
+                    o_new.append_range(o_copy);
+                    break;
+                }
+            }
+
+            if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
+                cycle_detected = true; /* unknown error */
+
+            if (not cycle_detected)
+                std::ranges::move(o_copy, beg);
+
+            return not cycle_detected;
+        }
     }
 
 
@@ -231,12 +296,13 @@ namespace rx::detail::tdfa
 
         /* calculate reachability matrix (initial reachability is added above) */
 
-        for (std::size_t i{ 0 }; i < reachable.side_length(); ++i)
+        const auto side_length{ reachable.side_length() };
+        for (std::size_t i{ 0 }; i < side_length; ++i)
             reachable[i, i] = true;
 
-        for (std::size_t k{ 0 }; k < reachable.side_length(); ++k)
-            for (std::size_t i{ 0 }; i < reachable.side_length(); ++i)
-                for (std::size_t j{ 0 }; j < reachable.side_length(); ++j)
+        for (std::size_t k{ 0 }; k < side_length; ++k)
+            for (std::size_t i{ 0 }; i < side_length; ++i)
+                for (std::size_t j{ 0 }; j < side_length; ++j)
                     if (not reachable[i, j])
                         reachable[i, j] = reachable[i, k] and reachable[k, j];
 
@@ -385,6 +451,9 @@ namespace rx::detail::tdfa
             for (const reg_t final_reg : dfa.final_registers_)
                 liveness.at(fni.op_index, final_reg) = true;
 
+        bitset_t current_row_copy;
+        bitset_t successor_row_copy;
+
         for (bool loop{ true }; loop;)
         {
             loop = false;
@@ -398,11 +467,11 @@ namespace rx::detail::tdfa
 
                 const auto block_idx{ opt.value() };
 
-                bitset_t current_row_copy{ liveness.row(block_idx) };
+                current_row_copy = liveness.row(block_idx);
 
                 for (const std::size_t sblock_idx : block_graph_.at(block_idx))
                 {
-                    bitset_t successor_row_copy{ liveness.row(sblock_idx) };
+                    successor_row_copy = liveness.row(sblock_idx);
 
                     for (const auto& op : dfa.regops_.at(sblock_idx) | std::views::reverse) /* todo: in post order? */
                     {
@@ -435,13 +504,14 @@ namespace rx::detail::tdfa
             }
         }
 
+        bitset_t current_row(reg_count, false);
+        bitset_t added(dfa.nodes_.size(), false);
+
         for (const auto [fallback_state, fbni] : dfa.fallback_nodes_)
         {
-            bitset_t current_row;
-
             if (fbni.op_index == no_transition_regops)
             {
-                current_row = bitset_t(reg_count, false);
+                current_row.reset();
 
                 for (const std::size_t final_reg : dfa.final_registers_)
                     current_row.at(final_reg) = true;
@@ -463,7 +533,7 @@ namespace rx::detail::tdfa
 
             /* traverse nodes that can possibly fallback to fallback_state */
 
-            bitset_t added(dfa.nodes_.size(), false);
+            added.reset();
             std::vector<std::pair<std::size_t, std::size_t>> stack;
             stack.emplace_back(fallback_state, 0);
             added.at(fallback_state) = true;
@@ -535,7 +605,7 @@ namespace rx::detail::tdfa
         square_matrix overlapping_lifetimes(dfa.register_count_);
         std::vector<std::optional<regop::op_t>> histories(dfa.register_count_);
 
-        for (std::size_t block_idx{ 0 }; block_idx < dfa.regops_.size(); ++block_idx)
+        for (std::size_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
         {
             const auto& block{ dfa.regops_.at(block_idx) };
 
@@ -774,7 +844,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::optimise_registers()
     {
-        std::invoke(tdfa::opt<char_type>{}, *this);
+        tdfa::opt<char_type> regoptimise;
+        regoptimise(*this);
         compact_regop_blocks();
     }
 }

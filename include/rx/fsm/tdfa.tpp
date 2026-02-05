@@ -151,6 +151,9 @@ namespace rx::detail::tdfa
 
         constexpr void factory_init();
 
+        static constexpr std::size_t hash_state(const node_info& state);
+        static constexpr std::size_t hash_mappability(const node_info& state);
+
         const tnfa_t* tnfa_ptr_;
         state_info_t state_info_;
         continue_info_t cont_info_;
@@ -158,7 +161,30 @@ namespace rx::detail::tdfa
         normal_tr_info_t normal_transitions_;
         reg_t tag_count_;
         fsm_flags flags_;
+
+        // TODO: eventually replace these with (flat|unordered)_multimap when supported?
+        std::vector<std::size_t> state_hashes_keys_;
+        std::vector<std::size_t> state_hashes_values_;
+        std::vector<std::size_t> mappable_candidate_keys_;
+        std::vector<std::size_t> mappable_candidate_values_;
     };
+
+    template<typename CharT>
+    constexpr std::size_t factory<CharT>::hash_state(const node_info& state)
+    {
+        std::size_t hash{ hash::init() };
+        hash::append(hash, state);
+        return hash;
+    }
+
+    template<typename CharT>
+    constexpr std::size_t factory<CharT>::hash_mappability(const node_info& state)
+    {
+        std::size_t hash{ hash::init() };
+        for (const auto& cfg: state.config)
+            hash::append(hash, cfg.tnfa_state);
+        return hash;
+    }
 
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
@@ -229,22 +255,77 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> std::size_t
     {
+        static constexpr std::size_t map_usage_threshold{ 128 };
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; // TODO: remove later
+
         node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) } };
+        std::size_t new_state{ state_info_.size() };
 
-        const std::size_t new_state{ static_cast<std::size_t>(std::ranges::distance(state_info_.begin(), std::ranges::find(state_info_, current_info))) };
+        if (new_state < map_usage_threshold) [[likely]]
+        {
+            /* check if state already exists */
+            const std::size_t sh_key{ hash_state(current_info) };
+            for (std::size_t existing_state{ 0 }, size{ state_hashes_keys_.size() }; existing_state < size; ++existing_state)
+                if (sh_key == state_hashes_keys_[existing_state]) [[unlikely]]
+                    if (mappable(current_info, existing_state, o, result.register_count_))
+                        return existing_state;
 
-        /* check if state already exists */
-        if (new_state < state_info_.size())
-            return new_state;
+            /* check if state can be mapped to an existing state */
+            const std::size_t mc_key{ hash_mappability(current_info) };
+            for (std::size_t mapped_state{ 0 }, size{ mappable_candidate_keys_.size() }; mapped_state < size; ++mapped_state)
+                if (mc_key == mappable_candidate_keys_[mapped_state]) [[unlikely]]
+                    if (mappable(current_info, mapped_state, o, result.register_count_))
+                        return mapped_state;
 
-        /* check if state can be mapped to an existing state */
-        for (std::size_t mapped_state{ 0 }; mapped_state < state_info_.size(); ++mapped_state)
-            if (mappable(current_info, mapped_state, o, result.register_count_))
-                return mapped_state;
+            /* create new state */
+            result.nodes_.emplace_back();
+            state_info_.emplace_back(std::move(current_info));
 
-        /* create new state */
-        result.nodes_.emplace_back();
-        state_info_.emplace_back(std::move(current_info));
+            state_hashes_keys_.emplace_back(sh_key);
+            mappable_candidate_keys_.emplace_back(mc_key);
+
+            /* switch to using maps at threshold */
+            if (state_info_.size() == map_usage_threshold)
+            {
+                state_hashes_values_.assign_range(std::views::iota(0uz, new_state));
+                mappable_candidate_values_.assign_range(std::views::iota(0uz, new_state));
+
+                std::ranges::sort(std::views::zip(state_hashes_keys_, state_hashes_values_), {}, key_proj);
+                std::ranges::sort(std::views::zip(mappable_candidate_keys_, mappable_candidate_values_), {}, key_proj);
+            }
+        }
+        else
+        {
+            /* check if state already exists */
+            auto sh_zv = std::views::zip(state_hashes_keys_, state_hashes_values_);
+            const std::size_t sh_key{ hash_state(current_info) };
+            const auto sh_eq_range{ std::ranges::equal_range(sh_zv, sh_key, {}, key_proj) };
+
+            for (const auto& [_, state] : sh_eq_range)
+                if (current_info == state_info_.at(state))
+                    return state;
+
+            /* check if state can be mapped to an existing state */
+            auto mc_zv = std::views::zip(mappable_candidate_keys_, mappable_candidate_values_);
+            const std::size_t mc_key{ hash_mappability(current_info) };
+            const auto mc_eq_range{ std::ranges::equal_range(mc_zv, mc_key, {}, key_proj) };
+
+            for (const auto& [_, mapped_state] : mc_eq_range)
+                if (mappable(current_info, mapped_state, o, result.register_count_))
+                    return mapped_state;
+
+            /* create new state */
+            result.nodes_.emplace_back();
+            state_info_.emplace_back(std::move(current_info));
+
+            const auto sh_offset{ std::ranges::distance(sh_zv.begin(), sh_eq_range.end()) };
+            state_hashes_keys_.emplace(state_hashes_keys_.cbegin() + sh_offset, sh_key);
+            state_hashes_values_.emplace(state_hashes_values_.cbegin() + sh_offset, new_state);
+
+            const auto mc_offset{ std::ranges::distance(mc_zv.begin(), mc_eq_range.end()) };
+            mappable_candidate_keys_.emplace(mappable_candidate_keys_.cbegin() + mc_offset, mc_key);
+            mappable_candidate_values_.emplace(mappable_candidate_values_.cbegin() + mc_offset, new_state);
+        }
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
