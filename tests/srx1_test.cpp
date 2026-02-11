@@ -84,8 +84,7 @@ namespace
     template<rx::string_literal S>
     consteval bool search_all(rx::static_regex<S> pattern, std::string_view str, const std::vector<std::vector<std::size_t>>& captures)
     {
-        auto range = str | rx::views::regex_match(pattern);
-        for (const auto& [match, caps] : std::views::zip(range, captures))
+        for (const auto& [match, caps] : std::views::zip(pattern.range(str), captures))
         {
             if (not submatch_check(match, caps, str.begin()))
                 return false;

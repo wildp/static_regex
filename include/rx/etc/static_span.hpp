@@ -48,7 +48,7 @@ namespace rx::detail
         template<typename R>
         requires (not std::same_as<R, static_span>)
         consteval static_span(R&& r) noexcept
-            :  static_span(std::define_static_array(std::forward<R>(r))) {}
+            : static_span(std::define_static_array(std::forward<R>(r))) {}
 
         /* size observers */
         [[nodiscard]] constexpr size_type size() const noexcept { return size_; }
