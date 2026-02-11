@@ -120,12 +120,15 @@ namespace rx::detail::tnfa
         continue_at_t continue_at{ 0 };        /* only meaningful if is_final */
     };
 
+    template<typename CharT>
     struct continue_info
     {
         using sub_e_closure = std::optional<std::vector<state_t>>;
 
         state_t value;
         // sub_e_closure sub_ec;
+
+        charset_t<CharT> cs;  // TODO: maybe replace with something else to deal with generalised lookahead?
     };
 
 
@@ -250,12 +253,12 @@ namespace rx::detail
 
         /* data members */
 
-        std::vector<tnfa::node>                  nodes_{ 2 };
-        std::vector<tnfa::transition<char_type>> transitions_;
-        capture_info                             capture_info_;
-        std::size_t                              tag_count_;
-        state_t                                  start_node_{ default_start_node };
-        std::vector<tnfa::continue_info>         cont_info_;
+        std::vector<tnfa::node>                     nodes_{ 2 };
+        std::vector<tnfa::transition<char_type>>    transitions_;
+        capture_info                                capture_info_;
+        std::size_t                                 tag_count_;
+        state_t                                     start_node_{ default_start_node };
+        std::vector<tnfa::continue_info<char_type>> cont_info_;
 
         fsm_flags flags_;
 

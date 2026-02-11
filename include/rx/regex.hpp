@@ -25,18 +25,39 @@
 
 namespace rx
 {
-    template<string_literal Pattern>
-    requires std::same_as<char, typename decltype(Pattern)::char_type> /* temporary: remove later */
+    enum class mode : unsigned char
+    {
+        standard,
+        fast,
+        naive
+    };
+
+    namespace detail
+    {
+        consteval auto get_matcher_refl(mode i, bool is_search = false)
+        {
+            if (i == mode::naive)
+                return ^^detail::p1306_matcher; /* todo: implement */
+            else if (i == mode::standard and is_search)
+                return ^^detail::p1306_searcher;
+            else
+                return ^^detail::p1306_matcher;
+        }
+    }
+
+    template<string_literal Pattern, mode Impl = mode::standard>
     struct static_regex
     {
         using char_type = decltype(Pattern)::char_type;
+        static_assert(std::same_as<char, char_type>); /* temporary: remove later */
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, full_match> matcher;
+            using matcher_t = [: detail::get_matcher_refl(Impl) :]<Pattern, full_match>;
+            matcher_t matcher;
             return matcher(first, last);
         }
 
@@ -59,7 +80,8 @@ namespace rx
         [[nodiscard]] static constexpr auto prefix_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, partial_match> matcher;
+            using matcher_t = [: detail::get_matcher_refl(Impl) :]<Pattern, partial_match>;
+            matcher_t matcher;
             return matcher(first, last);
         }
 
@@ -82,7 +104,8 @@ namespace rx
         [[nodiscard]] static constexpr auto search(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, search_single> matcher;
+            using matcher_t = [: detail::get_matcher_refl(Impl, true) :]<Pattern, search_single>;
+            matcher_t matcher;
             return matcher(first, last);
         }
 
@@ -105,7 +128,8 @@ namespace rx
         [[nodiscard]] static constexpr bool is_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, full_match | return_bool_modifier> matcher;
+            using matcher_t = [: detail::get_matcher_refl(Impl) :]<Pattern, full_match | return_bool_modifier>;
+            matcher_t matcher;
             return matcher(first, last);
         }
 
@@ -128,7 +152,8 @@ namespace rx
         [[nodiscard]] static constexpr bool starts_with_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, partial_match | return_bool_modifier> matcher;
+            using matcher_t = [: detail::get_matcher_refl(Impl) :]<Pattern, partial_match | return_bool_modifier>;
+            matcher_t matcher;
             return matcher(first, last);
         }
 
@@ -151,7 +176,8 @@ namespace rx
         [[nodiscard]] static constexpr bool contains_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, search_single | return_bool_modifier> matcher;
+            using matcher_t = [: detail::get_matcher_refl(Impl, true) :]<Pattern, search_single | return_bool_modifier>;
+            matcher_t matcher;
             return matcher(first, last);
         }
 
@@ -179,9 +205,9 @@ namespace rx
     };
 
 
-    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Impl>
     requires std::ranges::view<V>
-    class regex_match_view<V, static_regex<Pattern>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern>>>
+    class regex_match_view<V, static_regex<Pattern, Impl>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Impl>>>
     {
         template<bool Const>
         struct iterator;
@@ -190,7 +216,7 @@ namespace rx
 
     public:
         regex_match_view() requires std::default_initializable<V> = default;
-        constexpr explicit regex_match_view(V base, static_regex<Pattern> /* regex */) : base_{ std::move(base) } {}
+        constexpr explicit regex_match_view(V base, static_regex<Pattern, Impl> /* regex */) : base_{ std::move(base) } {}
 
         [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
         [[nodiscard]] constexpr V base() && { return std::move(base_); }
@@ -221,15 +247,15 @@ namespace rx
         V base_{};
     };
 
-    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Impl>
     requires std::ranges::view<V>
     template<bool Const>
-    struct regex_match_view<V, static_regex<Pattern>>::iterator
+    struct regex_match_view<V, static_regex<Pattern, Impl>>::iterator
     {
     private:
         using Parent  = detail::maybe_const_t<Const, regex_match_view>;
         using Base    = detail::maybe_const_t<Const, V>;
-        using Matcher = detail::p1306_matcher<Pattern, detail::default_fsm_flags::search_all>;
+        using Matcher = [: detail::get_matcher_refl(Impl, true) :]<Pattern, detail::default_fsm_flags::search_all>;
 
     public:
         using iterator_category = std::input_iterator_tag;
@@ -325,8 +351,8 @@ namespace rx
         value_type result_;
     };
 
-    template<typename Range, string_literal Pattern>
-    regex_match_view(Range&&, static_regex<Pattern>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern>>;
+    template<typename Range, string_literal Pattern, mode Impl>
+    regex_match_view(Range&&, static_regex<Pattern, Impl>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern, Impl>>;
 
     namespace detail
     {
@@ -887,6 +913,30 @@ namespace rx
     {
         template<string_literal Pattern>
         consteval static_regex<Pattern> operator ""_rx()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::fast> operator ""_rxf()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::fast> operator ""_rx_fast()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::naive> operator ""_rxn()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::naive> operator ""_rx_naive()
         {
             return {};
         }

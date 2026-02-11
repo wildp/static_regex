@@ -78,5 +78,22 @@ namespace rx::detail
             .return_bool     = false,
         };
 
+        inline constexpr fsm_flags disable_search_modifier{
+            .is_search       = false,
+            .longest_match   = true,
+            .enable_fallback = true,
+            .is_iterator     = true,
+            .no_captures     = true,
+            .return_bool     = true,
+        };
+
+        inline constexpr fsm_flags make_iterator_modifier{
+            .is_search       = false,
+            .longest_match   = false,
+            .enable_fallback = false,
+            .is_iterator     = true,
+            .no_captures     = false,
+            .return_bool     = false,
+        };
     }
 }

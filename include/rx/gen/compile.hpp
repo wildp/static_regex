@@ -12,11 +12,15 @@
 #include <utility>
 #include <vector>
 
+#include <boost/dynamic_bitset.hpp>
+
 #include "rx/ast/tree.hpp"
+#include "rx/etc/static_charset.hpp"
 #include "rx/etc/static_span.hpp"
 #include "rx/etc/string_literal.hpp"
 #include "rx/fsm/flags.hpp"
 #include "rx/fsm/tdfa.hpp"
+#include "rx/fsm/tdfa.tpp"
 #include "rx/fsm/tnfa.hpp"
 
 
@@ -113,6 +117,11 @@ namespace rx::detail
             return static_transition{ tr.next, tr.op_index, static_span{ tr.cs.get_intervals() } };
         }
 
+        static consteval auto make_static_outer_transition(const std::pair<std::size_t, tnfa::charset_t<char_type>>& otr)
+        {
+            return static_transition{ otr.first, tdfa::no_transition_regops, static_span{ otr.second.get_intervals() } };
+        }
+
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)
         {
             return static_span{ n.tr | std::views::transform(make_static_transition) };
@@ -132,7 +141,7 @@ namespace rx::detail
             };
         }
 
-        static consteval auto make_default_transitions(const std::vector<tdfa::node<char_type>>& ns)
+        static consteval auto make_default_transitions(const std::vector<tdfa::node<char_type>>& ns) -> std::flat_map<std::size_t, tdfa::default_transition>
         {
             std::flat_map<std::size_t, tdfa::default_transition> result;
             for (std::size_t i{ 0 }; i < ns.size(); ++i)
@@ -141,8 +150,74 @@ namespace rx::detail
             return result;
         }
 
+        static consteval auto make_continue_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
+        {
+            /* adapted from tagged_dfa::minimise_transition_edges */
+            using tr_type = std::pair<std::size_t, tdfa::charset_t<char_type>>;
+
+            std::vector<tr_type> vec;
+
+            for (const auto& [nfa_cont, dfa_cont] : std::views::zip(nfa.get_cont_info(), dfa.continue_nodes()))
+                vec.emplace_back(dfa_cont, std::cref(nfa_cont.cs));
+
+            if (not vec.empty())
+            {
+                std::vector scored_pairs{
+                    std::from_range, // TODO: switch to using views::enumerate when supported by clang
+                    std::views::zip(std::views::iota(0uz), vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
+                };
+
+                std::ranges::sort(scored_pairs, {}, [](const auto& x){ return std::get<1>(x); });
+
+                std::vector<tr_type> new_tr;
+                std::vector<tdfa::charset_t<char_type>> dont_cares;
+                tdfa::charset_t<char_type> acc;
+
+                for (const auto [i, _] : scored_pairs)
+                {
+                    auto& tr{ vec.at(i) };
+                    dont_cares.emplace_back(acc);
+                    acc |= tr.second;
+                    new_tr.emplace_back(std::move(tr));
+                }
+
+                if (acc.full())
+                {
+                    new_tr.back().second = std::move(acc);
+                    dont_cares.back() = tdfa::charset_t<char_type>{};
+                }
+
+                /* fill gaps where possible */
+
+                for (const auto& [tr_ref, dont_cares] : std::views::zip(std::ranges::ref_view(new_tr), dont_cares))
+                {
+                    tr_type& tr{ tr_ref };
+
+                    if (dont_cares.empty())
+                        continue;
+
+                    using interval_t = tdfa::charset_t<char_type>::char_interval;
+                    std::vector<interval_t> to_insert;
+
+                    std::ranges::set_intersection((~tr.second).get_intervals(), dont_cares.get_intervals(), std::back_inserter(to_insert));
+
+                    for (const auto [beg, end] : to_insert)
+                    {
+                        if (beg == end)
+                            tr.second.insert(beg);
+                        else
+                            tr.second.insert(beg, end);
+                    }
+                }
+
+                vec = std::move(new_tr);
+            }
+
+            return static_span{ vec | std::views::transform(make_static_outer_transition) };
+        }
+
     public:
-        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa)
+        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
             : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
               regops{ dfa.regops_ | std::views::transform(make_register_operations) },
               continue_nodes{ dfa.continue_nodes() },
@@ -152,9 +227,10 @@ namespace rx::detail
               final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
-              captures{ dfa.get_capture_info() } {}
+              captures{ dfa.get_capture_info() },
+              outer_transitions{ make_continue_info(dfa, nfa) } {}
 
-        consteval static_match_result_info make_match_result_info(bool has_continue) const
+        [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
         {
             return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue };
         }
@@ -171,6 +247,8 @@ namespace rx::detail
         std::size_t register_count{ 0 };
         std::size_t match_start{ 0 };
         final_capture_info captures;
+
+        static_span<static_transition<char_type>> outer_transitions;
     };
 
 
@@ -200,7 +278,7 @@ namespace rx::detail
         /* (if using tables, do `dfa.make_default_tr_if_possible()` instead) */
         dfa.minimise_transition_edges();
 
-        return tdfa_info{ dfa };
+        return tdfa_info{ dfa, nfa };
     }
 
     template<string_literal Pattern, fsm_flags Flags>

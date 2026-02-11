@@ -1231,7 +1231,8 @@ namespace rx::detail
                 throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
 
             continue_ats.emplace_back(std::saturate_cast<tnfa::continue_at_t>(cont_info_.size()));
-            cont_info_.emplace_back(mapped_cont);
+            cont_info_.emplace_back(mapped_cont, edge);
+            cont_info_.at(0).cs -= edge; /* note: cont_info should be non-empty to begin with */
         }
 
         if (continue_state.has_value())
@@ -1381,7 +1382,7 @@ namespace rx::detail
         dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
 
         if (flags_.is_iterator)
-            cont_info_.emplace_back(default_start_node);
+            cont_info_.emplace_back(default_start_node, ~charset_type{});
 
         thompson(ast);
     }

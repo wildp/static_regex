@@ -126,10 +126,30 @@ namespace rx::detail
     {
         friend constexpr Derived operator|(Derived x, Derived y)
         {
-            Derived result{};
+            Derived result;
             template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^Derived), std::meta::access_context::current())))
             {
                 result.[:member:] = x.[:member:] or y.[:member:];
+            }
+            return result;
+        }
+
+        friend constexpr Derived operator&(Derived x, Derived y)
+        {
+            Derived result;
+            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^Derived), std::meta::access_context::current())))
+            {
+                result.[:member:] = x.[:member:] and y.[:member:];
+            }
+            return result;
+        }
+
+        friend constexpr Derived operator^(Derived x, Derived y)
+        {
+            Derived result;
+            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^Derived), std::meta::access_context::current())))
+            {
+                result.[:member:] = x.[:member:] != y.[:member:];
             }
             return result;
         }

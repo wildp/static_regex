@@ -25,6 +25,9 @@ namespace rx::detail
 {
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher;
+
+    template<string_literal Pattern, fsm_flags Flags>
+    struct p1306_searcher;
 }
 
 namespace rx
@@ -53,8 +56,6 @@ namespace rx
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
-            if constexpr (has_enabled)
-                enabled_.fill(false);
         }
 
         /* observers */
@@ -189,6 +190,9 @@ namespace rx
         template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
         friend struct detail::p1306_matcher;
 
+        template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
+        friend struct detail::p1306_searcher;
+
         template<std::ranges::bidirectional_range V, typename Regex>
         requires std::ranges::view<V>
         friend class regex_match_view;
@@ -202,12 +206,10 @@ namespace rx
         static constexpr bool has_match_start{ Captures.fci.has_match_start() };
 
         explicit constexpr static_regex_match_result(I start)
-            : match_start_{ start }
+            : match_start_{ std::move(start) }
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
-            if constexpr (has_enabled)
-                enabled_.fill(false);
         }
 
         template<detail::tag_number_t N>
@@ -247,7 +249,7 @@ namespace rx
         using continue_type    = detail::maybe_type_t<Captures.has_continue, detail::tdfa::continue_at_t>;
         using success_type     = detail::maybe_type_t<has_success, bool>;
 
-        [[no_unique_address]] registers_type reg_{};
+        [[no_unique_address]] registers_type reg_;
         [[no_unique_address]] match_start_type match_start_{};
         I match_end_{};
         [[no_unique_address]] enabled_type enabled_{};
