@@ -140,6 +140,17 @@ namespace rx::detail
             return it->second;
         }
 
+        // TODO: replace with std::optional<T&> accessor?
+        [[nodiscard]] constexpr const mapped_type* at_if(const key_type& x) const &
+        {
+            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
+                return nullptr;
+            return &(it->second);
+        }
+
+        constexpr const mapped_type* at_if(const key_type& x) && = delete;
+
         /* map operations */
         [[nodiscard]] constexpr const_iterator find(const key_type& x) const
         {

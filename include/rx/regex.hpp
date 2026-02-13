@@ -313,7 +313,7 @@ namespace rx
             {
                 if (current_ == end_)
                 {
-                    result_ = value_type{};
+                    result_.clear_match();
                     return *this;
                 }
                 else
@@ -326,7 +326,10 @@ namespace rx
                 current_ = result_.match_end_;
             }
 
-            result_ = matcher_(current_, end_, result_.continue_at_);
+            if constexpr (value_type::has_continue)
+                result_ = matcher_(current_, end_, result_.continue_at_);
+            else
+                result_ = matcher_(current_, end_);
             return *this;
         }
 

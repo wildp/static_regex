@@ -204,12 +204,21 @@ namespace rx
         static constexpr bool has_success{ not std::contiguous_iterator<I> };
         static constexpr bool has_enabled{ has_registers and has_success };
         static constexpr bool has_match_start{ Captures.fci.has_match_start() };
+        static constexpr bool has_continue{ Captures.has_continue };
 
         explicit constexpr static_regex_match_result(I start)
             : match_start_{ std::move(start) }
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
+        }
+
+        constexpr void clear_match()
+        {
+            if constexpr (std::contiguous_iterator<I>)
+                match_end_ = I{};
+            else
+                match_success_ = false;
         }
 
         template<detail::tag_number_t N>
@@ -246,7 +255,7 @@ namespace rx
         using registers_type   = detail::maybe_type_t<has_registers, std::array<I, Captures.register_count>>;
         using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, Captures.register_count>>;
         using match_start_type = detail::maybe_type_t<has_match_start, I>;
-        using continue_type    = detail::maybe_type_t<Captures.has_continue, detail::tdfa::continue_at_t>;
+        using continue_type    = detail::maybe_type_t<has_continue, detail::tdfa::continue_at_t>;
         using success_type     = detail::maybe_type_t<has_success, bool>;
 
         [[no_unique_address]] registers_type reg_;

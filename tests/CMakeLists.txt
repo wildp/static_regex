@@ -9,6 +9,7 @@ target_sources(tests
         setc_test.cpp
         srx1_test.cpp
         srx2_test.cpp
+        srxc_test.cpp
         srxf_test.cpp
         tdfa_test.cpp
         tnfa_test.cpp

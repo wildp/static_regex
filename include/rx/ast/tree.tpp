@@ -171,7 +171,7 @@ namespace rx::detail
                 break;
 
             case ast_index<char_class>:
-                const_len.at(idx) = 1;
+                const_len.at(idx) = 1; // TODO: change this for multibyte char classes
                 stack.pop_back();
                 break;
 
@@ -306,6 +306,11 @@ namespace rx::detail
                 }
             }
         }
+
+        /* re-map start of input tag if possible */
+
+        if (const auto& opt{ const_len.at(root_idx_) }; opt.has_value())
+            tag_remap.try_emplace(start_of_input_tag, capture_info::pair_entry{ .tag_number = end_of_input_tag, .offset = -(static_cast<int>(*opt)) });
 
         /* re-number map and re-number tags in capture_info */
 
