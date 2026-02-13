@@ -137,6 +137,7 @@ namespace rx::detail
         constexpr void minimise_transition_edges();
         constexpr void make_default_transitions();
         constexpr void make_shared_transitions();
+        constexpr void de_default_edges();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;

@@ -465,4 +465,17 @@ namespace rx::detail
 
         nodes_ = std::move(new_nodes);
     }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::de_default_edges()
+    {
+        for (auto& node : nodes_)
+        {
+            if (node.default_tr.has_value())
+            {
+                node.tr.emplace_back(node.default_tr->next, node.default_tr->op_index, ~(tdfa::charset_t<char_type>{}));
+                node.default_tr.reset();
+            }
+        }
+    }
 }

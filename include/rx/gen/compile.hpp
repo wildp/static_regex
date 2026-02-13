@@ -141,15 +141,6 @@ namespace rx::detail
             };
         }
 
-        static consteval auto make_default_transitions(const std::vector<tdfa::node<char_type>>& ns) -> std::flat_map<std::size_t, tdfa::default_transition>
-        {
-            std::flat_map<std::size_t, tdfa::default_transition> result;
-            for (std::size_t i{ 0 }; i < ns.size(); ++i)
-                if (const auto& n{ ns[i] }; n.default_tr.has_value())
-                    result.emplace_hint(result.end(), i, *n.default_tr);
-            return result;
-        }
-
         static consteval auto make_continue_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
         {
             /* adapted from tagged_dfa::minimise_transition_edges */
@@ -223,7 +214,6 @@ namespace rx::detail
               continue_nodes{ dfa.continue_nodes() },
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
-              default_transitions{ make_default_transitions(dfa.nodes_) },
               final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
@@ -244,7 +234,6 @@ namespace rx::detail
         static_span<std::size_t> continue_nodes;
         static_map<std::size_t, tdfa::final_node_info> final_nodes;
         static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
-        static_map<std::size_t, tdfa::default_transition> default_transitions;
         static_span<tdfa::reg_t> final_registers;
 
         std::size_t register_count{ 0 };
@@ -280,6 +269,7 @@ namespace rx::detail
         /* optimise transition edges and their order to produce fewest comparisons */
         /* (if using tables, do `dfa.make_default_tr_if_possible()` instead) */
         dfa.minimise_transition_edges();
+        dfa.de_default_edges();
 
         return tdfa_info{ dfa, nfa };
     }

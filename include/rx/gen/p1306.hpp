@@ -180,14 +180,6 @@ namespace rx::detail
                     }
                 }
 
-                if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-                {
-                    static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-
-                    register_operations<dt->op_index>(res, it);
-                    [[clang::musttail]] return state<dt->next>(res, ++it, last, fallback_it, fallback_state);
-                }
-
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
                 {
                     if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
@@ -225,17 +217,6 @@ namespace rx::detail
                 {
                     register_operations<tr.op_index>(res, it);
                     [[clang::musttail]] return state<tr.next>(res, ++it, last, fallback_it, fallback_state);
-                }
-            }
-
-            if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-            {
-                static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-
-                if (it != last) [[likely]]
-                {
-                    register_operations<dt->op_index>(res, it);
-                    [[clang::musttail]] return state<dt->next>(res, ++it, last, fallback_it, fallback_state);
                 }
             }
 
@@ -422,13 +403,6 @@ namespace rx::detail
                     }
                 }
 
-                if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-                {
-                    static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-                    register_operations<dt->op_index>(res, gen, it);
-                    [[clang::musttail]] return state<dt->next>(res, gen, ++it, last, fallback_it, fallback_state);
-                }
-
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
                 {
                     if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
@@ -468,17 +442,6 @@ namespace rx::detail
                 {
                     register_operations<tr.op_index>(res, gen, it);
                     [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
-                }
-            }
-
-            if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-            {
-                static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-
-                if (it != last)
-                {
-                    register_operations<dt->op_index>(res, gen, it);
-                    [[clang::musttail]] return state<dt->next>(res, gen, ++it, last, fallback_it, fallback_state);
                 }
             }
 
@@ -546,15 +509,6 @@ namespace rx::detail
                         return;
                     [[clang::musttail]] return outer_transition(res, gen, it, last);
                 }
-            }
-
-            if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-            {
-                static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-                register_operations<dt->op_index>(res, gen, it);
-                if (state<dt->next>(res, gen, std::ranges::next(it), last, it, fallback_state_init))
-                    return;
-                [[clang::musttail]] return outer_transition(res, gen, it, last);
             }
 
             if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr and DFAState == fallback_state_init)
@@ -640,13 +594,6 @@ namespace rx::detail
                     [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
             }
 
-            if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-            {
-                static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-
-                [[clang::musttail]] return state<dt->next>(++it, last, fallback_state);
-            }
-
             if constexpr (Flags.enable_fallback)
                 [[clang::musttail]] return fallback(it, last, fallback_state);
 
@@ -684,19 +631,17 @@ namespace rx::detail
                     [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
             }
 
-            if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
+            if constexpr (dfa_t::value.final_nodes.contains(DFAState))
             {
-                static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-
-                if (it != last) [[likely]]
-                    [[clang::musttail]] return state<dt->next>(++it, last, fallback_state);
-                else if constexpr (dfa_t::value.final_nodes.contains(DFAState))
+                if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
+                {
                     return true;
-            }
-            else if constexpr (dfa_t::value.final_nodes.contains(DFAState))
-            {
-                if (it == last) [[likely]]
-                    return true;
+                }
+                else
+                {
+                    if (it == last) [[likely]]
+                        return true;
+                }
             }
 
             if constexpr (Flags.enable_fallback)
@@ -761,14 +706,6 @@ namespace rx::detail
                         return true;
                     [[clang::musttail]] return outer_transition(it, last);
                 }
-            }
-
-            if constexpr (static constexpr auto* dt{ dfa_t::value.default_transitions.at_if(DFAState) }; dt != nullptr)
-            {
-                static_assert(dt->op_index != tdfa::default_transition_is_not_state);
-                if (underlying::template state<dt->next>(std::ranges::next(it), last, fallback_state_init))
-                    return true;
-                [[clang::musttail]] return outer_transition(it, last);
             }
 
             if constexpr (dfa_t::value.final_nodes.contains(DFAState) and DFAState == fallback_state_init)
