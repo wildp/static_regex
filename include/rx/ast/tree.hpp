@@ -97,8 +97,8 @@ namespace rx::detail
         constexpr void insert_search_prefix();
 
     private:
-        template<in_variant<type> T>
-        static constexpr std::size_t ast_index{ index_of_impl<type, T>::value };
+        template<typename T>
+        static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^type) };
 
         [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
 

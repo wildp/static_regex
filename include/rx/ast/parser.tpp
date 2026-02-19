@@ -66,8 +66,8 @@ namespace rx::detail::parser
         [[nodiscard]] constexpr capture_info& get_capture_info() { return ref_.get().capture_info_; }
         [[nodiscard]] constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
-        template<in_variant<typename lexer<char_type>::token_t> T>
-        static constexpr std::size_t tok_index{ index_of_impl<typename lexer<char_type>::token_t, T>::value };
+        template<typename T>
+        static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^typename lexer<char_type>::token_t) };
 
         template<in_variant<type> T, typename... Args>
         [[nodiscard]] constexpr std::size_t new_expression(Args... args)

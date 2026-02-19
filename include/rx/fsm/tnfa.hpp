@@ -195,8 +195,8 @@ namespace rx::detail
         using ast_t = expr_tree<char_type>;
         using transition_info = tnfa::transition<char_type>::transition_type;
 
-        template<in_variant<typename ast_t::type> T>
-        static constexpr state_t ast_index{ index_of_impl<typename ast_t::type, T>::value };
+        template<typename T>
+        static constexpr state_t ast_index{ index_in_variant(^^T, ^^typename ast_t::type) };
 
         /* fundamental helpers */
 

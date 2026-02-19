@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <meta>
 #include <ranges>
 #include <vector>
 
@@ -153,16 +154,9 @@ namespace rx::detail::parser
             /* overwrite containing capturing group's flags when elem is an empty capturing group */
             if (elem.mode == cse::modes::flag_assigning)
             {
-                // template for (constexpr auto e : std::define_static_array(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
-                // {
-                //     if (elem.flags.[:e:] != cf::inherit)
-                //         target.flags.[:e:] = elem.flags.[:e:] ;
-                // }
-
-                if (elem.flags.caseless  != cf::inherit) target.flags.caseless  = elem.flags.caseless;
-                if (elem.flags.multiline != cf::inherit) target.flags.multiline = elem.flags.multiline;
-                if (elem.flags.dotall    != cf::inherit) target.flags.dotall    = elem.flags.dotall;
-                if (elem.flags.ungreedy  != cf::inherit) target.flags.ungreedy  = elem.flags.ungreedy;
+                template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
+                    if (elem.flags.[: e :] != cf::inherit)
+                        target.flags.[: e :] = elem.flags.[: e :];
             }
 
             if (elem.mode == cse::modes::branch_reset)
@@ -176,78 +170,32 @@ namespace rx::detail::parser
                 return {};
         }
 
-        // template<std::meta::info CaptureFlagReflection>
-        // requires (std::ranges::contains(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked()), CaptureFlagReflection))
-        // [[nodiscard]] constexpr bool get() const
-        // {
-        //     for (const auto& elem : elems_ | std::views::reverse)
-        //     {
-        //         if (elem.flags.[:CaptureFlagReflection:] != cf::inherit)
-        //             return elem.flags.[:CaptureFlagReflection:] == cf::enabled;
-        //     }
-
-        //     return base_.flags.[:CaptureFlagReflection:] == cf::enabled;
-        // }
-
-
-        [[nodiscard]] constexpr bool caseless() const
+    private:
+        template<std::meta::info CaptureFlagReflection>
+        [[nodiscard]] constexpr bool get() const
         {
             for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.caseless != cf::inherit)
-                    return elem.flags.caseless == cf::enabled;
-            return base_.flags.caseless == cf::enabled;
+                if (elem.flags.[: CaptureFlagReflection :] != cf::inherit)
+                    return elem.flags.[: CaptureFlagReflection :] == cf::enabled;
+            return base_.flags.[: CaptureFlagReflection :] == cf::enabled;
         }
 
-        [[nodiscard]] constexpr bool multiline() const
+        template<std::meta::info CaptureFlagReflection>
+        constexpr void set(bool value)
         {
-            for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.multiline != cf::inherit)
-                    return elem.flags.multiline == cf::enabled;
-            return base_.flags.multiline == cf::enabled;
+            ((elems_.empty()) ? base_ : elems_.back()).flags.[: CaptureFlagReflection :] = (value) ? cf::enabled : cf::disabled;
         }
 
-        [[nodiscard]] constexpr bool dotall() const
-        {
-            for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.dotall != cf::inherit)
-                    return elem.flags.dotall == cf::enabled;
-            return base_.flags.dotall == cf::enabled;
-        }
+    public:
+        [[nodiscard]] constexpr bool caseless()  const { return get<^^capture_flags::caseless>(); }
+        [[nodiscard]] constexpr bool multiline() const { return get<^^capture_flags::multiline>(); }
+        [[nodiscard]] constexpr bool dotall()    const { return get<^^capture_flags::dotall>(); }
+        [[nodiscard]] constexpr bool ungreedy()  const { return get<^^capture_flags::ungreedy>(); }
 
-        [[nodiscard]] constexpr bool ungreedy() const
-        {
-            for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.ungreedy != cf::inherit)
-                    return elem.flags.ungreedy == cf::enabled;
-            return base_.flags.ungreedy == cf::enabled;
-        }
-
-        // template<std::meta::info CaptureFlagReflection>
-        // requires (std::ranges::contains(std::meta::nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked()), CaptureFlagReflection))
-        // [[nodiscard]] constexpr void set(bool value)
-        // {
-        //     ((elems_.empty()) ? base_ : elems_.back()).flags.[:CaptureFlagReflection:] = (value) ? cf::enabled : cf::disabled;
-        // }
-
-        constexpr void set_caseless(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.caseless = (value) ? cf::enabled : cf::disabled;
-        }
-
-        constexpr void set_multiline(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.multiline = (value) ? cf::enabled : cf::disabled;
-        }
-
-        constexpr void set_dotall(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.dotall = (value) ? cf::enabled : cf::disabled;
-        }
-
-        constexpr void set_ungreedy(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.ungreedy = (value) ? cf::enabled : cf::disabled;
-        }
+        constexpr void set_caseless(bool value)  noexcept { return set<^^capture_flags::caseless>(value); }
+        constexpr void set_multiline(bool value) noexcept { return set<^^capture_flags::multiline>(value); }
+        constexpr void set_dotall(bool value)    noexcept { return set<^^capture_flags::dotall>(value); }
+        constexpr void set_ungreedy(bool value)  noexcept { return set<^^capture_flags::ungreedy>(value); }
 
     private:
         [[nodiscard]] constexpr std::uint_least16_t next_number() const noexcept

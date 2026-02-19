@@ -129,7 +129,6 @@ namespace rx::detail
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr void state(result<I>& res, I it, const S last, I fallback_it, std::size_t fallback_state)
-        requires (not std::same_as<S, cstr_sentinel_t>)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
@@ -359,7 +358,6 @@ namespace rx::detail
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(result<I>& res, gen_info& gen, I it, const S last, I fallback_it, std::size_t fallback_state, const I first)
-        requires (not std::same_as<S, cstr_sentinel_t>)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
@@ -552,7 +550,6 @@ namespace rx::detail
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(I it, const S last, std::size_t fallback_state)
-        requires (not std::same_as<S, cstr_sentinel_t>)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
                 fallback_state = DFAState;

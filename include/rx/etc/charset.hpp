@@ -898,7 +898,6 @@ namespace rx::detail
         return result;
     }
 
-
     template<typename CharT>
     template<typename T>
     constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>

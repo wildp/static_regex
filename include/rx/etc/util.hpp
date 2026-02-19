@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <meta>
 #include <limits>
@@ -25,30 +26,43 @@ namespace rx::detail
 
     consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta::info templ)
     {
-        if (not std::meta::is_type(type) or not std::meta::is_class_template(templ))
+        if (not is_type(type) or not is_class_template(templ))
             return false;
 
-        auto dealiased{ std::meta::dealias(type) };
-
-        if (not std::meta::has_template_arguments(dealiased))
+        if (not has_template_arguments(dealias(type)))
             return false;
 
-        return std::meta::template_of(dealiased) == templ;
+        return template_of(dealias(type)) == templ;
     }
 
     template<typename T, std::meta::info Template>
     concept template_instantiation_of = is_template_instantiation_of_impl(^^T, Template);
 
-    // TODO: replace with P2996 implementation
-    template<typename, typename>
-    struct type_in_variant_impl {};
+    consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
+    {
+        if (not is_template_instantiation_of_impl(variant, ^^std::variant))
+            throw std::exception(); // TODO: throw std::meta::exception instead
 
-    // TODO: replace with P2996 implementation
-    template<typename T, typename... Ts>
-    struct type_in_variant_impl<T, std::variant<Ts...>> : std::bool_constant<one_of<T, Ts...>> {};
+        return std::ranges::contains(template_arguments_of(variant), dealias(type), std::meta::dealias);
+    }
 
     template<typename T, typename Variant>
-    concept in_variant = type_in_variant_impl<T, Variant>::value;
+    concept in_variant = in_variant_impl(^^T, ^^Variant);
+
+    consteval std::size_t index_in_variant(std::meta::info type, std::meta::info variant)
+    {
+        if (not is_template_instantiation_of_impl(variant, ^^std::variant))
+            throw std::exception(); // TODO: throw std::meta::exception instead
+
+        const auto vartypes{ template_arguments_of(variant) };
+        const auto it{ std::ranges::find(vartypes, dealias(type), std::meta::dealias) };
+
+        if (it == vartypes.end())
+            throw std::exception(); // TODO: throw std::meta::exception instead
+
+        return static_cast<std::size_t>(std::ranges::distance(vartypes.begin(), it));
+    }
+
 
     template<typename CharT>
     concept char_is_utf8 = std::same_as<CharT, char8_t>; /* Assume a regular char is ascii (or some single byte superset of) */
@@ -64,15 +78,6 @@ namespace rx::detail
     template<typename CharT>
     concept char_is_multibyte = char_is_utf8<CharT> or char_is_utf16<CharT>;
 
-
-    template<typename V, typename T, std::size_t I = 0>
-    struct index_of_impl : std::conditional_t<std::same_as<T, std::variant_alternative_t<I, V>>,
-                                              std::integral_constant<std::size_t, I>,
-                                              index_of_impl<V, T, I + 1>> {};
-
-    template<typename V, typename T, std::size_t I>
-    requires (I >= std::variant_size_v<V>)
-    struct index_of_impl<V, T, I> {};
 
     namespace hash
     {
@@ -113,18 +118,14 @@ namespace rx::detail
         template<memberwise_hashable T>
         constexpr void append(std::size_t& hash, const T& value)
         {
-            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^T), std::meta::access_context::unchecked())))
-            {
-                const auto& ref = value.[:member:]; // TODO: replace with `append(hash, value.[:member:])`
-                append(hash, ref);
-            }
+            template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
+                append(hash, value.[:member:]);
         }
     };
 
+
     inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
 
-    template<bool Const, typename T>
-    using maybe_const_t = std::conditional_t<Const, const T, T>;
 
     struct cstr_sentinel_t
     {
@@ -137,6 +138,7 @@ namespace rx::detail
 
     inline constexpr cstr_sentinel_t cstr_sentinel;
 
+
     struct terminal_object
     {
         template<typename... Ts>
@@ -145,4 +147,7 @@ namespace rx::detail
 
     template<bool Enabled, typename T>
     using maybe_type_t = std::conditional_t<Enabled, T, terminal_object>;
+
+    template<bool Const, typename T>
+    using maybe_const_t = std::conditional_t<Const, const T, T>;
 }
