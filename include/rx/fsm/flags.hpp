@@ -7,12 +7,9 @@
 #pragma once
 
 
-#include "rx/etc/util.hpp"
-
-
 namespace rx::detail
 {
-    struct fsm_flags : flag_base<fsm_flags>
+    struct fsm_flags
     {
         bool is_search       : 1;
         bool longest_match   : 1;
@@ -77,23 +74,25 @@ namespace rx::detail
             .no_captures     = true,
             .return_bool     = false,
         };
+    }
 
-        inline constexpr fsm_flags disable_search_modifier{
-            .is_search       = false,
-            .longest_match   = true,
-            .enable_fallback = true,
-            .is_iterator     = true,
-            .no_captures     = true,
-            .return_bool     = true,
-        };
+    constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
+    {
+        f.is_search = false;
+        f.is_iterator = true;
+        return f;
+    }
 
-        inline constexpr fsm_flags make_iterator_modifier{
-            .is_search       = false,
-            .longest_match   = false,
-            .enable_fallback = false,
-            .is_iterator     = true,
-            .no_captures     = false,
-            .return_bool     = false,
-        };
+    constexpr fsm_flags adapt_flags_return_bool(fsm_flags f)
+    {
+        f.no_captures = true;
+        f.return_bool = true;
+        return f;
+    }
+
+    constexpr fsm_flags adapt_flags_non_capturing(fsm_flags f)
+    {
+        f.no_captures = true;
+        return f;
     }
 }

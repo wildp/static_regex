@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -23,61 +22,29 @@
 
 namespace rx::detail
 {
-    template<typename CharT, std::pair<CharT, CharT>... Intervals>
-    [[gnu::always_inline]] constexpr bool tr_possible_impl(CharT c)
-    {
-        return ((Intervals.first <= c and c <= Intervals.second) or ...);
-    }
-
-    template<typename CharT>
-    consteval auto tr_possible_make_refl(static_transition<CharT> tr) -> std::vector<std::meta::info>
-    {
-        std::vector<std::meta::info> result{ ^^CharT };
-        result.reserve(1 + tr.cs.size());
-        for (const auto& pair : tr.cs)
-            result.emplace_back(std::meta::reflect_constant(pair));
-        return result;
-    }
-
     template<static_transition Tr, typename CharT>
     [[gnu::always_inline]] constexpr bool tr_possible(CharT c)
     {
-        constexpr auto func{ std::meta::substitute(^^tr_possible_impl, tr_possible_make_refl(Tr)) };
-        return [: func :](c);
-    }
+        // TODO: change to use structured binding when supported
+        template for (constexpr auto pair : Tr.cs)
+        {
+            if (pair.first <= c and c <= pair.second)
+                return true;
+        }
 
-    template<typename CharT, CharT Lower, CharT Upper>
-    [[gnu::always_inline]] constexpr bool tr_possible_impl_exclude_null_helper(CharT c)
-    {
-        static constexpr CharT null_char{};
-        if constexpr (Lower == null_char and Upper == null_char)
-            return false;
-        else if constexpr (Lower == null_char)
-            return (Lower + 1) <= c and c <= Upper;
-        else if constexpr (Upper == null_char)
-            return Lower <= c and c <= (Upper - 1);
-        else if constexpr (Lower < null_char and null_char < Upper)
-            return (Lower <= c and c <= (null_char - 1)) or ((null_char + 1) <= c and c <= Upper);
-        else
-            return Lower <= c and c <= Upper;
-    }
-
-    template<typename CharT, std::pair<CharT, CharT>... Intervals>
-    [[gnu::always_inline]] constexpr bool tr_possible_impl_exclude_null(CharT c)
-    {
-        return (tr_possible_impl_exclude_null_helper<CharT, Intervals.first, Intervals.second>(c) or ...);
+        return false;
     }
 
     template<static_transition Tr, typename CharT>
     [[gnu::always_inline]] constexpr bool tr_possible_exclude_null(CharT c)
     {
-        constexpr auto func{ std::meta::substitute(^^tr_possible_impl_exclude_null, tr_possible_make_refl(Tr)) };
-        return [: func :](c);
-    }
+        if constexpr (tr_possible<Tr>(CharT{}))
+        {
+            if (c == CharT{})
+                return false;
+        }
 
-    consteval fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
-    {
-        return (f & default_fsm_flags::disable_search_modifier) | default_fsm_flags::make_iterator_modifier;
+        return tr_possible<Tr>(c);
     }
 
 
@@ -142,8 +109,9 @@ namespace rx::detail
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr void fallback(result<I>& res, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state)
-        requires (Flags.enable_fallback)
         {
+            static_assert(Flags.enable_fallback);
+
             if (fallback_state == fallback_disabled)
                 return;
 
@@ -287,7 +255,7 @@ namespace rx::detail
         struct generation
         {
             std::array<std::size_t, dfa_t::value.register_count> reg{};
-            std::size_t current{ 1 };
+            std::size_t current{ 0 };
         };
 
         using gen_info = maybe_type_t<(dfa_t::value.register_count > 0), generation>;
@@ -340,8 +308,11 @@ namespace rx::detail
         }
 
         template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I>
-        static constexpr void set_final_info(result<I>& res, gen_info& gen, const I it)
+        static constexpr void set_final_info(result<I>& res, gen_info& gen, const I it, const I first)
         {
+            if constexpr (result<I>::has_match_start)
+                res.match_start_ = first;
+
             register_operations<Blk>(res, gen, it);
             res.match_end_ = std::ranges::prev(it, Offset);
 
@@ -350,9 +321,9 @@ namespace rx::detail
         }
 
         template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I>
-        static constexpr void set_fallback_info(result<I>& res, gen_info& gen, const I it)
+        static constexpr void set_fallback_info(result<I>& res, gen_info& gen, const I it, const I first)
         {
-            set_final_info<Blk, Offset>(res, gen, it);
+            set_final_info<Blk, Offset>(res, gen, it, first);
 
             if constexpr (result<I>::has_continue)
             {
@@ -362,11 +333,15 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool fallback(result<I>& res, gen_info& gen, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state)
-        requires (Flags.enable_fallback)
+        static constexpr bool fallback(result<I>& res, gen_info& gen, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state, const I first)
         {
+            static_assert(Flags.enable_fallback);
+
             if (fallback_state == fallback_disabled)
                 return false;
+
+            if constexpr (result<I>::has_match_start)
+                res.match_start_ = first;
 
             // TODO: change to use structured binding when supported
             template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
@@ -374,7 +349,7 @@ namespace rx::detail
                 if (fallback_state == pair.first)
                 {
                     static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
-                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, gen, fallback_it);
+                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, gen, fallback_it, first);
                     return true;
                 }
             }
@@ -383,7 +358,7 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool state(result<I>& res, gen_info& gen, I it, const S last, I fallback_it, std::size_t fallback_state)
+        static constexpr bool state(result<I>& res, gen_info& gen, I it, const S last, I fallback_it, std::size_t fallback_state, const I first)
         requires (not std::same_as<S, cstr_sentinel_t>)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
@@ -399,7 +374,7 @@ namespace rx::detail
                     if (tr_possible<tr>(*it))
                     {
                         register_operations<tr.op_index>(res, gen, it);
-                        [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
+                        [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state, first);
                     }
                 }
 
@@ -407,7 +382,7 @@ namespace rx::detail
                 {
                     if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
                     {
-                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
+                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it, first);
                         return true;
                     }
                 }
@@ -416,19 +391,19 @@ namespace rx::detail
             {
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
                 {
-                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it, first);
                     return true;
                 }
             }
 
             if constexpr (Flags.enable_fallback)
-                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state);
+                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state, first);
 
             return false;
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I>
-        static constexpr bool state(result<I>& res, gen_info& gen, I it, const cstr_sentinel_t last, I fallback_it, std::size_t fallback_state)
+        static constexpr bool state(result<I>& res, gen_info& gen, I it, const cstr_sentinel_t last, I fallback_it, std::size_t fallback_state, const I first)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
@@ -441,7 +416,7 @@ namespace rx::detail
                 if (tr_possible_exclude_null<tr>(*it))
                 {
                     register_operations<tr.op_index>(res, gen, it);
-                    [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
+                    [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state, first);
                 }
             }
 
@@ -449,75 +424,50 @@ namespace rx::detail
             {
                 if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
                 {
-                    set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
+                    if constexpr (result<I>::has_match_start)
+                        res.match_start_ = first;
+                    set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it, first);
                     return true;
                 }
                 else
                 {
                     if (it == last) [[likely]]
                     {
-                        set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                        set_final_info<fn->op_index, fn->final_offset>(res, gen, it, first);
                         return true;
                     }
                 }
             }
 
             if constexpr (Flags.enable_fallback)
-                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state);
+                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state, first);
 
             return false;
         }
 
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr void outer_transition(result<I>& res, gen_info& gen, I it, const S last)
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr void outer_state(result<I>& res, gen_info& gen, I it, const S last)
         {
-            if constexpr (result<I>::has_match_start)
-                ++res.match_start_;
-
             if constexpr (dfa_t::value.register_count > 0)
                 ++gen.current;
+
+            if (it != last)
+            {
+                if (state<DFAState>(res, gen, it, last, it, fallback_disabled, it))
+                    return;
+            }
+            else
+            {
+                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it, it);
+                return;
+            }
 
             template for (constexpr static_transition<char_type> tr : dfa_t::value.outer_transitions)
             {
                 if (tr_possible<tr>(*it))
                     [[clang::musttail]] return outer_state<tr.next>(res, gen, ++it, last);
             }
-        }
-
-        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr void outer_state(result<I>& res, gen_info& gen, I it, const S last)
-        {
-            static constexpr std::size_t fallback_state_init{
-                (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
-                ? DFAState
-                : fallback_disabled
-            };
-
-            if (it == last)
-            {
-                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
-                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
-                return;
-            }
-
-            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-            {
-                if (tr_possible<tr>(*it))
-                {
-                    register_operations<tr.op_index>(res, gen, it);
-                    if (state<tr.next>(res, gen, std::ranges::next(it), last, it, fallback_state_init))
-                        return;
-                    [[clang::musttail]] return outer_transition(res, gen, it, last);
-                }
-            }
-
-            if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr and DFAState == fallback_state_init)
-            {
-                set_fallback_info<fn->op_index, fn->final_offset, dfa_t::value.fallback_nodes.at(DFAState).continue_at>(res, gen, it);
-                return;
-            }
-
-            [[clang::musttail]] return outer_transition(res, gen, it, last);
         }
 
     public:
@@ -674,9 +624,19 @@ namespace rx::detail
         using char_type = underlying::char_type;
 
     private:
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool outer_transition(I it, const S last)
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool outer_state(I it, const S last)
         {
+            if (it != last)
+            {
+                if (underlying::template state<DFAState>(it, last, underlying::fallback_disabled))
+                    return true;
+            }
+            else
+            {
+                return dfa_t::value.final_nodes.contains(DFAState);
+            }
+
             template for (constexpr static_transition<char_type> tr : dfa_t::value.outer_transitions)
             {
                 if (tr_possible<tr>(*it))
@@ -684,34 +644,6 @@ namespace rx::detail
             }
 
             return false;
-        }
-
-        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool outer_state(I it, const S last)
-        {
-            static constexpr std::size_t fallback_state_init{
-                (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
-                ? DFAState
-                : underlying::fallback_disabled
-            };
-
-            if (it == last)
-                return dfa_t::value.final_nodes.contains(DFAState);
-
-            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-            {
-                if (tr_possible<tr>(*it))
-                {
-                    if (underlying::template state<tr.next>(std::ranges::next(it), last, fallback_state_init))
-                        return true;
-                    [[clang::musttail]] return outer_transition(it, last);
-                }
-            }
-
-            if constexpr (dfa_t::value.final_nodes.contains(DFAState) and DFAState == fallback_state_init)
-                return true;
-
-            [[clang::musttail]] return outer_transition(it, last);
         }
 
     public:

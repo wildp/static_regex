@@ -125,7 +125,7 @@ namespace rx
         [[nodiscard]] static constexpr bool is_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, full_match | return_bool_modifier>;
+            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(full_match)>;
             return matcher_t{}(first, last);
         }
 
@@ -148,7 +148,7 @@ namespace rx
         [[nodiscard]] static constexpr bool starts_with_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, partial_match | return_bool_modifier>;
+            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(partial_match)>;
             return matcher_t{}(first, last);
         }
 
@@ -171,7 +171,7 @@ namespace rx
         [[nodiscard]] static constexpr bool contains_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, search_single | return_bool_modifier>;
+            using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::adapt_flags_return_bool(search_single)>;
             return matcher_t{}(first, last);
         }
 
@@ -213,7 +213,7 @@ namespace rx
     requires std::ranges::view<V>
     class regex_match_view
     {
-        static_assert("regex_match_view: invalid range");
+        static_assert("regex_match_view: invalid regex");
     };
 
 
