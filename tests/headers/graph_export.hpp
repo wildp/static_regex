@@ -208,7 +208,7 @@ namespace rx::testing
         {
             const auto& tr{ nfa.get_tr(i) };
 
-            if (std::holds_alternative<std::monostate>(tr.type))
+            if (holds_alternative<std::monostate>(tr.type))
                 continue;
 
             std::string label{

@@ -255,12 +255,12 @@ namespace rx::testing
     {
         for (const auto& op : this->get_regops(op_index))
         {
-            if (auto* set{ std::get_if<detail::tdfa::regop::set>(&op.op) }; set != nullptr)
+            if (auto* set{ get_if<detail::tdfa::regop::set>(&op.op) }; set != nullptr)
             {
                 if (set->val) registers.at(op.dst) = it;
                 registers_enabled.at(op.dst) = set->val;
             }
-            else if (auto* copy{ std::get_if<detail::tdfa::regop::copy>(&op.op) }; copy != nullptr)
+            else if (auto* copy{ get_if<detail::tdfa::regop::copy>(&op.op) }; copy != nullptr)
             {
                 registers.at(op.dst) = registers.at(copy->src);
                 registers_enabled.at(op.dst) = registers_enabled.at(copy->src);

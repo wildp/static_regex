@@ -256,7 +256,7 @@ namespace rx::detail::tdfa
     constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> std::size_t
     {
         static constexpr std::size_t map_usage_threshold{ 128 };
-        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; // TODO: remove later
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; // TODO: remove later
 
         node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) } };
         std::size_t new_state{ state_info_.size() };
@@ -605,7 +605,7 @@ namespace rx::detail::tdfa
 
             for (const auto& f : final_ops)
             {
-                if (auto* cpy{ std::get_if<regop::copy>(&f.op) }; cpy != nullptr and clobbered.at(cpy->src))
+                if (auto* cpy{ get_if<regop::copy>(&f.op) }; cpy != nullptr and clobbered.at(cpy->src))
                     backup_regops(result, state, f.dst, cpy->src);
                 else
                     o.emplace_back(f);
@@ -678,11 +678,11 @@ namespace rx::detail::tdfa
             {
                 const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
 
-                if (const auto* const ptr{ std::get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
                 {
                     current_tr.emplace_back(tr.dst, std::cref(ptr->cs));
                 }
-                else if (const auto* const ptr{ std::get_if<tnfa::epsilon_tr>(&tr.type) }; ptr != nullptr)
+                else if (const auto* const ptr{ get_if<tnfa::epsilon_tr>(&tr.type) }; ptr != nullptr)
                 {
                     current_etr.emplace_back(tr.dst, *ptr);
                 }

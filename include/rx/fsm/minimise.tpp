@@ -310,10 +310,10 @@ namespace rx::detail
             std::vector scored_pairs{
                 std::from_range, // TODO: switch to using views::enumerate when supported by clang
                 std::views::zip(std::views::iota(0uz), node.tr | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
-                | std::views::filter([largest_index](const auto& x) { return std::get<0>(x) != largest_index; })
+                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
             };
 
-            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return std::get<1>(x); });
+            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
             scored_pairs.emplace_back(largest_index, 0 /* unimportant */);
 
             std::vector<tr_type> new_tr;
@@ -407,7 +407,7 @@ namespace rx::detail
         // TODO: switch to using std::flat_multimap instead when constexpr is supported
         //       (but an unordered flat set would be much better)
         // const std::flat_multimap map{ std::move(keys), std::move(values) };
-        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; // TODO: remove
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; // TODO: remove
         std::ranges::sort(std::views::zip(keys, values), {}, key_proj); // TODO: remove
 
         data_t new_nodes{};

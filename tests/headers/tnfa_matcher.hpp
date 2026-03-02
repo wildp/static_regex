@@ -72,8 +72,8 @@ namespace rx::testing
                 std::from_range,
                 this->get_node(q).out_tr
                 | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
-                | std::views::filter([](const auto& t) { return std::holds_alternative<epsilon_tr>(t.type); })
-                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<epsilon_tr>(t.type) }; })
+                | std::views::filter([](const auto& t) { return holds_alternative<epsilon_tr>(t.type); })
+                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, get<epsilon_tr>(t.type) }; })
             };
 
             std::ranges::sort(et, std::ranges::greater{}, compose(&epsilon_tr::priority, &epsilon_t::second));
@@ -96,7 +96,7 @@ namespace rx::testing
             if (this->get_node(e.first).is_final)
                 return false;
             return 0 != std::ranges::count_if(this->get_node(e.first).out_tr,
-                                              [&](const std::size_t i) { return not std::holds_alternative<normal_tr<CharT>>(this->get_tr(i).type); });
+                                              [&](const std::size_t i) { return not holds_alternative<normal_tr<CharT>>(this->get_tr(i).type); });
         });
 
         return new_closure;
@@ -116,7 +116,7 @@ namespace rx::testing
             {
                 const auto& tr{ this->get_tr(this->get_node(q).out_tr[i]) };
 
-                if (const auto* const ptr{ std::get_if<normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ get_if<normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
                 {
                     if (ptr->cs.contains(a))
                     {

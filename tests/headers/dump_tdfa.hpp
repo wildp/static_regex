@@ -20,9 +20,9 @@ namespace rx::testing
         using namespace detail::tdfa;
 
         auto print_regop = [](T target, const regop& op, std::string_view indent = "") {
-            if (auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+            if (auto* set{ get_if<regop::set>(&op.op) }; set != nullptr)
                 std::println(target, "{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
-            else if (auto* copy{ std::get_if<regop::copy>(&op.op) }; copy != nullptr)
+            else if (auto* copy{ get_if<regop::copy>(&op.op) }; copy != nullptr)
                 std::println(target, "{}r{} <- r{}", indent, op.dst, copy->src);
             else
                 std::unreachable();

@@ -112,9 +112,9 @@ namespace rx::detail
         {
             return static_span{ o | std::views::transform(
                 [](const tdfa::regop& op) consteval -> register_operation {
-                    if (const auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
+                    if (const auto* set{ get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
                         return { .dst = op.dst, .cpy_src = 0, .set_val = set->val, .is_copy = false };
-                    else if (const auto* cpy{ std::get_if<tdfa::regop::copy>(&op.op) }; cpy != nullptr)
+                    else if (const auto* cpy{ get_if<tdfa::regop::copy>(&op.op) }; cpy != nullptr)
                         return { .dst = op.dst, .cpy_src = cpy->src, .set_val = false, .is_copy = true };
                     else
                         std::unreachable();
@@ -139,7 +139,7 @@ namespace rx::detail
                     std::views::zip(std::views::iota(0uz), vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
                 };
 
-                std::ranges::sort(scored_pairs, {}, [](const auto& x){ return std::get<1>(x); });
+                std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
 
                 std::vector<tr_type> new_tr;
                 std::vector<tdfa::charset_t<char_type>> dont_cares;

@@ -177,7 +177,7 @@ namespace rx::detail
             }
 
             auto zv{ std::views::zip(keys_, values_) };
-            auto [it, _]{ std::ranges::unique(zv, {}, [](const auto& v) -> decltype(auto) { return std::get<0>(v); }) };
+            auto [it, _]{ std::ranges::unique(zv, {}, [](const auto& v) -> decltype(auto) { return get<0>(v); }) };
             auto dist{ std::ranges::distance(std::ranges::begin(zv), it) };
             keys_.erase(keys_.begin() + dist, keys_.end());
             values_.erase(values_.begin() + dist, values_.end());

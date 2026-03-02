@@ -150,7 +150,7 @@ namespace rx::detail::tnfa
         static constexpr bool operator()(const transition<CharT>& tr)
         {
             /* only count e-transitions */
-            return std::holds_alternative<epsilon_tr>(tr.type);
+            return holds_alternative<epsilon_tr>(tr.type);
         }
     };
 }

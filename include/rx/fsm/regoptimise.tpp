@@ -34,7 +34,7 @@ namespace rx::detail::tdfa
 
             for (auto it{ beg }; it != end; ++it)
             {
-                if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
                     ++indeg.at(copy->src);
             }
 
@@ -50,7 +50,7 @@ namespace rx::detail::tdfa
                 {
                     if (indeg.at(it->dst) == 0)
                     {
-                        if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                        if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
                             --indeg.at(copy->src);
 
                         o_new.emplace_back(*it);
@@ -68,7 +68,7 @@ namespace rx::detail::tdfa
                     for (const auto& oc : o_copy)
                     {
                         /* ignore copying to self */
-                        if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                        if (const auto* copy{ get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
                         {
                             cycle_detected = true;
                             break;
@@ -94,7 +94,7 @@ namespace rx::detail::tdfa
 
             for (auto it{ beg }; it != end; ++it)
             {
-                if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
                     ++indeg[copy->src];
             }
 
@@ -110,7 +110,7 @@ namespace rx::detail::tdfa
                 {
                     if (indeg[it->dst] == 0)
                     {
-                        if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
+                        if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
                             --indeg[copy->src];
 
                         o_new.emplace_back(*it);
@@ -128,7 +128,7 @@ namespace rx::detail::tdfa
                     for (const auto& oc : o_copy)
                     {
                         /* ignore copying to self */
-                        if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                        if (const auto* copy{ get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
                         {
                             cycle_detected = true;
                             break;
@@ -168,18 +168,18 @@ namespace rx::detail::tdfa
         for (auto it{ o.begin() }; it != o.end();)
         {
             auto local_end{ it + 1 };
-            if (std::holds_alternative<regop::set>(it->op))
+            if (holds_alternative<regop::set>(it->op))
             {
-                while (local_end != o.end() and std::holds_alternative<regop::set>(local_end->op))
+                while (local_end != o.end() and holds_alternative<regop::set>(local_end->op))
                     ++local_end;
 
                 local_end = dedup_regops(o, it, local_end);
                 std::ranges::sort(it, local_end, std::ranges::less{}, &regop::dst);
                 it = local_end;
             }
-            else if (std::holds_alternative<regop::copy>(it->op))
+            else if (holds_alternative<regop::copy>(it->op))
             {
-                while (local_end != o.end() and std::holds_alternative<regop::copy>(local_end->op))
+                while (local_end != o.end() and holds_alternative<regop::copy>(local_end->op))
                     ++local_end;
 
                 local_end = dedup_regops(o, it, local_end);
@@ -344,7 +344,7 @@ namespace rx::detail::tdfa
         {
             for (auto& op : block)
             {
-                if (auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                if (auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     visited.at(cpy->src) = true;
                 visited.at(op.dst) = true;
             }
@@ -366,7 +366,7 @@ namespace rx::detail::tdfa
             for (auto it{ std::ranges::begin(block) }; it != std::ranges::end(block);)
             {
                 it->dst = remap.at(it->dst);
-                if (auto* cpy{ std::get_if<regop::copy>(&it->op) }; cpy != nullptr)
+                if (auto* cpy{ get_if<regop::copy>(&it->op) }; cpy != nullptr)
                 {
                     cpy->src = remap.at(cpy->src);
 
@@ -475,11 +475,11 @@ namespace rx::detail::tdfa
 
                     for (const auto& op : dfa.regops_.at(sblock_idx) | std::views::reverse) /* todo: in post order? */
                     {
-                        if (std::holds_alternative<regop::set>(op.op))
+                        if (holds_alternative<regop::set>(op.op))
                         {
                             successor_row_copy.at(op.dst) = false;
                         }
-                        else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                        else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         {
                             if (successor_row_copy.at(op.dst))
                             {
@@ -527,7 +527,7 @@ namespace rx::detail::tdfa
                     current_row.at(op.dst) = false;
 
                 for (const auto& op : dfa.regops_.at(fbni.op_index))
-                    if (auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                    if (auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         current_row.at(cpy->src) = false;
             }
 
@@ -583,9 +583,9 @@ namespace rx::detail::tdfa
 
                 if (current_row_copy.at(op.dst))
                 {
-                    if (std::holds_alternative<regop::set>(op.op))
+                    if (holds_alternative<regop::set>(op.op))
                         current_row_copy.at(op.dst) = false;
-                    else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                    else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         current_row_copy.at(op.dst) = false, current_row_copy.at(cpy->src) = true;
                     else
                         std::unreachable();
@@ -610,14 +610,14 @@ namespace rx::detail::tdfa
             const auto& block{ dfa.regops_.at(block_idx) };
 
             for (const auto& op : block)
-                if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     histories.at(cpy->src) = op.op;
 
             for (const auto& op : block)
             {
-                if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+                if (const auto* set{ get_if<regop::set>(&op.op) }; set != nullptr)
                     histories.at(op.dst) = op.op;
-                else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     histories.at(op.dst) = histories.at(cpy->src);
                 else
                     std::unreachable();
@@ -627,9 +627,9 @@ namespace rx::detail::tdfa
             {
                 bitset_t current_row_copy{ liveness.row(block_idx) };
 
-                if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+                if (const auto* set{ get_if<regop::set>(&op.op) }; set != nullptr)
                     current_row_copy.at(op.dst) = false;
-                else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     current_row_copy.at(op.dst) = false, current_row_copy.at(cpy->src) = false;
                 else
                     std::unreachable();
@@ -660,7 +660,7 @@ namespace rx::detail::tdfa
         {
             for (const auto& op : block)
             {
-                if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr and op.dst != cpy->src)
+                if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr and op.dst != cpy->src)
                 {
                     reg_t x{ representative_map.at(op.dst) };
                     reg_t y{ representative_map.at(cpy->src) };
@@ -723,7 +723,7 @@ namespace rx::detail::tdfa
 
                 // /* we don't have ranges::cartesian_product yet :( */
                 // if (std::ranges::all_of(std::views::cartesian_product(equivalence_classes.at(x), equivalence_classes.at(y)),
-                //                         [&](const std::tuple<reg_t, reg_t>& pair) { return not overlapping_lifetimes.at(std::get<0>(pair), std::get<1>(pair)); }))
+                //                         [&](const std::tuple<reg_t, reg_t>& pair) { return not overlapping_lifetimes.at(get<0>(pair), get<1>(pair)); }))
                 // {
                 //     /* do thing */
                 // }

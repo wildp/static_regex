@@ -51,7 +51,7 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ std::get<concat>(entry) };
+                const auto& cat{ get<concat>(entry) };
 
                 if (cat.idxs.empty())
                 {
@@ -80,7 +80,7 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ std::get<alt>(entry) };
+                const auto& atl{ get<alt>(entry) };
 
                 if (pos == atl.idxs.size())
                 {
@@ -105,7 +105,7 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ std::get<repeat>(entry) };
+                const auto& rep{ get<repeat>(entry) };
 
                 if (pos == 1)
                 {
@@ -124,7 +124,7 @@ namespace rx::detail
 
             case ast_index<tag>:
             {
-                const auto& tag_entry{ std::get<tag>(entry) };
+                const auto& tag_entry{ get<tag>(entry) };
 
                 auto& vec{ tag_vec.at(idx) };
                 vec.emplace_back(tag_entry.number);
@@ -166,7 +166,7 @@ namespace rx::detail
                 break;
 
             case ast_index<char_str>:
-                const_len.at(idx) = std::get<char_str>(entry).data.size();
+                const_len.at(idx) = get<char_str>(entry).data.size();
                 stack.pop_back();
                 break;
 
@@ -181,7 +181,7 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ std::get<concat>(entry) };
+                const auto& cat{ get<concat>(entry) };
 
                 if (pos == cat.idxs.size())
                 {
@@ -206,7 +206,7 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ std::get<alt>(entry) };
+                const auto& atl{ get<alt>(entry) };
 
                 if (pos == atl.idxs.size())
                 {
@@ -232,7 +232,7 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ std::get<repeat>(entry) };
+                const auto& rep{ get<repeat>(entry) };
 
                 if (pos == 1)
                 {
@@ -266,11 +266,11 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
         {
-            if (not std::holds_alternative<concat>(expressions_.at(i)))
+            if (not holds_alternative<concat>(expressions_.at(i)))
                 continue;
 
             std::optional<capture_info::pair_entry> current;
-            auto& target{ std::get<concat>(expressions_.at(i)).idxs };
+            auto& target{ get<concat>(expressions_.at(i)).idxs };
 
             if (i == root_idx())
                 current = { .tag_number = end_of_input_tag, .offset = 0 };
@@ -279,7 +279,7 @@ namespace rx::detail
             {
                 const std::size_t idx{ target.at(j - 1) };
 
-                if (auto* tn{ std::get_if<tag>(&expressions_.at(idx)) }; tn != nullptr)
+                if (auto* tn{ get_if<tag>(&expressions_.at(idx)) }; tn != nullptr)
                 {
                     if (current.has_value())
                     {
@@ -320,7 +320,7 @@ namespace rx::detail
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
+            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
                 if (auto it{ remapper.find(tn->number) }; it != remapper.end())
                     tn->number = it->second;
         }
@@ -359,10 +359,10 @@ namespace rx::detail
         }
 
         /* insert into pattern */
-        if (type& ast{ expressions_.at(root_idx_) }; std::holds_alternative<concat>(ast))
+        if (type& ast{ expressions_.at(root_idx_) }; holds_alternative<concat>(ast))
         {
             /* root idx is already concat, so we can avoid creating a new concat as root */
-            auto& target{ std::get<concat>(ast).idxs };
+            auto& target{ get<concat>(ast).idxs };
             if (flags_.enable_start_tag)
                 target.insert(target.begin(), { repeater_idx, start_tag_idx });
             else
@@ -388,10 +388,10 @@ namespace rx::detail
     {
         for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
         {
-            if (not std::holds_alternative<repeat>(expressions_[i]))
+            if (not holds_alternative<repeat>(expressions_[i]))
                 continue;
 
-            repeat rep{ std::get<repeat>(expressions_[i]) };
+            repeat rep{ get<repeat>(expressions_[i]) };
 
             /* here we simplify `a{n,m}` into 3 primitives: `a{n}`, `a*`, and `a?` */
 
@@ -454,17 +454,17 @@ namespace rx::detail
     {
         for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
         {
-            if (not std::holds_alternative<repeat>(expressions_[i]))
+            if (not holds_alternative<repeat>(expressions_[i]))
                 continue;
 
-            repeat rep{ std::get<repeat>(expressions_[i]) };
+            repeat rep{ get<repeat>(expressions_[i]) };
 
-            if (rep.min != rep.max or not std::holds_alternative<char_str>(expressions_.at(rep.idx)))
+            if (rep.min != rep.max or not holds_alternative<char_str>(expressions_.at(rep.idx)))
                 continue;
 
             auto& cs{ expressions_[i].template emplace<char_str>() };
 
-            const auto& old{ std::get<char_str>(expressions_[rep.idx]) };
+            const auto& old{ get<char_str>(expressions_[rep.idx]) };
             cs.data.reserve(rep.min * old.data.size());
             for (std::int_least16_t j{ 0 }; j < rep.min; ++j)
                 cs.data += old.data;
@@ -478,7 +478,7 @@ namespace rx::detail
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
+            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
                 if (auto it{ branch_remapper.find(tn->number) }; it != branch_remapper.end())
                     tn->number = it->second;
         }
@@ -499,11 +499,11 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
         {
-            if (not std::holds_alternative<concat>(expressions_.at(i)))
+            if (not holds_alternative<concat>(expressions_.at(i)))
                 continue;
 
             std::optional<capture_info::pair_entry> current;
-            auto& target{ std::get<concat>(expressions_.at(i)).idxs };
+            auto& target{ get<concat>(expressions_.at(i)).idxs };
 
             if (i == root_idx())
                 current = { .tag_number = end_of_input_tag, .offset = 0 };
@@ -512,7 +512,7 @@ namespace rx::detail
             {
                 const std::size_t idx{ target.at(j - 1) };
 
-                if (auto* tn{ std::get_if<tag>(&expressions_.at(idx)) }; tn != nullptr and not ignore.at(tn->number))
+                if (auto* tn{ get_if<tag>(&expressions_.at(idx)) }; tn != nullptr and not ignore.at(tn->number))
                 {
                     if (current.has_value())
                     {
@@ -548,7 +548,7 @@ namespace rx::detail
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
+            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
                 if (auto it{ remapper.find(tn->number) }; it != remapper.end())
                     tn->number = it->second;
         }

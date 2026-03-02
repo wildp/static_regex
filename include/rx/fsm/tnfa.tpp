@@ -161,7 +161,7 @@ namespace rx::detail
             switch (entry.index())
             {
             case ast_index<typename ast_t::char_str>:
-                if (const auto& str{ std::get<typename ast_t::char_str>(entry) }; not str.data.empty())
+                if (const auto& str{ get<typename ast_t::char_str>(entry) }; not str.data.empty())
                 {
                     for (const auto c : str.data | std::views::take(str.data.size() - 1))
                     {
@@ -180,7 +180,7 @@ namespace rx::detail
 
             case ast_index<typename ast_t::char_class>:
             {
-                const auto& cla{ std::get<typename ast_t::char_class>(entry) };
+                const auto& cla{ get<typename ast_t::char_class>(entry) };
                 // using uct = decltype(cla)::underlying_char_type;
 
                 if constexpr (char_is_utf8<char_type>)
@@ -206,7 +206,7 @@ namespace rx::detail
             }
 
             case ast_index<typename ast_t::concat>:
-                if (const auto& cat{ std::get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
+                if (const auto& cat{ get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
                 {
                     for (const auto i : cat.idxs | std::views::take(cat.idxs.size() - 1))
                     {
@@ -224,7 +224,7 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::alt>:
-                if (const auto& alt{ std::get<typename ast_t::alt>(entry) }; not alt.idxs.empty())
+                if (const auto& alt{ get<typename ast_t::alt>(entry) }; not alt.idxs.empty())
                 {
                     if (tag_vec.empty() or tag_vec.at(idx).empty())
                     {
@@ -281,7 +281,7 @@ namespace rx::detail
 
             case ast_index<typename ast_t::repeat>:
             {
-                const auto& rep{ std::get<typename ast_t::repeat>(entry) };
+                const auto& rep{ get<typename ast_t::repeat>(entry) };
 
                 if (rep.mode == repeater_mode::possessive)
                     throw tnfa_error("Possessive repetition is unimplemented");
@@ -369,14 +369,14 @@ namespace rx::detail
             case ast_index<typename ast_t::tag>:
             {
                 /* in tree_expr tags start at 0, whereas here they start at 1 */
-                const auto& tag_entry{ std::get<typename ast_t::tag>(entry) };
+                const auto& tag_entry{ get<typename ast_t::tag>(entry) };
                 make_epsilon(q0, qf, 0, tag_entry.number + 1);
                 break;
             }
 
             case ast_index<typename ast_t::assertion>:
             {
-                const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
+                const typename ast_t::assertion& assertion{ get<typename ast_t::assertion>(entry) };
 
                 using cs = nontransient_constexpr_version_of_t<charset_type>;
                 using p = cs::char_interval;
@@ -617,7 +617,7 @@ namespace rx::detail
     constexpr void tagged_nfa<CharT>::rewrite_sof_anchors()
     {
         static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
-            return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookbehind_1_tr>(tr.type);
+            return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookbehind_1_tr>(tr.type);
         };
 
         const auto ec{ epsilon_closure({ start_node() }, pred) };
@@ -644,17 +644,17 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(i) };
 
-                if (std::holds_alternative<normal_tr>(tr.type))
+                if (holds_alternative<normal_tr>(tr.type))
                 {
                     /* transition from copied e-closure to main graph */
                     make_copy(p, tr.dst, tr.type);
                 }
-                else if (std::holds_alternative<sof_anchor_tr>(tr.type))
+                else if (holds_alternative<sof_anchor_tr>(tr.type))
                 {
                     /* replace sof anchor with e-transition in copied subgraph */
                     make_epsilon(p, mapped_states.at(tr.dst));
                 }
-                else if (not std::holds_alternative<lookbehind_1_tr>(tr.type))
+                else if (not holds_alternative<lookbehind_1_tr>(tr.type))
                 {
                     /* transition within copied e-closure */
                     make_copy(p, mapped_states.at(tr.dst), tr.type);
@@ -668,7 +668,7 @@ namespace rx::detail
         {
             auto& tr{ transitions_[i] };
 
-            if (not std::holds_alternative<sof_anchor_tr>(tr.type))
+            if (not holds_alternative<sof_anchor_tr>(tr.type))
                 continue;
 
             /* delete transition */
@@ -689,7 +689,7 @@ namespace rx::detail
         /* NOTE: this function must be called before any other function which adds final nodes */
 
         static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
-            return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookahead_1_tr>(tr.type);
+            return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookahead_1_tr>(tr.type);
         };
 
         const auto bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
@@ -701,7 +701,7 @@ namespace rx::detail
         {
             const auto& tr{ transitions_[i] };
 
-            if (not std::holds_alternative<eof_anchor_tr>(tr.type))
+            if (not holds_alternative<eof_anchor_tr>(tr.type))
                 continue;
 
             to_revisit.emplace_back(i);
@@ -749,11 +749,11 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(i) };
 
-                if (std::holds_alternative<normal_tr>(tr.type))
+                if (holds_alternative<normal_tr>(tr.type))
                 {
                     /* do not insert transition */
                 }
-                else if (std::holds_alternative<eof_anchor_tr>(tr.type))
+                else if (holds_alternative<eof_anchor_tr>(tr.type))
                 {
                     /* replace eof anchor with e-transition in copied subgraph */
                     make_epsilon(p, mapped_states.at(tr.dst));
@@ -807,7 +807,7 @@ namespace rx::detail
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
             const auto& tr{ transitions_[i] };
-            if (const auto* ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+            if (const auto* ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 sc_transitions[ptr->cs].emplace_back(i);
         }
 
@@ -838,10 +838,10 @@ namespace rx::detail
 
             auto pred = [&](const tnfa::transition<char_type>& tr) {
                 /* skip normal transitions and eof anchors */
-                if (std::holds_alternative<normal_tr>(tr.type) or std::holds_alternative<eof_anchor_tr>(tr.type))
+                if (holds_alternative<normal_tr>(tr.type) or holds_alternative<eof_anchor_tr>(tr.type))
                     return false;
 
-                if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 {
                     if (auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
                     {
@@ -897,19 +897,19 @@ namespace rx::detail
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                     const auto& tr{ get_tr(i) };
 
-                    if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+                    if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally transition from copied e-closure to main graph */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                             make_transition(p, tr.dst, std::move(new_edge));
                     }
-                    else if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+                    else if (const auto* const ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally e-transition between copied subgraphs */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                             make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));
                     }
-                    else if (not std::holds_alternative<eof_anchor_tr>(tr.type))
+                    else if (not holds_alternative<eof_anchor_tr>(tr.type))
                     {
                         /* transition within copied e-closure */
                         make_copy(p, mapped_states.at(tr.dst), tr.type);
@@ -978,7 +978,7 @@ namespace rx::detail
 
         static constexpr auto search_predicate = [](lb_info& lb, const charset_type& edge, const tnfa::transition<char_type>& tr, const tr_index i) static {
             /* assign results here instead of using the normal return value */
-            if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+            if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
             {
                 if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                     lb.tr_into.emplace_back(i);
@@ -987,11 +987,11 @@ namespace rx::detail
             }
 
             /* skip sof anchors */
-            if (std::holds_alternative<sof_anchor_tr>(tr.type))
+            if (holds_alternative<sof_anchor_tr>(tr.type))
                 return false;
 
             /* intersection with lookbehind_1 transition requires cloned subgraph */
-            if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+            if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
             {
                 if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
                     lb.tr_between.emplace_back(i);
@@ -1024,7 +1024,7 @@ namespace rx::detail
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
             const auto& tr{ transitions_[i] };
-            const auto* ptr{ std::get_if<lookbehind_1_tr>(&tr.type) };
+            const auto* ptr{ get_if<lookbehind_1_tr>(&tr.type) };
 
             if (ptr == nullptr)
                 continue;
@@ -1085,7 +1085,7 @@ namespace rx::detail
         {
             const auto fn = [this](const tr_index i) {
                 const auto& tr{ get_tr(i) };
-                return std::cref(std::get<lookbehind_1_tr>(tr.type).cs);
+                return std::cref(get<lookbehind_1_tr>(tr.type).cs);
             };
 
             const std::vector refs{ std::from_range, wraparounds | std::views::transform(fn) };
@@ -1107,11 +1107,11 @@ namespace rx::detail
             for (const auto& edge : wrap_starts)
             {
                 for (const tr_index i : wraparound_lb_closure->tr_into)
-                    if (auto new_edge{ edge & std::get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                    if (auto new_edge{ edge & get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
                         start_transitions[i].try_emplace(std::move(new_edge));
 
                 for (const tr_index i : wraparound_lb_closure->tr_between)
-                    if (auto new_edge{ edge & std::get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                    if (auto new_edge{ edge & get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
                         to_insert[std::move(new_edge)].emplace_back(i);
             }
 
@@ -1133,11 +1133,11 @@ namespace rx::detail
                 const auto& lb{ lb_closures.at(lb_tr_index) };
 
                 for (const tr_index i : lb.tr_into)
-                    if (auto new_edge{ edge & std::get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                    if (auto new_edge{ edge & get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
                         start_transitions[i].try_emplace(std::move(new_edge));
 
                 for (const tr_index i : lb.tr_between)
-                    if (auto new_edge{ edge & std::get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                    if (auto new_edge{ edge & get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
                         to_insert[std::move(new_edge)].emplace_back(i);
             }
 
@@ -1194,10 +1194,10 @@ namespace rx::detail
             auto& mapped_states{ all_mapped_states[edge] };
 
             auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr) {
-                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
+                if (holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                     return false;
 
-                if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
                     return (e | ptr->cs) == ptr->cs;
 
                 return true;
@@ -1281,13 +1281,13 @@ namespace rx::detail
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                     const auto& tr{ get_tr(i) };
 
-                    if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+                    if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* this should be valid since in our tnfa, nodes by construction either only have outgoing
                          * normal transitions, or have outgoing e-transitions (or assertions), but never both */
                         make_epsilon(p, q);
                     }
-                    else if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+                    else if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
                     {
                         if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                         {
@@ -1297,7 +1297,7 @@ namespace rx::detail
                                 make_epsilon(p, tr.dst); /* transition from copied subgraph back to main graph */
                         }
                     }
-                    else if (not std::holds_alternative<sof_anchor_tr>(tr.type))
+                    else if (not holds_alternative<sof_anchor_tr>(tr.type))
                     {
                         /* transition within copied e-closure (if necessary) */
                         if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
@@ -1322,7 +1322,7 @@ namespace rx::detail
                         continue;
 
                     auto& tr{ transitions_.at(i) };
-                    auto* const ptr{ std::get_if<normal_tr>(&tr.type) };
+                    auto* const ptr{ get_if<normal_tr>(&tr.type) };
 
                     if (ptr == nullptr)
                         continue;
