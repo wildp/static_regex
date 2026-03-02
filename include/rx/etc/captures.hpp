@@ -35,6 +35,7 @@ namespace rx::detail
 
         using tag_pair_t     = std::pair<pair_entry, pair_entry>;
         using tag_remapper_t = std::flat_map<tag_number_t, tag_number_t>;
+        using staging_info_t = std::flat_map<tag_number_t, tag_number_t>;
 
         using key_type   = capture_number_t;
         using value_type = tag_pair_t;
@@ -48,7 +49,7 @@ namespace rx::detail
         constexpr void insert(capture_number_t cap, tag_number_t lhs, tag_number_t rhs)
         {
             if (cap == 0)
-                throw std::invalid_argument("Cannot insert capture with number 0");
+                throw std::invalid_argument("capture_info::insert: cannot insert capture with number 0");
 
             const auto key_it{ std::ranges::upper_bound(keys_, cap) };
             const auto value_it{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_it) };
@@ -140,6 +141,59 @@ namespace rx::detail
             }
 
             return remapper;
+        }
+
+        [[nodiscard]] constexpr tag_remapper_t eliminate_branch_reset()
+        {
+            tag_remapper_t result;
+
+            for (std::size_t i{ 1 }, end{ keys_.size() }; i < end; ++i)
+            {
+                const auto capnum{ keys_.at(i - 1) };
+
+                if (capnum != keys_.at(i))
+                    continue;
+
+                if (values_[i - 1].first.offset != 0 or values_[i - 1].first.offset != 0)
+                    throw std::logic_error("capture_info::get_multitags: tags already optimised");
+
+                const auto first_target{ values_[i - 1].first.tag_number };
+                const auto second_target{ values_[i - 1].second.tag_number };
+
+                result.emplace(values_[i].first.tag_number, first_target);
+                result.emplace(values_[i].second.tag_number, second_target);
+
+                for (; i < end and capnum == keys_.at(i); ++i)
+                {
+                    result.emplace(values_[i].first.tag_number, first_target);
+                    result.emplace(values_[i].second.tag_number, second_target);
+
+                    if (values_[i].first.offset != 0 or values_[i].first.offset != 0)
+                        throw std::logic_error("capture_info::get_multitags: tags already optimised");
+
+                    values_[i].first.tag_number = first_target;
+                    values_[i].second.tag_number = second_target;
+                };
+            }
+
+            auto zv{ std::views::zip(keys_, values_) };
+            auto [it, _]{ std::ranges::unique(zv, {}, [](const auto& v) -> decltype(auto) { return std::get<0>(v); }) };
+            auto dist{ std::ranges::distance(std::ranges::begin(zv), it) };
+            keys_.erase(keys_.begin() + dist, keys_.end());
+            values_.erase(values_.begin() + dist, values_.end());
+
+            return result;
+        }
+
+        [[nodiscard]] constexpr staging_info_t get_staged_tags() const
+        {
+            staging_info_t result;
+
+            for (const auto& [lhs , rhs] : values_)
+                if (lhs.offset == 0 and lhs.tag_number != start_of_input_tag)
+                    result.emplace(lhs.tag_number, rhs.tag_number);
+
+            return result;
         }
 
     private:

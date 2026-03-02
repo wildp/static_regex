@@ -11,27 +11,33 @@
 
 namespace rx
 {
-    class pattern_error : public std::runtime_error
+    class regex_error : public std::runtime_error
     {
     public:
         using runtime_error::runtime_error;
     };
 
-    class parser_error : public std::runtime_error
+    class pattern_error : public regex_error
     {
     public:
-        using runtime_error::runtime_error;
+        using regex_error::regex_error;
     };
 
-    class tree_error : public std::runtime_error
+    class parser_error : public regex_error
     {
     public:
-        using runtime_error::runtime_error;
+        using regex_error::regex_error;
     };
 
-    class tnfa_error : public std::runtime_error
+    class tree_error : public regex_error
     {
     public:
-        using runtime_error::runtime_error;
+        using regex_error::regex_error;
+    };
+
+    class tnfa_error : public regex_error
+    {
+    public:
+        using regex_error::regex_error;
     };
 }

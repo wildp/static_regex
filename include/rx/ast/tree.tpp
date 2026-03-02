@@ -321,10 +321,8 @@ namespace rx::detail
         for (auto& expr : expressions_)
         {
             if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
-            {
                 if (auto it{ remapper.find(tn->number) }; it != remapper.end())
                     tn->number = it->second;
-            }
         }
 
         if (remapper.size() > std::numeric_limits<tag_number_t>::max())
@@ -332,6 +330,7 @@ namespace rx::detail
 
         tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
     }
+
 
     /* convert pattern for use in regex search */
 
@@ -379,5 +378,192 @@ namespace rx::detail
                 expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, root_idx_ });
             root_idx_ = new_root_idx;
         }
+    }
+
+
+    /* convert pattern for use in naive matcher */
+
+    template<typename CharT>
+    constexpr void expr_tree<CharT>::simplify_counted_repeat()
+    {
+        for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
+        {
+            if (not std::holds_alternative<repeat>(expressions_[i]))
+                continue;
+
+            repeat rep{ std::get<repeat>(expressions_[i]) };
+
+            /* here we simplify `a{n,m}` into 3 primitives: `a{n}`, `a*`, and `a?` */
+
+            if (rep.min == 0)
+            {
+                if (rep.max > 1)
+                {
+                    std::size_t cat{ rep.idx };
+
+                    for (auto i{ rep.min + 1 }; i < rep.max; ++i)
+                    {
+                        const std::size_t quest{ expressions_.size() };
+                        expressions_.emplace_back(std::in_place_type<repeat>, cat, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+
+                        cat = expressions_.size();
+                        expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
+                    }
+
+                    expressions_[i].template emplace<repeat>(cat, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+                }
+            }
+            else if (rep.min < rep.max)
+            {
+                /* simplify `a{n,m}`, where 0 < n < m */
+
+                const std::size_t fixed_rep{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
+
+                std::size_t quest{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+
+                for (auto i{ rep.min + 1 }; i < rep.max; ++i)
+                {
+                    const std::size_t cat{ expressions_.size() };
+                    expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
+
+                    quest = expressions_.size();
+                    expressions_.emplace_back(std::in_place_type<repeat>, cat, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+                }
+
+                expressions_[i].template emplace<concat>(std::vector{ fixed_rep, quest });
+            }
+            else if (rep.min > rep.max)
+            {
+                /* simplify `a{n,}` and `a+`, where n > 0 */
+
+                const std::size_t fixed_rep{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
+
+                const std::size_t star{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, rep.mode);
+
+                expressions_[i].template emplace<concat>(std::vector{ fixed_rep, star });
+            }
+        }
+    }
+
+    template<typename CharT>
+    constexpr void expr_tree<CharT>::optimise_exact_repeat()
+    {
+        for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
+        {
+            if (not std::holds_alternative<repeat>(expressions_[i]))
+                continue;
+
+            repeat rep{ std::get<repeat>(expressions_[i]) };
+
+            if (rep.min != rep.max or not std::holds_alternative<char_str>(expressions_.at(rep.idx)))
+                continue;
+
+            auto& cs{ expressions_[i].template emplace<char_str>() };
+
+            const auto& old{ std::get<char_str>(expressions_[rep.idx]) };
+            cs.data.reserve(rep.min * old.data.size());
+            for (std::int_least16_t j{ 0 }; j < rep.min; ++j)
+                cs.data += old.data;
+        }
+    }
+
+    template<typename CharT>
+    constexpr auto expr_tree<CharT>::tag_to_register()
+    {
+        const auto branch_remapper{ capture_info_.eliminate_branch_reset() };
+
+        for (auto& expr : expressions_)
+        {
+            if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
+                if (auto it{ branch_remapper.find(tn->number) }; it != branch_remapper.end())
+                    tn->number = it->second;
+        }
+
+        std::vector<bool> ignore(tag_count_, false);
+
+        /* the section below has been copied from optimise_tags, except:
+         * - branch reset tags are ignored,
+         * - the start of input is not remapped
+         */
+
+        for (const auto tag : branch_remapper.values())
+            ignore.at(tag) = true;
+
+        const auto const_len{ make_const_len_vec() };
+
+        std::flat_map<tag_number_t, capture_info::pair_entry> tag_remap;
+
+        for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
+        {
+            if (not std::holds_alternative<concat>(expressions_.at(i)))
+                continue;
+
+            std::optional<capture_info::pair_entry> current;
+            auto& target{ std::get<concat>(expressions_.at(i)).idxs };
+
+            if (i == root_idx())
+                current = { .tag_number = end_of_input_tag, .offset = 0 };
+
+            for (std::size_t j{ target.size() }; j > 0; --j)
+            {
+                const std::size_t idx{ target.at(j - 1) };
+
+                if (auto* tn{ std::get_if<tag>(&expressions_.at(idx)) }; tn != nullptr and not ignore.at(tn->number))
+                {
+                    if (current.has_value())
+                    {
+                        /* remap tag */
+
+                        auto [_, success]{ tag_remap.try_emplace(tn->number, *current) };
+                        if (not success)
+                            throw tree_error("Tag appears more than once in AST");
+
+                        tn->number = -1; /* set to an invalid value */
+                        target.erase(target.begin() + j - 1);
+                    }
+                    else
+                    {
+                        current = { .tag_number = tn->number, .offset = 0 };
+                    }
+                }
+                else if (current.has_value())
+                {
+                    if (const_len.at(idx))
+                        current->offset -= *const_len.at(idx);
+                    else
+                        current = {};
+                }
+            }
+        }
+
+        /* re-number map and re-number tags in capture_info */
+
+        const auto remapper{ capture_info_.remap_tags(tag_remap) };
+
+        /* re-number tags in ast */
+
+        for (auto& expr : expressions_)
+        {
+            if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
+                if (auto it{ remapper.find(tn->number) }; it != remapper.end())
+                    tn->number = it->second;
+        }
+
+        if (remapper.size() > std::numeric_limits<tag_number_t>::max())
+            throw tree_error("Tag number exceeded");
+
+        tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
+
+
+        /* --- end copied section ---  */
+
+        /* this returns an over-approximation of the tags which need staging;
+         * only lhs tag for capturing groups which contain a
+         * backreference to themselves need to be staged                      */
+        return capture_info_.get_staged_tags();
     }
 }

@@ -11,6 +11,7 @@ target_sources(tests
         srx2_test.cpp
         srxc_test.cpp
         srxf_test.cpp
+        srxn_test.cpp
         tdfa_test.cpp
         tnfa_test.cpp
         tree_test.cpp

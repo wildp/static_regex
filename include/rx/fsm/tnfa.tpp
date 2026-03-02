@@ -409,7 +409,7 @@ namespace rx::detail
                     has_eof_anchor_ = true;
                     break;
 
-                case assert_type::word_boundary:
+                case assert_type::ascii_word_boundary:
                 {
                     const state_t q1{ node_create() };
                     const state_t q2{ node_create() };
@@ -429,7 +429,7 @@ namespace rx::detail
                     break;
                 }
 
-                case assert_type::not_word_boundary:
+                case assert_type::not_ascii_word_boundary:
                 {
                     const state_t q1{ node_create() };
                     const state_t q2{ node_create() };

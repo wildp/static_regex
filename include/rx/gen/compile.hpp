@@ -12,15 +12,12 @@
 #include <utility>
 #include <vector>
 
-#include <boost/dynamic_bitset.hpp>
-
+#include "rx/api/regex_error.hpp"
 #include "rx/ast/tree.hpp"
-#include "rx/etc/static_charset.hpp"
 #include "rx/etc/static_span.hpp"
 #include "rx/etc/string_literal.hpp"
 #include "rx/fsm/flags.hpp"
 #include "rx/fsm/tdfa.hpp"
-#include "rx/fsm/tdfa.tpp"
 #include "rx/fsm/tnfa.hpp"
 
 
@@ -30,32 +27,22 @@ namespace rx::detail
     {
         explicit consteval final_capture_info(const capture_info& ci)
         {
-            using namespace std::placeholders;
-
             std::vector<capture_info::tag_pair_t> captures_tmp;
-            std::vector<capture_info::tag_pair_t> overflow_tmp;
 
             for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
             {
                 const auto range{ ci.lookup(i) };
 
-                if (std::ranges::size(range) == 1)
-                {
-                    captures_tmp.emplace_back(*std::ranges::begin(range));
-                }
-                else
-                {
-                    const auto begin{ std::saturate_cast<int>(overflow_tmp.size()) };
-                    overflow_tmp.append_range(range);
-                    const auto end{ std::saturate_cast<int>(overflow_tmp.size()) };
-                    captures_tmp.emplace_back(capture_info::pair_entry{ .tag_number = end_of_input_tag, .offset = begin },
-                                              capture_info::pair_entry{ .tag_number = start_of_input_tag, .offset = end });
-                }
+                if (std::ranges::size(range) != 1)
+                    throw tree_error("Capture info contains branch reset");
+
+                captures_tmp.emplace_back(*std::ranges::begin(range));
             }
 
             captures = static_span{ captures_tmp };
-            overflow = static_span{ overflow_tmp };
         }
+
+        consteval final_capture_info() = default;
 
         [[nodiscard]] consteval std::size_t capture_count() const noexcept
         {
@@ -64,22 +51,16 @@ namespace rx::detail
 
         [[nodiscard]] consteval bool has_match_start() const
         {
-            for (const auto& [fst, snd] : captures)
-            {
-                if (fst.tag_number == end_of_input_tag and snd.tag_number == start_of_input_tag)
-                    continue;
-                if (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag)
-                    return true;
-            }
+            static constexpr auto pred = [](const capture_info::tag_pair_t& pair) {
+                const auto& [fst, snd]{ pair };
+                return (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag);
+            };
 
-            return std::ranges::any_of(overflow, [](const capture_info::tag_pair_t& p) {
-                return p.first.tag_number == start_of_input_tag or p.second.tag_number == start_of_input_tag;
-            });
+            return std::ranges::any_of(captures, pred);
         }
 
         /* data members (public so that final_capture_info is structural) */
-        static_span<capture_info::tag_pair_t> captures; /* use invalid tag pairs to point towards overflow being used */
-        static_span<capture_info::tag_pair_t> overflow;
+        static_span<capture_info::tag_pair_t> captures;
     };
 
     struct static_match_result_info
@@ -244,8 +225,8 @@ namespace rx::detail
     };
 
 
-    template<typename CharT, std::size_t N>
-    consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, fsm_flags f)
+    template<typename CharT>
+    consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern, fsm_flags f)
     {
         /* set parser flags as appropriate */
         parser_flags p{};
@@ -253,7 +234,7 @@ namespace rx::detail
         if (f.return_bool) p.enable_start_tag = false;
 
         /* parse pattern string into tree */
-        expr_tree ast{ pattern.view(), p };
+        expr_tree ast{ pattern, p };
         if (f.is_search) ast.insert_search_prefix();
         ast.optimise_tags();
 
@@ -277,6 +258,6 @@ namespace rx::detail
     template<string_literal Pattern, fsm_flags Flags>
     struct compiled_dfa
     {
-        static constexpr auto value{ compile_pattern(Pattern, Flags) };
+        static constexpr auto value{ compile_pattern(Pattern.view(), Flags) };
     };
 }

@@ -19,6 +19,7 @@
 #include "rx/etc/string_literal.hpp"
 #include "rx/etc/util.hpp"
 #include "rx/fsm/flags.hpp"
+#include "rx/gen/naive.hpp"
 #include "rx/gen/p1306.hpp"
 #include "rx/gen/result.hpp"
 
@@ -37,7 +38,7 @@ namespace rx
         consteval auto get_matcher_refl(mode i, bool is_search = false)
         {
             if (i == mode::naive)
-                return ^^detail::p1306_matcher; /* todo: implement */
+                return ^^detail::p1306_naive_adaptor;
             else if (i == mode::standard and is_search)
                 return ^^detail::p1306_searcher;
             else
@@ -226,6 +227,8 @@ namespace rx
 
         struct sentinel {};
 
+        using Matcher = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+
     public:
         regex_match_view() requires std::default_initializable<V> = default;
         constexpr explicit regex_match_view(V base, static_regex<Pattern, Mode> /* regex */) : base_{ std::move(base) } {}
@@ -267,7 +270,6 @@ namespace rx
     private:
         using Parent  = detail::maybe_const_t<Const, regex_match_view>;
         using Base    = detail::maybe_const_t<Const, V>;
-        using Matcher = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
 
     public:
         using iterator_category = std::input_iterator_tag;
@@ -365,6 +367,148 @@ namespace rx
         [[no_unique_address]] Matcher matcher_;
         value_type result_;
     };
+
+
+    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    requires std::ranges::view<V>
+    class regex_match_view<V, static_regex<Pattern, mode::naive>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, mode::naive>>>
+    {
+        template<bool Const>
+        struct iterator;
+
+        struct sentinel {};
+
+        using Matcher = [: detail::get_matcher_refl(mode::naive, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+
+    public:
+        regex_match_view() requires std::default_initializable<V> = default;
+        constexpr explicit regex_match_view(V base, static_regex<Pattern, mode::naive> /* regex */) : base_{ std::move(base) } {}
+
+        [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
+        [[nodiscard]] constexpr V base() && { return std::move(base_); }
+
+        [[nodiscard]] constexpr iterator<false> begin()
+        {
+            return iterator<false>{ this };
+        }
+
+        [[nodiscard]] constexpr iterator<true> begin() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return iterator<true>{ this };
+        }
+
+        [[nodiscard]] constexpr sentinel end()
+        {
+            return {};
+        }
+
+        [[nodiscard]] constexpr sentinel end() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return {};
+        }
+
+    private:
+        V base_{};
+        [[no_unique_address]] Matcher matcher_;
+    };
+
+    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    requires std::ranges::view<V>
+    template<bool Const>
+    struct regex_match_view<V, static_regex<Pattern, mode::naive>>::iterator
+    {
+    private:
+        using Parent  = detail::maybe_const_t<Const, regex_match_view>;
+        using Base    = detail::maybe_const_t<Const, V>;
+
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using iterator_concept  = std::input_iterator_tag;
+        using value_type        = Matcher::template result<std::ranges::iterator_t<Base>>;
+        using difference_type   = std::ranges::range_difference_t<Base>;
+
+        iterator() requires std::default_initializable<std::ranges::iterator_t<Base>> = default;
+
+        constexpr explicit iterator(Parent* parent)
+            : parent_{ parent }, result_{ matcher_(std::ranges::begin(parent_->base_), std::ranges::end(parent_->base_)) } {}
+
+        constexpr explicit(false) iterator(iterator<not Const> i)
+        requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
+            : parent_{ i.parent_ }, result_{ std::move(i.result_) } {}
+
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
+        {
+            return result_.match_end;
+        }
+
+        constexpr const value_type& operator*() const
+        {
+            return result_;
+        }
+
+        constexpr const value_type* operator->() const
+        {
+            return &result_;
+        }
+
+        constexpr iterator& operator++()
+        {
+            if (not result_.has_value())
+                return *this;
+
+            auto current{ result_.match_end_ };
+
+            if (current == result_.match_start_)
+            {
+                if (current == std::ranges::end(parent_->base_))
+                {
+                    result_.clear_match();
+                    return *this;
+                }
+                else
+                {
+                    ++current;
+                }
+            }
+
+            result_ = matcher_(std::ranges::begin(parent_->base_), std::ranges::end(parent_->base_), current);
+            return *this;
+        }
+
+        constexpr void operator++(int)
+        {
+            ++*this;
+        }
+
+        friend constexpr bool operator==(const iterator& x, const iterator& y)
+        requires std::equality_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.result_.match_start == y.result_.match_start;
+        }
+
+        friend constexpr auto operator<=>(const iterator& x, const iterator& y)
+        requires std::three_way_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.result_.match_start <=> y.result_.match_start;
+        }
+
+        friend constexpr bool operator==(const iterator& x, sentinel /* y */)
+        {
+            return not x.result_.has_value();
+        }
+
+        template<std::ranges::input_range W, int...>
+        requires std::ranges::view<W>
+        friend class submatches_view;
+
+    private:
+        Parent* parent_;
+        [[no_unique_address]] Matcher matcher_;
+        value_type result_;
+    };
+
 
     template<typename Range, string_literal Pattern, mode Mode>
     regex_match_view(Range&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern, Mode>>;

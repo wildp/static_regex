@@ -28,6 +28,9 @@ namespace rx::detail
 
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_searcher;
+
+    template<rx::string_literal Pattern>
+    struct p1306_naive_impl;
 }
 
 namespace rx
@@ -148,42 +151,8 @@ namespace rx
         requires (N < submatch_count)
         [[nodiscard]] constexpr submatch_type get() const noexcept
         {
-            using namespace detail;
-
-            static constexpr auto current{ Captures.fci.captures[N] };
-
-            if (not this->has_value())
-                return {};
-
-            if constexpr (current.first.tag_number == end_of_input_tag and current.second.tag_number == start_of_input_tag)
-            {
-                // TODO: make multi tag
-                throw std::logic_error("Branch reset not implemented");
-            }
-            else
-            {
-                if constexpr (current.first.tag_number == current.second.tag_number)
-                {
-                    if (this->tag_enabled<current.first.tag_number>())
-                    {
-                        return factory::make_submatch(
-                            std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                            std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
-                        );
-                    }
-                }
-                else
-                {
-                    if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
-                    {
-                        return factory::make_submatch(
-                            std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                            std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
-                        );
-                    }
-                }
-            }
-
+            if (this->has_value())
+                return this->force_get<N>();
             return {};
         }
 
@@ -192,6 +161,9 @@ namespace rx
 
         template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
         friend struct detail::p1306_searcher;
+
+        template<rx::string_literal Pattern>
+        friend struct detail::p1306_naive_impl;
 
         template<std::ranges::bidirectional_range V, typename Regex>
         requires std::ranges::view<V>
@@ -243,6 +215,36 @@ namespace rx
                 return reg_[Captures.final_registers[N]];
         }
 
+        template<size_type N>
+        requires (N < submatch_count)
+        [[nodiscard]] constexpr submatch_type force_get() const noexcept
+        {
+            static constexpr auto current{ Captures.fci.captures[N] };
+
+            if constexpr (current.first.tag_number == current.second.tag_number)
+            {
+                if (this->tag_enabled<current.first.tag_number>())
+                {
+                    return factory::make_submatch(
+                        std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                        std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                    );
+                }
+            }
+            else
+            {
+                if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
+                {
+                    return factory::make_submatch(
+                        std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                        std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                    );
+                }
+            }
+
+            return {};
+        }
+
         constexpr void range_check(size_type n) const
         {
             if (n >= this->size())
@@ -286,7 +288,7 @@ namespace rx
 
         proxy_iterator() = default;
 
-        constexpr proxy_iterator(const static_regex_match_result* ptr, std::size_t pos)
+        constexpr proxy_iterator(const static_regex_match_result* ptr, size_type pos)
             : ptr_{ ptr }, pos_{ pos } {}
 
         constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) requires Const
@@ -366,7 +368,7 @@ namespace rx
 
     private:
         const static_regex_match_result* ptr_{ nullptr };
-        std::size_t pos_{ 0 };
+        size_type pos_{ 0 };
     };
 }
 
