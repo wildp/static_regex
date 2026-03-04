@@ -307,11 +307,8 @@ namespace rx::detail
         }
 
         template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I>
-        static constexpr void set_final_info(result<I>& res, gen_info& gen, const I it, const I first)
+        static constexpr void set_final_info(result<I>& res, gen_info& gen, const I it)
         {
-            if constexpr (result<I>::has_match_start)
-                res.match_start_ = first;
-
             register_operations<Blk>(res, gen, it);
             res.match_end_ = std::ranges::prev(it, Offset);
 
@@ -320,27 +317,22 @@ namespace rx::detail
         }
 
         template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I>
-        static constexpr void set_fallback_info(result<I>& res, gen_info& gen, const I it, const I first)
+        static constexpr void set_fallback_info(result<I>& res, gen_info& gen, const I it)
         {
-            set_final_info<Blk, Offset>(res, gen, it, first);
+            set_final_info<Blk, Offset>(res, gen, it);
 
             if constexpr (result<I>::has_continue)
-            {
                 if constexpr (ContinueAt != tdfa::no_continue)
                     res.continue_at_ = ContinueAt;
-            }
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool fallback(result<I>& res, gen_info& gen, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state, const I first)
+        static constexpr bool fallback(result<I>& res, gen_info& gen, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state)
         {
             static_assert(Flags.enable_fallback);
 
             if (fallback_state == fallback_disabled)
                 return false;
-
-            if constexpr (result<I>::has_match_start)
-                res.match_start_ = first;
 
             // TODO: change to use structured binding when supported
             template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
@@ -348,7 +340,7 @@ namespace rx::detail
                 if (fallback_state == pair.first)
                 {
                     static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
-                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, gen, fallback_it, first);
+                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, gen, fallback_it);
                     return true;
                 }
             }
@@ -357,7 +349,7 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool state(result<I>& res, gen_info& gen, I it, const S last, I fallback_it, std::size_t fallback_state, const I first)
+        static constexpr bool state(result<I>& res, gen_info& gen, I it, const S last, I fallback_it, std::size_t fallback_state)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
@@ -372,7 +364,7 @@ namespace rx::detail
                     if (tr_possible<tr>(*it))
                     {
                         register_operations<tr.op_index>(res, gen, it);
-                        [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state, first);
+                        [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
                     }
                 }
 
@@ -380,7 +372,7 @@ namespace rx::detail
                 {
                     if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
                     {
-                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it, first);
+                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
                         return true;
                     }
                 }
@@ -389,19 +381,19 @@ namespace rx::detail
             {
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
                 {
-                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it, first);
+                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
                     return true;
                 }
             }
 
             if constexpr (Flags.enable_fallback)
-                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state, first);
+                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state);
 
             return false;
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I>
-        static constexpr bool state(result<I>& res, gen_info& gen, I it, const cstr_sentinel_t last, I fallback_it, std::size_t fallback_state, const I first)
+        static constexpr bool state(result<I>& res, gen_info& gen, I it, const cstr_sentinel_t last, I fallback_it, std::size_t fallback_state)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
@@ -414,7 +406,7 @@ namespace rx::detail
                 if (tr_possible_exclude_null<tr>(*it))
                 {
                     register_operations<tr.op_index>(res, gen, it);
-                    [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state, first);
+                    [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
                 }
             }
 
@@ -422,23 +414,21 @@ namespace rx::detail
             {
                 if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
                 {
-                    if constexpr (result<I>::has_match_start)
-                        res.match_start_ = first;
-                    set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it, first);
+                    set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
                     return true;
                 }
                 else
                 {
                     if (it == last) [[likely]]
                     {
-                        set_final_info<fn->op_index, fn->final_offset>(res, gen, it, first);
+                        set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
                         return true;
                     }
                 }
             }
 
             if constexpr (Flags.enable_fallback)
-                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state, first);
+                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state);
 
             return false;
         }
@@ -451,13 +441,21 @@ namespace rx::detail
 
             if (it != last)
             {
-                if (state<DFAState>(res, gen, it, last, it, fallback_disabled, it))
+                if (state<DFAState>(res, gen, it, last, it, fallback_disabled))
+                {
+                    if constexpr (result<I>::has_match_start)
+                        res.match_start_ = it;
                     return;
+                }
             }
             else
             {
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
-                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it, it);
+                {
+                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                    if constexpr (result<I>::has_match_start)
+                        res.match_start_ = it;
+                }
                 return;
             }
 

@@ -10,6 +10,7 @@
 #include <concepts>
 #include <meta>
 #include <limits>
+#include <stdexcept>
 #include <variant>
 
 
@@ -40,10 +41,10 @@ namespace rx::detail
 
     consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
     {
-        if (not is_template_instantiation_of_impl(variant, ^^std::variant))
-            throw std::exception(); // TODO: throw std::meta::exception instead
+        if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+            throw std::invalid_argument("in_variant_impl: variant is not an instantiation of std::variant");
 
-        return std::ranges::contains(template_arguments_of(variant), dealias(type), std::meta::dealias);
+        return std::ranges::contains(template_arguments_of(dealias(variant)), dealias(type), std::meta::dealias);
     }
 
     template<typename T, typename Variant>
@@ -51,14 +52,14 @@ namespace rx::detail
 
     consteval std::size_t index_in_variant(std::meta::info type, std::meta::info variant)
     {
-        if (not is_template_instantiation_of_impl(variant, ^^std::variant))
-            throw std::exception(); // TODO: throw std::meta::exception instead
+        if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+            throw std::invalid_argument("index_in_variant: variant is not an instantiation of std::variant");
 
-        const auto vartypes{ template_arguments_of(variant) };
+        const auto vartypes{ template_arguments_of(dealias(variant)) };
         const auto it{ std::ranges::find(vartypes, dealias(type), std::meta::dealias) };
 
         if (it == vartypes.end())
-            throw std::exception(); // TODO: throw std::meta::exception instead
+            throw std::invalid_argument("index_in_variant: type is not an alternative in variant");
 
         return static_cast<std::size_t>(std::ranges::distance(vartypes.begin(), it));
     }

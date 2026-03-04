@@ -92,7 +92,7 @@ namespace rx::testing
             : it{ first }, cont{ start_state }, tags(tag_count) {}
     };
 
-    enum class rc : uint_least8_t
+    enum class rc : unsigned char
     {
         match_failure,
         match_success,
@@ -120,6 +120,10 @@ namespace rx::testing
 
                 const std::size_t pos{ raw_data.pos() };
 
+                static constexpr auto is_ascii_word_character = [](CharT c) {
+                    return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
+                };
+
                 const rc result = this->get_expr(pos).visit(detail::overloads{
                     [&](const tree_matcher::assertion& asr) -> rc {
                         using detail::assert_type;
@@ -140,6 +144,31 @@ namespace rx::testing
                         case assert_type::line_end:
                             if (s.it == last or *s.it == '\n')
                                 return rc::match_continue;
+                            break;
+                        case assert_type::ascii_word_boundary:
+                            if (s.it == first or not is_ascii_word_character(*std::ranges::prev(s.it)))
+                            {
+                                if (s.it != last and is_ascii_word_character(*s.it))
+                                    return rc::match_continue;
+                            }
+                            else /* if (s.it != first and is_ascii_word_character(*std::ranges::prev(s.it))) */
+                            {
+                                  if (s.it == last or not is_ascii_word_character(*s.it))
+                                    return rc::match_continue;
+                            }
+                            break;
+                        case assert_type::not_ascii_word_boundary:
+                            if (s.it == first or not is_ascii_word_character(*std::ranges::prev(s.it)))
+                            {
+                                if (s.it == last or not is_ascii_word_character(*s.it))
+                                    return rc::match_continue;
+
+                            }
+                            else /* if (s.it != first and is_ascii_word_character(*std::ranges::prev(s.it))) */
+                            {
+                                if (s.it != last and is_ascii_word_character(*s.it))
+                                    return rc::match_continue;
+                            }
                             break;
                         default:
                             throw tree_error("Encountered unimplemented assertion while matching");

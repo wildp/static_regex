@@ -95,16 +95,15 @@ namespace rx::detail
 
                     member = data_member_spec(member, { .name = name });
                 }
-                // mems.emplace_back(data_member_spec(^^empty, { .name = "default_constructed_value_t_value" }));
                 define_aggregate(^^value_t, mems);
             }
 
             static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^value_t, std::meta::access_context::unchecked())) };
 
-            // value_t value{ .default_constructed_value_t_value{} };
-            // unsigned char index{ std::saturate_cast<unsigned char>(nsdms.size() - 1) };
+            using index_t = unsigned char;
+
             value_t value;
-            unsigned char index;
+            index_t index;
         };
 
     private:
@@ -127,52 +126,54 @@ namespace rx::detail
 
             /* we do this instead as a temporary workaround */
 
+            using index_t = type::index_t;
+
             return expr.visit(overloads{
                 [](const typename expr_tree<CharT>::assertion& e) -> type
                 {
                     const auto& [...mems]{ e };
-                    return { .value{ .assertion{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
+                    return { .value{ .assertion{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_str& e) -> type
                 {
                      const auto& [...mems]{ e };
-                     return { .value{ .char_str{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
+                     return { .value{ .char_str{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_class& e) -> type
                 {
                      const auto& [...mems]{ e };
-                     return { .value{ .char_class{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
+                     return { .value{ .char_class{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::backref& e) -> type
                 {
                     const auto& [...mems]{ e };
-                    return { .value{ .backref{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
+                    return { .value{ .backref{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::alt& e) -> type
                 {
                     const auto& [...mems]{ e };
-                    return { .value{ .alt{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
+                    return { .value{ .alt{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::concat& e) -> type
                 {
                     const auto& [...mems]{ e };
-                    return { .value{ .concat{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::concat, ^^old_type)) };
+                    return { .value{ .concat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, ^^old_type)) };
                 },
                 [](const typename expr_tree<CharT>::tag& e) -> type
                 {
                     const auto& [...mems]{ e };
-                    return { .value{ .tag{  mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
+                    return { .value{ .tag{  mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
 
                 },
                 [](const typename expr_tree<CharT>::repeat& e) -> type
                 {
                     const auto& [...mems]{ e };
-                    return { .value{ .repeat{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
+                    return { .value{ .repeat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
                 }
                 // , [](const typename expr_tree<CharT>::special& e) -> type
                 // {
                 //     const auto& [...mems]{ e };
-                //     return { .value{ .special{ mems... } }, .index = std::saturate_cast<uint_least8_t>(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
+                //     return { .value{ .special{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
                 // }
             });
         }
@@ -303,8 +304,8 @@ namespace rx::detail
             }
         };
 
-        template<>
-        struct state<true, require_full_match>
+        template<bool Fwd>
+        struct state<Fwd, require_full_match>
         {
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, staging_info<I>& /* si */, const I /* first */, const S last, I& it)
@@ -314,7 +315,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::char_str>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_str>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto str{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_str>] :] };
@@ -385,7 +386,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::char_class>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_class>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto cla{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_class>] :] };
@@ -417,7 +418,7 @@ namespace rx::detail
             }
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-            [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, const I /* first */, const S /* last */, I& /* it */)
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, staging_info<I>& /* si */, const I /* first */, const S /* last */, I& /* it */)
             requires (not std::same_as<char_type, char> and not std::same_as<char_type, char32_t>)
             {
                 // using uct = decltype(cla)::underlying_char_type;
@@ -438,11 +439,12 @@ namespace rx::detail
                 // }
 
                 static_assert("Unimplemented");
+                return false;
             }
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::alt>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::alt>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto alt{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::alt>] :] };
@@ -471,7 +473,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::concat>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::concat>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto cat{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::concat>] :] };
@@ -510,7 +512,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::repeat>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::repeat>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto rep{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::repeat>] :] };
@@ -616,7 +618,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::assertion>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::assertion>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto asr{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::assertion>] :] };
@@ -689,7 +691,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::backref>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::backref>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto bref{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::backref>] :] };
@@ -769,7 +771,7 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (ast.exprs[Expr].index == ast_index<typename ast_t::tag>)
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::tag>)
         struct state<Fwd, Expr, Cont...>
         {
             static constexpr auto tag{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::tag>] :] };
@@ -863,7 +865,7 @@ namespace rx::detail
         };
 
         // template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        // requires (ast.exprs[Expr].index == ast_index<typename ast_t::special>)
+        // requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::special>)
         // struct state<Fwd, Expr, Cont...>
         // {
         //     static constexpr auto spg{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::special>] :] };

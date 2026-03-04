@@ -22,11 +22,10 @@
 
 namespace rx::detail
 {
-    /* RE2 limits counted repetitions to 1000 - we do the same here.
-     * Note: clang reaches the consteval step limit with >512 repetitions */
-    inline constexpr std::int_least16_t counted_repetition_limit{ 1000 };
+    /* RE2 limits counted repetitions to 1000 - we do the same here */
+    inline constexpr int counted_repetition_limit{ 1000 };
 
-    enum class assert_type : int_least8_t // TODO: consider moving to another header?
+    enum class assert_type : unsigned char
     {
         text_start,
         text_end,
@@ -60,8 +59,8 @@ namespace rx::detail
 
         struct repeat_n_m
         {
-            std::int_least16_t min;
-            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */
+            int min;
+            int max; /* use max=min for {min} or max<min for {min,} */
         };
 
         struct assertion
@@ -122,7 +121,7 @@ namespace rx::detail
 
         struct backref
         {
-            std::uint_least16_t number;
+            int number;
         };
     }
 
@@ -240,7 +239,7 @@ namespace rx::detail
             case '7': return parse_bref_or_octal(escaped);
 
             case '8':
-            case '9': return backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
+            case '9': return backref{ escaped - '0' };
 
             case 'g': return parse_bref();
 
@@ -498,10 +497,9 @@ namespace rx::detail
     constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
     {
         using namespace tok;
-        static constexpr std::int_least16_t base{ 10 };
+        static constexpr int base{ 10 };
 
-        std::int_least16_t min{ -1 };
-        std::int_least16_t max{ -1 };
+        repeat_n_m rep{ .min = -1, .max = -1 };
 
         bool parse_min{ true };
         bool parse_max{ true };
@@ -515,10 +513,10 @@ namespace rx::detail
 
             if ('0' <= c and c <= '9')
             {
-                if (min == -1)
-                    min = c - '0';
+                if (rep.min == -1)
+                    rep.min = c - '0';
                 else
-                    min = std::add_sat<std::int_least16_t>(std::mul_sat(min, base), c - '0');
+                    rep.min = std::add_sat(std::mul_sat(rep.min, base), c - '0');
             }
             else if (c == ',')
             {
@@ -529,7 +527,7 @@ namespace rx::detail
                 parse_min = false;
 
                 /* skip parsing max */
-                max = min;
+                rep.max = rep.min;
                 parse_max = false;
             }
             else
@@ -547,14 +545,14 @@ namespace rx::detail
 
             if ('0' <= c and c <= '9')
             {
-                if (max == -1)
-                    max = c - '0';
+                if (rep.max == -1)
+                    rep.max = c - '0';
                 else
-                    max = std::add_sat<std::int_least16_t>(std::mul_sat(max, base), c - '0');
+                    rep.max = std::add_sat(std::mul_sat(rep.max, base), c - '0');
             }
             else if (c == '}')
             {
-                if (max != -1 and max < min)
+                if (rep.max != -1 and rep.max < rep.min)
                     throw pattern_error("Invalid repeater (max is less than min)");
 
                 parse_max = false;
@@ -565,19 +563,19 @@ namespace rx::detail
             }
         }
 
-        if (min > counted_repetition_limit)
+        if (rep.min > counted_repetition_limit)
         {
-            if (min == max)
+            if (rep.min == rep.max)
                 throw pattern_error("Finite number of counted repetitions exceeds limit");
             else
                 throw pattern_error("Lower bound of counted repetitions exceeds limit");
         }
-        else if (max > counted_repetition_limit)
+        else if (rep.max > counted_repetition_limit)
         {
             throw pattern_error("Finite upper bound of counted repetitions exceeds limit");
         }
 
-        return repeat_n_m{ .min = min, .max = max };
+        return rep;
     }
 
     template<typename CharT>
@@ -587,7 +585,7 @@ namespace rx::detail
         static constexpr std::size_t base{ 010 };
 
         std::size_t result{ static_cast<std::size_t>(init - '0') };
-        backref bref{ std::saturate_cast<std::uint_least16_t>(init - '0') };
+        backref bref{ init - '0' };
 
         for (int i{ 0 }; i < 2; ++i)
         {

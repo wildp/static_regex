@@ -345,7 +345,7 @@ namespace rx::detail
 
         /* make lazy repeater of wildcard */
         const std::size_t repeater_idx{ expressions_.size() };
-        expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, repeater_mode::lazy);
+        expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, 0, -1, repeater_mode::lazy);
 
         /* conditionally make start tag */
         const std::size_t start_tag_idx{ expressions_.size() };
@@ -404,13 +404,13 @@ namespace rx::detail
                     for (auto i{ rep.min + 1 }; i < rep.max; ++i)
                     {
                         const std::size_t quest{ expressions_.size() };
-                        expressions_.emplace_back(std::in_place_type<repeat>, cat, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+                        expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
 
                         cat = expressions_.size();
                         expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
                     }
 
-                    expressions_[i].template emplace<repeat>(cat, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+                    expressions_[i].template emplace<repeat>(cat, 0, 1, rep.mode);
                 }
             }
             else if (rep.min < rep.max)
@@ -421,7 +421,7 @@ namespace rx::detail
                 expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
 
                 std::size_t quest{ expressions_.size() };
-                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, 1, rep.mode);
 
                 for (auto i{ rep.min + 1 }; i < rep.max; ++i)
                 {
@@ -429,7 +429,7 @@ namespace rx::detail
                     expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
 
                     quest = expressions_.size();
-                    expressions_.emplace_back(std::in_place_type<repeat>, cat, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, rep.mode);
+                    expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
                 }
 
                 expressions_[i].template emplace<concat>(std::vector{ fixed_rep, quest });
@@ -442,7 +442,7 @@ namespace rx::detail
                 expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
 
                 const std::size_t star{ expressions_.size() };
-                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, rep.mode);
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, -1, rep.mode);
 
                 expressions_[i].template emplace<concat>(std::vector{ fixed_rep, star });
             }
@@ -466,7 +466,7 @@ namespace rx::detail
 
             const auto& old{ get<char_str>(expressions_[rep.idx]) };
             cs.data.reserve(rep.min * old.data.size());
-            for (std::int_least16_t j{ 0 }; j < rep.min; ++j)
+            for (int j{ 0 }; j < rep.min; ++j)
                 cs.data += old.data;
         }
     }

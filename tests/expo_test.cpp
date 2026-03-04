@@ -192,6 +192,7 @@ static_assert(match("(?|(a)|(b)(c))(d)\\3", "add"));
 static_assert(match("(?|(a)|(b)(c))(d)\\1\\2", "bcdbc"));
 static_assert(match("(?|(a)|(b)(c)|(d)(e))(f)\\1\\2", "bcfbc"));
 static_assert(match("(?|(a)|(b)(c)|(d)(e))(f)\\1\\2", "defde"));
+static_assert(match("(.*)\\1", "abcdeabcde"));
 
 /* caseless flag */
 static_assert(match("(?i)abc", "ABC"));

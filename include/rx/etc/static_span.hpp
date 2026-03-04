@@ -46,7 +46,7 @@ namespace rx::detail
             : data_{ span.data() }, size_{ span.size() } {}
 
         template<typename R>
-        requires (not std::same_as<R, static_span>)
+        requires (std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, value_type> and not std::same_as<R, static_span>)
         consteval static_span(R&& r) noexcept
             : static_span(std::define_static_array(std::forward<R>(r))) {}
 
@@ -117,8 +117,8 @@ namespace rx::detail
             : data_{ std::vector<value_type>{ std::from_range, map } }, compare_{ map.key_comp() } {}
 
         /* size and other observers */
-        [[nodiscard]] constexpr bool empty() const noexcept { return data_.keys.empty(); }
-        [[nodiscard]] constexpr size_type size() const noexcept { return data_.keys.size(); }
+        [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
+        [[nodiscard]] constexpr size_type size() const noexcept { return data_.size(); }
         [[nodiscard]] constexpr key_compare key_comp() const { return compare_; }
 
         /* iterators */

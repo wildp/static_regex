@@ -84,7 +84,7 @@ namespace rx::detail::tdfa
     };
 
     using state_info_t = std::vector<node_info>;
-    using continue_info_t = std::flat_map<std::size_t, std::uint16_t>;
+    using continue_info_t = std::flat_map<std::size_t, tdfa::continue_at_t>;
 
     class tag_op_map
     {

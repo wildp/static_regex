@@ -17,7 +17,7 @@ namespace rx::detail::parser
 {
     struct capture_flags
     {
-        enum class flag_value : std::uint8_t
+        enum class flag_value : unsigned char
         {
             enabled,
             disabled,
@@ -32,9 +32,11 @@ namespace rx::detail::parser
 
     class capture_stack
     {
+        using number_t = std::uint_least16_t;
+
         struct cse
         {
-            enum class modes : std::int_least8_t
+            enum class modes : unsigned char
             {
                 normal,
                 flag_assigning,
@@ -44,8 +46,8 @@ namespace rx::detail::parser
 
             using cf = capture_flags::flag_value;
 
-            std::uint_least16_t number;
-            std::uint_least16_t number_end;
+            number_t number;
+            number_t number_end;
             capture_flags flags;
             modes mode;
 
@@ -55,7 +57,7 @@ namespace rx::detail::parser
                   flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
                   mode{ modes::non_capturing } {}
 
-            constexpr explicit cse(std::uint_least16_t cur, std::uint_least16_t end) noexcept
+            constexpr explicit cse(number_t cur, number_t end) noexcept
                 : number{ cur },
                   number_end{ end },
                   flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit },
@@ -134,14 +136,14 @@ namespace rx::detail::parser
             }
         }
 
-        [[nodiscard]] constexpr std::optional<std::uint_least16_t> capture_count() const noexcept
+        [[nodiscard]] constexpr std::optional<number_t> capture_count() const noexcept
         {
             if (elems_.empty())
                 return base_.number_end;
             return {};
         }
 
-        constexpr std::optional<std::uint_least16_t> pop()
+        constexpr std::optional<number_t> pop()
         {
             if (elems_.empty())
                 return {};
@@ -198,7 +200,7 @@ namespace rx::detail::parser
         constexpr void set_ungreedy(bool value)  noexcept { return set<^^capture_flags::ungreedy>(value); }
 
     private:
-        [[nodiscard]] constexpr std::uint_least16_t next_number() const noexcept
+        [[nodiscard]] constexpr number_t next_number() const noexcept
         {
             auto& target{ elems_.empty() ? base_ : elems_.back() };
             return target.number_end;

@@ -18,7 +18,7 @@
 
 namespace rx::detail
 {
-    enum class named_character_class : std::uint8_t
+    enum class named_character_class : unsigned char
     {
         alphanumeric,
         alphabetic,

@@ -25,14 +25,14 @@ namespace rx::detail
 
     /* types */
 
-    enum class repeater_mode : int_least8_t
+    enum class repeater_mode : unsigned char
     {
         greedy = 0,
         lazy,
         possessive
     };
 
-    enum class special_group_mode : int_least8_t
+    enum class special_group_mode : unsigned char
     {
         atomic_group = 0,
         positive_lookahead,
@@ -80,9 +80,9 @@ namespace rx::detail
         struct repeat
         {
             std::size_t idx;
-            std::int_least16_t min;
-            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */
-            repeater_mode mode;     /* default = greedy */
+            int min;
+            int max;            /* use max=min for {min} or max<min for {min,} */
+            repeater_mode mode; /* default = greedy */
         };
 
         struct special

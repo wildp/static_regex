@@ -98,9 +98,9 @@ namespace rx::detail::parser
 
     /* helper classes (and enum) for parser */
 
-    enum class nonterminal : std::uint_least8_t { S, E, E_, F, F_, G, R, R_, H, P };
+    enum class nonterminal : unsigned char { S, E, E_, F, F_, G, R, R_, H, P };
 
-    enum class semantic_action : std::int_least8_t
+    enum class semantic_action : unsigned char
     {
         make_empty,
         make_dot,
@@ -1011,19 +1011,19 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_star(const std::size_t child_idx, const repeater_mode mode)
     {
-        return new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, mode);
+        return new_expression<repeat>(child_idx, 0, -1, mode);
     }
 
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_plus(const std::size_t child_idx, const repeater_mode mode)
     {
-        return new_expression<repeat>(child_idx, std::int_least16_t{ 1 }, std::int_least16_t{ 0 }, mode);
+        return new_expression<repeat>(child_idx, 1, 0, mode);
     }
 
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_quest(const std::size_t child_idx, const repeater_mode mode)
     {
-        return new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, mode);
+        return new_expression<repeat>(child_idx, 0, 1, mode);
     }
 
     template<typename CharT>
