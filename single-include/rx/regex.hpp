@@ -382,6 +382,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <boost/dynamic_bitset.hpp>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
@@ -421,28 +422,42 @@ namespace rx::detail
 
     consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta::info templ)
     {
-        if (not std::meta::is_type(type) or not std::meta::is_class_template(templ))
+        if (not is_type(type) or not is_class_template(templ))
             return false;
 
-        auto dealiased{ std::meta::dealias(type) };
-
-        if (not std::meta::has_template_arguments(dealiased))
+        if (not has_template_arguments(dealias(type)))
             return false;
 
-        return std::meta::template_of(dealiased) == templ;
+        return template_of(dealias(type)) == templ;
     }
 
     template<typename T, std::meta::info Template>
     concept template_instantiation_of = is_template_instantiation_of_impl(^^T, Template);
 
-    template<typename, typename>
-    struct type_in_variant_impl {};
+    consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
+    {
+        if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+            throw std::invalid_argument("in_variant_impl: variant is not an instantiation of std::variant");
 
-    template<typename T, typename... Ts>
-    struct type_in_variant_impl<T, std::variant<Ts...>> : std::bool_constant<one_of<T, Ts...>> {};
+        return std::ranges::contains(template_arguments_of(dealias(variant)), dealias(type), std::meta::dealias);
+    }
 
     template<typename T, typename Variant>
-    concept in_variant = type_in_variant_impl<T, Variant>::value;
+    concept in_variant = in_variant_impl(^^T, ^^Variant);
+
+    consteval std::size_t index_in_variant(std::meta::info type, std::meta::info variant)
+    {
+        if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+            throw std::invalid_argument("index_in_variant: variant is not an instantiation of std::variant");
+
+        const auto vartypes{ template_arguments_of(dealias(variant)) };
+        const auto it{ std::ranges::find(vartypes, dealias(type), std::meta::dealias) };
+
+        if (it == vartypes.end())
+            throw std::invalid_argument("index_in_variant: type is not an alternative in variant");
+
+        return static_cast<std::size_t>(std::ranges::distance(vartypes.begin(), it));
+    }
 
     template<typename CharT>
     concept char_is_utf8 = std::same_as<CharT, char8_t>; /* Assume a regular char is ascii (or some single byte superset of) */
@@ -457,15 +472,6 @@ namespace rx::detail
 
     template<typename CharT>
     concept char_is_multibyte = char_is_utf8<CharT> or char_is_utf16<CharT>;
-
-    template<typename V, typename T, std::size_t I = 0>
-    struct index_of_impl : std::conditional_t<std::same_as<T, std::variant_alternative_t<I, V>>,
-                                              std::integral_constant<std::size_t, I>,
-                                              index_of_impl<V, T, I + 1>> {};
-
-    template<typename V, typename T, std::size_t I>
-    requires (I >= std::variant_size_v<V>)
-    struct index_of_impl<V, T, I> {};
 
     namespace hash
     {
@@ -506,32 +512,12 @@ namespace rx::detail
         template<memberwise_hashable T>
         constexpr void append(std::size_t& hash, const T& value)
         {
-            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^T), std::meta::access_context::unchecked())))
-            {
-                const auto& ref = value.[:member:]; 
-                append(hash, ref);
-            }
-        }
-    };
-
-    template<typename Derived>
-    struct flag_base
-    {
-        friend constexpr Derived operator|(Derived x, Derived y)
-        {
-            Derived result{};
-            template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(std::meta::dealias(^^Derived), std::meta::access_context::current())))
-            {
-                result.[:member:] = x.[:member:] or y.[:member:];
-            }
-            return result;
+            template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
+                append(hash, value.[:member:]);
         }
     };
 
     inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
-
-    template<bool Const, typename T>
-    using maybe_const_t = std::conditional_t<Const, const T, T>;
 
     struct cstr_sentinel_t
     {
@@ -552,6 +538,9 @@ namespace rx::detail
 
     template<bool Enabled, typename T>
     using maybe_type_t = std::conditional_t<Enabled, T, terminal_object>;
+
+    template<bool Const, typename T>
+    using maybe_const_t = std::conditional_t<Const, const T, T>;
 }
 
 namespace rx
@@ -838,7 +827,7 @@ namespace rx
 
 namespace rx::detail
 {
-    struct fsm_flags : flag_base<fsm_flags>
+    struct fsm_flags
     {
         bool is_search       : 1;
         bool longest_match   : 1;
@@ -903,166 +892,59 @@ namespace rx::detail
             .no_captures     = true,
             .return_bool     = false,
         };
-
     }
-}
 
-namespace rx::detail
-{
-    using tag_number_t = int; /* note: tags must be non-negative */
-    inline constexpr tag_number_t start_of_input_tag{ std::numeric_limits<tag_number_t>::min() };
-    inline constexpr tag_number_t end_of_input_tag{ std::numeric_limits<tag_number_t>::min() + 1 };
-
-    class capture_info
+    constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
     {
-    public:
-        using capture_number_t = std::uint_least16_t;
+        f.is_search = false;
+        f.is_iterator = true;
+        return f;
+    }
 
-        struct pair_entry
-        {
-            tag_number_t tag_number;
-            int          offset;     /* note: offset should normally be negative */
-        };
+    constexpr fsm_flags adapt_flags_return_bool(fsm_flags f)
+    {
+        f.no_captures = true;
+        f.return_bool = true;
+        return f;
+    }
 
-        using tag_pair_t     = std::pair<pair_entry, pair_entry>;
-        using tag_remapper_t = std::flat_map<tag_number_t, tag_number_t>;
-
-        using key_type   = capture_number_t;
-        using value_type = tag_pair_t;
-
-        constexpr capture_info()
-        {
-            keys_.emplace_back(0);
-            values_.emplace_back(pair_entry{ .tag_number = start_of_input_tag, .offset = 0 }, pair_entry{ .tag_number = end_of_input_tag, .offset = 0 });
-        }
-
-        constexpr void insert(capture_number_t cap, tag_number_t lhs, tag_number_t rhs)
-        {
-            if (cap == 0)
-                throw std::invalid_argument("Cannot insert capture with number 0");
-
-            const auto key_it{ std::ranges::upper_bound(keys_, cap) };
-            const auto value_it{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_it) };
-
-            keys_.emplace(key_it, cap);
-            values_.emplace(value_it, pair_entry{ .tag_number = lhs, .offset = 0 }, pair_entry{ .tag_number = rhs, .offset = 0 });
-        }
-
-        constexpr void set_match_start_tag(tag_number_t value)
-        {
-            values_.at(0).first.tag_number = value;
-        }
-
-        [[nodiscard]] constexpr capture_number_t capture_count() const
-        {
-            auto key_copy{ keys_ };
-            auto [last, _]{ std::ranges::unique(key_copy) };
-            return std::saturate_cast<capture_number_t>(std::ranges::distance(std::ranges::begin(key_copy), last));
-        }
-
-        [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
-        {
-            static constexpr auto compose = [](const auto& g, const auto& f) {
-                return [=]<typename T>(T&& arg) {
-                    return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
-                };
-            };
-
-            /* for some reason, this doesn't seem to work? */
-            return {
-                std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::first)),
-                std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::second))
-            };
-        }
-
-        [[nodiscard]] constexpr auto lookup(capture_number_t cap) const
-        {
-            auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
-
-            return std::ranges::subrange{
-                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
-                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end)
-            };
-        }
-
-        [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map)
-        {
-            static constexpr auto compose = [](const auto& g, const auto& f) {
-                return [=]<typename T>(T&& arg) {
-                    return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
-                };
-            };
-
-            for (auto& val : values_)
-            {
-                if (auto it{ map.find(val.first.tag_number) }; it != map.end())
-                {
-                    val.first.offset += it->second.offset;
-                    val.first.tag_number = it->second.tag_number;
-                }
-
-                if (auto it{ map.find(val.second.tag_number) }; it != map.end())
-                {
-                    val.second.offset += it->second.offset;
-                    val.second.tag_number = it->second.tag_number;
-                }
-            }
-
-            tag_remapper_t remapper;
-
-            std::vector<tag_number_t> set;
-            set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::first)));
-            set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::second)));
-            std::ranges::sort(set);
-            auto [tmp_beg, tmp_end]{ std::ranges::unique(set) };
-            set.erase(tmp_beg, tmp_end);
-            std::erase_if(set, [](tag_number_t n) { return n < 0; });
-
-            for (tag_number_t i{ 0 }; std::cmp_less(i, set.size()); ++i)
-                remapper[set.at(i)] = i;
-
-            for (auto& val : values_)
-            {
-                if (auto it{ remapper.find(val.first.tag_number) }; it != remapper.end())
-                    val.first.tag_number = it->second;
-
-                if (auto it{ remapper.find(val.second.tag_number) }; it != remapper.end())
-                    val.second.tag_number = it->second;
-            }
-
-            return remapper;
-        }
-
-    private:
-        std::vector<capture_number_t> keys_;
-        std::vector<tag_pair_t> values_;
-    };
+    constexpr fsm_flags adapt_flags_non_capturing(fsm_flags f)
+    {
+        f.no_captures = true;
+        return f;
+    }
 }
 
 namespace rx
 {
-    class pattern_error : public std::runtime_error
+    class regex_error : public std::runtime_error
     {
     public:
         using runtime_error::runtime_error;
     };
 
-    class parser_error : public std::runtime_error
+    class pattern_error : public regex_error
     {
     public:
-        using runtime_error::runtime_error;
+        using regex_error::regex_error;
     };
 
-    class tree_error : public std::runtime_error
+    class parser_error : public regex_error
     {
     public:
-        using runtime_error::runtime_error;
+        using regex_error::regex_error;
     };
 
-    class tnfa_error : public std::runtime_error
+    class tree_error : public regex_error
     {
     public:
-        using runtime_error::runtime_error;
+        using regex_error::regex_error;
+    };
+
+    class tnfa_error : public regex_error
+    {
+    public:
+        using regex_error::regex_error;
     };
 }
 
@@ -1082,6 +964,8 @@ namespace rx::detail
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
         static_assert(sizeof(CharT) < sizeof(int));
+
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
     public:
         using char_type = CharT;
@@ -1507,7 +1391,7 @@ namespace rx::detail
     template<typename T>
     constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>
     {
-        using part_pair = std::pair<bitcharset, std::vector<bool>>;
+        using part_pair = std::pair<bitcharset, bitset_t>;
 
         if (input.empty())
             return {};
@@ -1529,7 +1413,7 @@ namespace rx::detail
                 if (auto cs{ v & complement }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(false);
+                    next_gen.back().second.push_back(false);
                 }
             }
 
@@ -1538,7 +1422,7 @@ namespace rx::detail
                 if (auto cs{ v & val.get() }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(true);
+                    next_gen.back().second.push_back(true);
                 }
             }
 
@@ -1546,7 +1430,7 @@ namespace rx::detail
         }
 
         partition_pair_result<T> result;
-        const std::vector<bool> empty(input.size(), false);
+        const bitset_t empty(input.size(), false);
 
         for (const auto& [v, from] : partitions)
         {
@@ -1566,7 +1450,7 @@ namespace rx::detail
     template<typename T>
     constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>
     {
-        using part_pair = std::pair<bitcharset, std::vector<bool>>;
+        using part_pair = std::pair<bitcharset, bitset_t>;
 
         if (input.empty())
             return {};
@@ -1588,7 +1472,7 @@ namespace rx::detail
                 if (auto cs{ v & complement }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(false);
+                    next_gen.back().second.push_back(false);
                 }
             }
 
@@ -1597,7 +1481,7 @@ namespace rx::detail
                 if (auto cs{ v & val.get() }; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
-                    next_gen.back().second.emplace_back(true);
+                    next_gen.back().second.push_back(true);
                 }
             }
 
@@ -1605,7 +1489,7 @@ namespace rx::detail
         }
 
         std::vector<std::vector<T>> result;
-        const std::vector<bool> empty(input.size(), false);
+        const bitset_t empty(input.size(), false);
 
         for (const auto& [v, from] : partitions)
         {
@@ -1827,7 +1711,8 @@ namespace rx::detail
 
     private:
         using underlying_t = std::vector<char_interval>;
-        using partition_entry = std::pair<char_interval, std::vector<bool>>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+        using partition_entry = std::pair<char_interval, bitset_t>;
         using partitioned_intervals = std::vector<partition_entry>;
 
         constexpr explicit charset(underlying_t&& data) : data_{ std::move(data) } {}
@@ -1845,7 +1730,7 @@ namespace rx::detail
         static constexpr void part_sort_lookahead_and_insert(partitioned_intervals& part, std::size_t current_idx, partition_entry&& to_insert);
         static constexpr void part_sort_and_dedup(partitioned_intervals& sorted_part);
         static constexpr void part_merge_intervals(partitioned_intervals& sorted_part);
-        static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<std::vector<bool>, charset>;
+        static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<bitset_t, charset>;
 
         underlying_t data_;
     };
@@ -2359,10 +2244,7 @@ namespace rx::detail
                      */
 
                     lookahead.first = current.second + 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        current_mask[j] = current_mask[j] or lookahead_mask[j];
-
+                    current_mask |= lookahead_mask;
                     part_sort_lookahead(part, i);
                 }
                 else
@@ -2371,9 +2253,7 @@ namespace rx::detail
                      * ---------
                      */
 
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        current_mask[j] = current_mask[j] or lookahead_mask[j];
-
+                    current_mask |= lookahead_mask;
                     part.erase(part.begin() + i + 1); /* dedup */
                 }
             }
@@ -2389,10 +2269,7 @@ namespace rx::detail
                      */
 
                     current.second = lookahead.first - 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
-
+                    lookahead_mask |= current_mask;
                     part_sort_lookahead(part, i);
                 }
                 else if (current.second < lookahead.second)
@@ -2404,10 +2281,7 @@ namespace rx::detail
                     partition_entry to_insert{ { current.second + 1, lookahead.second }, lookahead_mask };
                     lookahead.second = current.second;
                     current.second = lookahead.first - 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
-
+                    lookahead_mask |= current_mask;
                     part_sort_lookahead_and_insert(part, i, std::move(to_insert));
                 }
                 else
@@ -2418,10 +2292,7 @@ namespace rx::detail
 
                     partition_entry to_insert{ { lookahead.second + 1, current.second }, current_mask };
                     current.second = lookahead.first - 1;
-
-                    for (std::size_t j{ 0 }, j_max{ std::min(current_mask.size(), lookahead_mask.size()) }; j < j_max; ++j)
-                        lookahead_mask[j] = lookahead_mask[j] or current_mask[j];
-
+                    lookahead_mask |= current_mask;
                     part_sort_lookahead_and_insert(part, i, std::move(to_insert));
                 }
             }
@@ -2433,9 +2304,9 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    constexpr auto charset<CharT>::part_make_map(const partitioned_intervals& part) -> std::flat_map<std::vector<bool>, charset>
+    constexpr auto charset<CharT>::part_make_map(const partitioned_intervals& part) -> std::flat_map<bitset_t, charset>
     {
-        std::flat_map<std::vector<bool>, charset> map;
+        std::flat_map<bitset_t, charset> map;
 
         for (const auto& [interval, mask] : part)
         {
@@ -2459,8 +2330,8 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
-            std::vector<bool> mask(input.size(), false);
-            mask[input.size() - i - 1] = true;
+            bitset_t mask(input.size(), false);
+            mask[i] = true;
             for (const auto& pair : input[i].get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -2485,8 +2356,8 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
-            std::vector<bool> mask(input.size(), false);
-            mask[input.size() - i - 1] = true;
+            bitset_t mask(input.size(), false);
+            mask[i] = true;
             for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -2501,7 +2372,7 @@ namespace rx::detail
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
             for (std::size_t i{ 0 }; i < input.size(); ++i)
-                if (it->first.at(input.size() - i - 1))
+                if (it->first.at(i))
                     result.back().second.emplace_back(input[i].second);
         }
 
@@ -2521,8 +2392,8 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
-            std::vector<bool> mask(input.size(), false);
-            mask[input.size() - i - 1] = true;
+            bitset_t mask(input.size(), false);
+            mask[i] = true;
             for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -2537,7 +2408,7 @@ namespace rx::detail
         {
             result.emplace_back();
             for (std::size_t i{ 0 }; i < input.size(); ++i)
-                if (it->first.at(input.size() - i - 1))
+                if (it->first.at(i))
                     result.back().emplace_back(input[i].second);
         }
 
@@ -2573,9 +2444,9 @@ namespace rx::detail
             : data_{ span.data() }, size_{ span.size() } {}
 
         template<typename R>
-        requires (not std::same_as<R, static_span>)
+        requires (std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, value_type> and not std::same_as<R, static_span>)
         consteval static_span(R&& r) noexcept
-            :  static_span(std::define_static_array(std::forward<R>(r))) {}
+            : static_span(std::define_static_array(std::forward<R>(r))) {}
 
         /* size observers */
         [[nodiscard]] constexpr size_type size() const noexcept { return size_; }
@@ -2643,8 +2514,8 @@ namespace rx::detail
             : data_{ std::vector<value_type>{ std::from_range, map } }, compare_{ map.key_comp() } {}
 
         /* size and other observers */
-        [[nodiscard]] constexpr bool empty() const noexcept { return data_.keys.empty(); }
-        [[nodiscard]] constexpr size_type size() const noexcept { return data_.keys.size(); }
+        [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
+        [[nodiscard]] constexpr size_type size() const noexcept { return data_.size(); }
         [[nodiscard]] constexpr key_compare key_comp() const { return compare_; }
 
         /* iterators */
@@ -2665,6 +2536,16 @@ namespace rx::detail
                 throw std::out_of_range("static_map::at");
             return it->second;
         }
+
+        [[nodiscard]] constexpr const mapped_type* at_if(const key_type& x) const &
+        {
+            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
+                return nullptr;
+            return &(it->second);
+        }
+
+        constexpr const mapped_type* at_if(const key_type& x) && = delete;
 
         /* map operations */
         [[nodiscard]] constexpr const_iterator find(const key_type& x) const
@@ -2908,7 +2789,7 @@ namespace rx::detail
 
 namespace rx::detail
 {
-    enum class named_character_class : std::uint8_t
+    enum class named_character_class : unsigned char
     {
         alphanumeric,
         alphabetic,
@@ -3061,19 +2942,18 @@ namespace rx::detail
 
 namespace rx::detail
 {
-    /* RE2 limits counted repetitions to 1000 - we do the same here.
-     * Note: clang reaches the consteval step limit with >512 repetitions */
-    inline constexpr std::int_least16_t counted_repetition_limit{ 1000 };
+    /* RE2 limits counted repetitions to 1000 - we do the same here */
+    inline constexpr int counted_repetition_limit{ 1000 };
 
-    enum class assert_type : int_least8_t 
+    enum class assert_type : unsigned char
     {
         text_start,
         text_end,
         line_start,
         line_end,
 
-        word_boundary,
-        not_word_boundary,
+        ascii_word_boundary,
+        not_ascii_word_boundary,
     };
 
     namespace parser
@@ -3099,8 +2979,8 @@ namespace rx::detail
 
         struct repeat_n_m
         {
-            std::int_least16_t min;
-            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */
+            int min;
+            int max; /* use max=min for {min} or max<min for {min,} */
         };
 
         struct assertion
@@ -3161,7 +3041,7 @@ namespace rx::detail
 
         struct backref
         {
-            std::uint_least16_t number;
+            int number;
         };
     }
 
@@ -3275,15 +3155,15 @@ namespace rx::detail
             case '7': return parse_bref_or_octal(escaped);
 
             case '8':
-            case '9': return backref{ std::saturate_cast<std::uint_least16_t>(escaped - '0') };
+            case '9': return backref{ escaped - '0' };
 
             case 'g': return parse_bref();
 
             /* assertions */
 
             case 'A': return assertion{ assert_type::text_start };
-            case 'b': return assertion{ assert_type::word_boundary };
-            case 'B': return assertion{ assert_type::not_word_boundary };
+            case 'b': return assertion{ assert_type::ascii_word_boundary };
+            case 'B': return assertion{ assert_type::not_ascii_word_boundary };
             case 'G': throw parser_error("Assertion (\\G) is not implemented");
             case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
             case 'z': return assertion{ assert_type::text_end };
@@ -3530,10 +3410,9 @@ namespace rx::detail
     constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
     {
         using namespace tok;
-        static constexpr std::int_least16_t base{ 10 };
+        static constexpr int base{ 10 };
 
-        std::int_least16_t min{ -1 };
-        std::int_least16_t max{ -1 };
+        repeat_n_m rep{ .min = -1, .max = -1 };
 
         bool parse_min{ true };
         bool parse_max{ true };
@@ -3547,10 +3426,10 @@ namespace rx::detail
 
             if ('0' <= c and c <= '9')
             {
-                if (min == -1)
-                    min = c - '0';
+                if (rep.min == -1)
+                    rep.min = c - '0';
                 else
-                    min = std::add_sat<std::int_least16_t>(std::mul_sat(min, base), c - '0');
+                    rep.min = std::add_sat(std::mul_sat(rep.min, base), c - '0');
             }
             else if (c == ',')
             {
@@ -3561,7 +3440,7 @@ namespace rx::detail
                 parse_min = false;
 
                 /* skip parsing max */
-                max = min;
+                rep.max = rep.min;
                 parse_max = false;
             }
             else
@@ -3579,14 +3458,14 @@ namespace rx::detail
 
             if ('0' <= c and c <= '9')
             {
-                if (max == -1)
-                    max = c - '0';
+                if (rep.max == -1)
+                    rep.max = c - '0';
                 else
-                    max = std::add_sat<std::int_least16_t>(std::mul_sat(max, base), c - '0');
+                    rep.max = std::add_sat(std::mul_sat(rep.max, base), c - '0');
             }
             else if (c == '}')
             {
-                if (max != -1 and max < min)
+                if (rep.max != -1 and rep.max < rep.min)
                     throw pattern_error("Invalid repeater (max is less than min)");
 
                 parse_max = false;
@@ -3597,19 +3476,19 @@ namespace rx::detail
             }
         }
 
-        if (min > counted_repetition_limit)
+        if (rep.min > counted_repetition_limit)
         {
-            if (min == max)
+            if (rep.min == rep.max)
                 throw pattern_error("Finite number of counted repetitions exceeds limit");
             else
                 throw pattern_error("Lower bound of counted repetitions exceeds limit");
         }
-        else if (max > counted_repetition_limit)
+        else if (rep.max > counted_repetition_limit)
         {
             throw pattern_error("Finite upper bound of counted repetitions exceeds limit");
         }
 
-        return repeat_n_m{ .min = min, .max = max };
+        return rep;
     }
 
     template<typename CharT>
@@ -3619,7 +3498,7 @@ namespace rx::detail
         static constexpr std::size_t base{ 010 };
 
         std::size_t result{ static_cast<std::size_t>(init - '0') };
-        backref bref{ std::saturate_cast<std::uint_least16_t>(init - '0') };
+        backref bref{ init - '0' };
 
         for (int i{ 0 }; i < 2; ++i)
         {
@@ -3959,6 +3838,192 @@ namespace rx::detail
 
 namespace rx::detail
 {
+    using tag_number_t = int; /* note: tags must be non-negative */
+    inline constexpr tag_number_t start_of_input_tag{ std::numeric_limits<tag_number_t>::min() };
+    inline constexpr tag_number_t end_of_input_tag{ std::numeric_limits<tag_number_t>::min() + 1 };
+
+    class capture_info
+    {
+    public:
+        using capture_number_t = std::uint_least16_t;
+
+        struct pair_entry
+        {
+            tag_number_t tag_number;
+            int          offset;     /* note: offset should normally be negative */
+        };
+
+        using tag_pair_t     = std::pair<pair_entry, pair_entry>;
+        using tag_remapper_t = std::flat_map<tag_number_t, tag_number_t>;
+        using staging_info_t = std::flat_map<tag_number_t, tag_number_t>;
+
+        using key_type   = capture_number_t;
+        using value_type = tag_pair_t;
+
+        constexpr capture_info()
+        {
+            keys_.emplace_back(0);
+            values_.emplace_back(pair_entry{ .tag_number = start_of_input_tag, .offset = 0 }, pair_entry{ .tag_number = end_of_input_tag, .offset = 0 });
+        }
+
+        constexpr void insert(capture_number_t cap, tag_number_t lhs, tag_number_t rhs)
+        {
+            if (cap == 0)
+                throw std::invalid_argument("capture_info::insert: cannot insert capture with number 0");
+
+            const auto key_it{ std::ranges::upper_bound(keys_, cap) };
+            const auto value_it{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_it) };
+
+            keys_.emplace(key_it, cap);
+            values_.emplace(value_it, pair_entry{ .tag_number = lhs, .offset = 0 }, pair_entry{ .tag_number = rhs, .offset = 0 });
+        }
+
+        constexpr void set_match_start_tag(tag_number_t value)
+        {
+            values_.at(0).first.tag_number = value;
+        }
+
+        [[nodiscard]] constexpr capture_number_t capture_count() const
+        {
+            auto key_copy{ keys_ };
+            auto [last, _]{ std::ranges::unique(key_copy) };
+            return std::saturate_cast<capture_number_t>(std::ranges::distance(std::ranges::begin(key_copy), last));
+        }
+
+        [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
+        {
+            static constexpr auto compose = [](const auto& g, const auto& f) {
+                return [=]<typename T>(T&& arg) {
+                    return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+                };
+            };
+
+            /* for some reason, this doesn't seem to work? */
+            return {
+                std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::first)),
+                std::ranges::contains(values_, tag, compose(&pair_entry::tag_number, &tag_pair_t::second))
+            };
+        }
+
+        [[nodiscard]] constexpr auto lookup(capture_number_t cap) const
+        {
+            auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
+
+            return std::ranges::subrange{
+                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
+                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end)
+            };
+        }
+
+        [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map)
+        {
+            static constexpr auto compose = [](const auto& g, const auto& f) {
+                return [=]<typename T>(T&& arg) {
+                    return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+                };
+            };
+
+            for (auto& val : values_)
+            {
+                if (auto it{ map.find(val.first.tag_number) }; it != map.end())
+                {
+                    val.first.offset += it->second.offset;
+                    val.first.tag_number = it->second.tag_number;
+                }
+
+                if (auto it{ map.find(val.second.tag_number) }; it != map.end())
+                {
+                    val.second.offset += it->second.offset;
+                    val.second.tag_number = it->second.tag_number;
+                }
+            }
+
+            tag_remapper_t remapper;
+
+            std::vector<tag_number_t> set;
+            set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::first)));
+            set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::second)));
+            std::ranges::sort(set);
+            auto [tmp_beg, tmp_end]{ std::ranges::unique(set) };
+            set.erase(tmp_beg, tmp_end);
+            std::erase_if(set, [](tag_number_t n) { return n < 0; });
+
+            for (tag_number_t i{ 0 }; std::cmp_less(i, set.size()); ++i)
+                remapper[set.at(i)] = i;
+
+            for (auto& val : values_)
+            {
+                if (auto it{ remapper.find(val.first.tag_number) }; it != remapper.end())
+                    val.first.tag_number = it->second;
+
+                if (auto it{ remapper.find(val.second.tag_number) }; it != remapper.end())
+                    val.second.tag_number = it->second;
+            }
+
+            return remapper;
+        }
+
+        [[nodiscard]] constexpr tag_remapper_t eliminate_branch_reset()
+        {
+            tag_remapper_t result;
+
+            for (std::size_t i{ 1 }, end{ keys_.size() }; i < end; ++i)
+            {
+                const auto capnum{ keys_.at(i - 1) };
+
+                if (capnum != keys_.at(i))
+                    continue;
+
+                if (values_[i - 1].first.offset != 0 or values_[i - 1].first.offset != 0)
+                    throw std::logic_error("capture_info::get_multitags: tags already optimised");
+
+                const auto first_target{ values_[i - 1].first.tag_number };
+                const auto second_target{ values_[i - 1].second.tag_number };
+
+                result.emplace(values_[i].first.tag_number, first_target);
+                result.emplace(values_[i].second.tag_number, second_target);
+
+                for (; i < end and capnum == keys_.at(i); ++i)
+                {
+                    result.emplace(values_[i].first.tag_number, first_target);
+                    result.emplace(values_[i].second.tag_number, second_target);
+
+                    if (values_[i].first.offset != 0 or values_[i].first.offset != 0)
+                        throw std::logic_error("capture_info::get_multitags: tags already optimised");
+
+                    values_[i].first.tag_number = first_target;
+                    values_[i].second.tag_number = second_target;
+                };
+            }
+
+            auto zv{ std::views::zip(keys_, values_) };
+            auto [it, _]{ std::ranges::unique(zv, {}, [](const auto& v) -> decltype(auto) { return get<0>(v); }) };
+            auto dist{ std::ranges::distance(std::ranges::begin(zv), it) };
+            keys_.erase(keys_.begin() + dist, keys_.end());
+            values_.erase(values_.begin() + dist, values_.end());
+
+            return result;
+        }
+
+        [[nodiscard]] constexpr staging_info_t get_staged_tags() const
+        {
+            staging_info_t result;
+
+            for (const auto& [lhs , rhs] : values_)
+                if (lhs.offset == 0 and lhs.tag_number != start_of_input_tag)
+                    result.emplace(lhs.tag_number, rhs.tag_number);
+
+            return result;
+        }
+
+    private:
+        std::vector<capture_number_t> keys_;
+        std::vector<tag_pair_t> values_;
+    };
+}
+
+namespace rx::detail
+{
     namespace parser
     {
         template<typename CharT>
@@ -3967,11 +4032,29 @@ namespace rx::detail
 
     /* types */
 
-    enum class repeater_mode : int_least8_t
+    enum class repeater_mode : unsigned char
     {
         greedy = 0,
         lazy,
         possessive
+    };
+
+    enum class special_group_mode : unsigned char
+    {
+        atomic_group = 0,
+        positive_lookahead,
+        negative_lookahead,
+        positive_lookbehind,
+        negative_lookbehind,
+
+        /* backtracking control */
+        backtrack_accept,
+        backtrack_fail,
+        backtrack_mark,
+        backtrack_commit,
+        backtrack_prune,
+        backtrack_skip,
+        backtrack_then
     };
 
     struct parser_flags
@@ -3984,15 +4067,8 @@ namespace rx::detail
         bool enable_alttocc     : 1 { true };
     };
 
-    /* ast definition */
-
-    template<typename CharT>
-    class expr_tree
+    namespace ast_entry
     {
-    public:
-        using char_type = CharT;
-        using sv_type = std::basic_string_view<char_type>;
-
         struct alt
         {
             std::vector<std::size_t> idxs;
@@ -4008,19 +4084,39 @@ namespace rx::detail
             tag_number_t number;
         };
 
-        using backref = tok::backref;
-
         struct repeat
         {
             std::size_t idx;
-            std::int_least16_t min;
-            std::int_least16_t max; /* use max=min for {min} or max<min for {min,} */
-            repeater_mode mode;     /* default = greedy */
+            int min;
+            int max;            /* use max=min for {min} or max<min for {min,} */
+            repeater_mode mode; /* default = greedy */
         };
 
-        using assertion = tok::assertion;
-        using char_str = tok::char_str<char_type>;
-        using char_class = tok::char_class<char_type>;
+        struct special
+        {
+            std::size_t idx;         /* use idx=-1 to ignore when mode is backtrack_.*  */
+            special_group_mode mode; /* for backtrack_.*, treat idx as the name of a mark when not ignored */
+        };
+    }
+
+    /* ast definition */
+
+    template<typename CharT>
+    class expr_tree
+    {
+    public:
+        using char_type = CharT;
+        using sv_type = std::basic_string_view<char_type>;
+
+        using assertion     = tok::assertion;
+        using char_str      = tok::char_str<char_type>;
+        using char_class    = tok::char_class<char_type>;
+        using backref       = tok::backref;
+        using alt           = ast_entry::alt;
+        using concat        = ast_entry::concat;
+        using tag           = ast_entry::tag;
+        using repeat        = ast_entry::repeat;
+        using special       = ast_entry::special;
 
         using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
@@ -4029,17 +4125,21 @@ namespace rx::detail
         friend class parser::ll1<char_type>;
 
         [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
-        [[nodiscard]] constexpr std::size_t root_idx() const { return root_idx_; }
-        [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
-        [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
+        [[nodiscard]] constexpr std::size_t root_idx() const noexcept { return root_idx_; }
+        [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
+        [[nodiscard]] constexpr const auto& get_all_exprs() const noexcept { return expressions_; }
+        [[nodiscard]] constexpr const auto& get_capture_info() const noexcept { return capture_info_; }
 
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
         constexpr void optimise_tags();
         constexpr void insert_search_prefix();
+        constexpr void simplify_counted_repeat();
+        constexpr void optimise_exact_repeat();
+        constexpr auto tag_to_register();
 
     private:
-        template<in_variant<type> T>
-        static constexpr std::size_t ast_index{ index_of_impl<type, T>::value };
+        template<typename T>
+        static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^type) };
 
         [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
 
@@ -4088,7 +4188,7 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ std::get<concat>(entry) };
+                const auto& cat{ get<concat>(entry) };
 
                 if (cat.idxs.empty())
                 {
@@ -4117,7 +4217,7 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ std::get<alt>(entry) };
+                const auto& atl{ get<alt>(entry) };
 
                 if (pos == atl.idxs.size())
                 {
@@ -4142,7 +4242,7 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ std::get<repeat>(entry) };
+                const auto& rep{ get<repeat>(entry) };
 
                 if (pos == 1)
                 {
@@ -4161,7 +4261,7 @@ namespace rx::detail
 
             case ast_index<tag>:
             {
-                const auto& tag_entry{ std::get<tag>(entry) };
+                const auto& tag_entry{ get<tag>(entry) };
 
                 auto& vec{ tag_vec.at(idx) };
                 vec.emplace_back(tag_entry.number);
@@ -4202,12 +4302,12 @@ namespace rx::detail
                 break;
 
             case ast_index<char_str>:
-                const_len.at(idx) = std::get<char_str>(entry).data.size();
+                const_len.at(idx) = get<char_str>(entry).data.size();
                 stack.pop_back();
                 break;
 
             case ast_index<char_class>:
-                const_len.at(idx) = 1;
+                const_len.at(idx) = 1; 
                 stack.pop_back();
                 break;
 
@@ -4217,7 +4317,7 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ std::get<concat>(entry) };
+                const auto& cat{ get<concat>(entry) };
 
                 if (pos == cat.idxs.size())
                 {
@@ -4242,7 +4342,7 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ std::get<alt>(entry) };
+                const auto& atl{ get<alt>(entry) };
 
                 if (pos == atl.idxs.size())
                 {
@@ -4268,7 +4368,7 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ std::get<repeat>(entry) };
+                const auto& rep{ get<repeat>(entry) };
 
                 if (pos == 1)
                 {
@@ -4302,11 +4402,11 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
         {
-            if (not std::holds_alternative<concat>(expressions_.at(i)))
+            if (not holds_alternative<concat>(expressions_.at(i)))
                 continue;
 
             std::optional<capture_info::pair_entry> current;
-            auto& target{ std::get<concat>(expressions_.at(i)).idxs };
+            auto& target{ get<concat>(expressions_.at(i)).idxs };
 
             if (i == root_idx())
                 current = { .tag_number = end_of_input_tag, .offset = 0 };
@@ -4315,7 +4415,238 @@ namespace rx::detail
             {
                 const std::size_t idx{ target.at(j - 1) };
 
-                if (auto* tn{ std::get_if<tag>(&expressions_.at(idx)) }; tn != nullptr)
+                if (auto* tn{ get_if<tag>(&expressions_.at(idx)) }; tn != nullptr)
+                {
+                    if (current.has_value())
+                    {
+                        /* remap tag */
+
+                        auto [_, success]{ tag_remap.try_emplace(tn->number, *current) };
+                        if (not success)
+                            throw tree_error("Tag appears more than once in AST");
+
+                        tn->number = -1; /* set to an invalid value */
+                        target.erase(target.begin() + j - 1);
+                    }
+                    else
+                    {
+                        current = { .tag_number = tn->number, .offset = 0 };
+                    }
+                }
+                else if (current.has_value())
+                {
+                    if (const_len.at(idx))
+                        current->offset -= *const_len.at(idx);
+                    else
+                        current = {};
+                }
+            }
+        }
+
+        /* re-map start of input tag if possible */
+
+        if (const auto& opt{ const_len.at(root_idx_) }; opt.has_value())
+            tag_remap.try_emplace(start_of_input_tag, capture_info::pair_entry{ .tag_number = end_of_input_tag, .offset = -(static_cast<int>(*opt)) });
+
+        /* re-number map and re-number tags in capture_info */
+
+        const auto remapper{ capture_info_.remap_tags(tag_remap) };
+
+        /* re-number tags in ast */
+
+        for (auto& expr : expressions_)
+        {
+            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
+                if (auto it{ remapper.find(tn->number) }; it != remapper.end())
+                    tn->number = it->second;
+        }
+
+        if (remapper.size() > std::numeric_limits<tag_number_t>::max())
+            throw tree_error("Tag number exceeded");
+
+        tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
+    }
+
+    /* convert pattern for use in regex search */
+
+    template<typename CharT>
+    constexpr void expr_tree<CharT>::insert_search_prefix()
+    {
+        /* make true wildcard */
+        const std::size_t wildcard_idx{ expressions_.size() };
+        char_class cc{ true };
+        cc.data.normalise();
+        expressions_.emplace_back(std::in_place_type<char_class>, std::move(cc));
+
+        /* make lazy repeater of wildcard */
+        const std::size_t repeater_idx{ expressions_.size() };
+        expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, 0, -1, repeater_mode::lazy);
+
+        /* conditionally make start tag */
+        const std::size_t start_tag_idx{ expressions_.size() };
+        if (flags_.enable_start_tag)
+        {
+            const tag_number_t start_tag{ tag_count_++ };
+            if (start_tag < 0)
+                throw tree_error("Capture limit exceed");
+            capture_info_.set_match_start_tag(start_tag);
+            expressions_.emplace_back(std::in_place_type<tag>, start_tag);
+        }
+
+        /* insert into pattern */
+        if (type& ast{ expressions_.at(root_idx_) }; holds_alternative<concat>(ast))
+        {
+            /* root idx is already concat, so we can avoid creating a new concat as root */
+            auto& target{ get<concat>(ast).idxs };
+            if (flags_.enable_start_tag)
+                target.insert(target.begin(), { repeater_idx, start_tag_idx });
+            else
+                target.insert(target.begin(), { repeater_idx });
+        }
+        else
+        {
+            /* make new root node */
+            const std::size_t new_root_idx{ expressions_.size() };
+            if (flags_.enable_start_tag)
+                expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, start_tag_idx, root_idx_ });
+            else
+                expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, root_idx_ });
+            root_idx_ = new_root_idx;
+        }
+    }
+
+    /* convert pattern for use in naive matcher */
+
+    template<typename CharT>
+    constexpr void expr_tree<CharT>::simplify_counted_repeat()
+    {
+        for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
+        {
+            if (not holds_alternative<repeat>(expressions_[i]))
+                continue;
+
+            repeat rep{ get<repeat>(expressions_[i]) };
+
+            /* here we simplify `a{n,m}` into 3 primitives: `a{n}`, `a*`, and `a?` */
+
+            if (rep.min == 0)
+            {
+                if (rep.max > 1)
+                {
+                    std::size_t cat{ rep.idx };
+
+                    for (auto i{ rep.min + 1 }; i < rep.max; ++i)
+                    {
+                        const std::size_t quest{ expressions_.size() };
+                        expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
+
+                        cat = expressions_.size();
+                        expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
+                    }
+
+                    expressions_[i].template emplace<repeat>(cat, 0, 1, rep.mode);
+                }
+            }
+            else if (rep.min < rep.max)
+            {
+                /* simplify `a{n,m}`, where 0 < n < m */
+
+                const std::size_t fixed_rep{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
+
+                std::size_t quest{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, 1, rep.mode);
+
+                for (auto i{ rep.min + 1 }; i < rep.max; ++i)
+                {
+                    const std::size_t cat{ expressions_.size() };
+                    expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
+
+                    quest = expressions_.size();
+                    expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
+                }
+
+                expressions_[i].template emplace<concat>(std::vector{ fixed_rep, quest });
+            }
+            else if (rep.min > rep.max)
+            {
+                /* simplify `a{n,}` and `a+`, where n > 0 */
+
+                const std::size_t fixed_rep{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
+
+                const std::size_t star{ expressions_.size() };
+                expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, -1, rep.mode);
+
+                expressions_[i].template emplace<concat>(std::vector{ fixed_rep, star });
+            }
+        }
+    }
+
+    template<typename CharT>
+    constexpr void expr_tree<CharT>::optimise_exact_repeat()
+    {
+        for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
+        {
+            if (not holds_alternative<repeat>(expressions_[i]))
+                continue;
+
+            repeat rep{ get<repeat>(expressions_[i]) };
+
+            if (rep.min != rep.max or not holds_alternative<char_str>(expressions_.at(rep.idx)))
+                continue;
+
+            auto& cs{ expressions_[i].template emplace<char_str>() };
+
+            const auto& old{ get<char_str>(expressions_[rep.idx]) };
+            cs.data.reserve(rep.min * old.data.size());
+            for (int j{ 0 }; j < rep.min; ++j)
+                cs.data += old.data;
+        }
+    }
+
+    template<typename CharT>
+    constexpr auto expr_tree<CharT>::tag_to_register()
+    {
+        const auto branch_remapper{ capture_info_.eliminate_branch_reset() };
+
+        for (auto& expr : expressions_)
+        {
+            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
+                if (auto it{ branch_remapper.find(tn->number) }; it != branch_remapper.end())
+                    tn->number = it->second;
+        }
+
+        std::vector<bool> ignore(tag_count_, false);
+
+        /* the section below has been copied from optimise_tags, except:
+         * - branch reset tags are ignored,
+         * - the start of input is not remapped
+         */
+
+        for (const auto tag : branch_remapper.values())
+            ignore.at(tag) = true;
+
+        const auto const_len{ make_const_len_vec() };
+
+        std::flat_map<tag_number_t, capture_info::pair_entry> tag_remap;
+
+        for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
+        {
+            if (not holds_alternative<concat>(expressions_.at(i)))
+                continue;
+
+            std::optional<capture_info::pair_entry> current;
+            auto& target{ get<concat>(expressions_.at(i)).idxs };
+
+            if (i == root_idx())
+                current = { .tag_number = end_of_input_tag, .offset = 0 };
+
+            for (std::size_t j{ target.size() }; j > 0; --j)
+            {
+                const std::size_t idx{ target.at(j - 1) };
+
+                if (auto* tn{ get_if<tag>(&expressions_.at(idx)) }; tn != nullptr and not ignore.at(tn->number))
                 {
                     if (current.has_value())
                     {
@@ -4351,65 +4682,22 @@ namespace rx::detail
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ std::get_if<tag>(&expr) }; tn != nullptr)
-            {
+            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
                 if (auto it{ remapper.find(tn->number) }; it != remapper.end())
                     tn->number = it->second;
-            }
         }
 
         if (remapper.size() > std::numeric_limits<tag_number_t>::max())
             throw tree_error("Tag number exceeded");
 
         tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
-    }
 
-    /* convert pattern for use in regex search */
+        /* --- end copied section ---  */
 
-    template<typename CharT>
-    constexpr void expr_tree<CharT>::insert_search_prefix()
-    {
-        /* make true wildcard */
-        const std::size_t wildcard_idx{ expressions_.size() };
-        char_class cc{ true };
-        cc.data.normalise();
-        expressions_.emplace_back(std::in_place_type<char_class>, std::move(cc));
-
-        /* make lazy repeater of wildcard */
-        const std::size_t repeater_idx{ expressions_.size() };
-        expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, repeater_mode::lazy);
-
-        /* conditionally make start tag */
-        const std::size_t start_tag_idx{ expressions_.size() };
-        if (flags_.enable_start_tag)
-        {
-            const tag_number_t start_tag{ tag_count_++ };
-            if (start_tag < 0)
-                throw tree_error("Capture limit exceed");
-            capture_info_.set_match_start_tag(start_tag);
-            expressions_.emplace_back(std::in_place_type<tag>, start_tag);
-        }
-
-        /* insert into pattern */
-        if (type& ast{ expressions_.at(root_idx_) }; std::holds_alternative<concat>(ast))
-        {
-            /* root idx is already concat, so we can avoid creating a new concat as root */
-            auto& target{ std::get<concat>(ast).idxs };
-            if (flags_.enable_start_tag)
-                target.insert(target.begin(), { repeater_idx, start_tag_idx });
-            else
-                target.insert(target.begin(), { repeater_idx });
-        }
-        else
-        {
-            /* make new root node */
-            const std::size_t new_root_idx{ expressions_.size() };
-            if (flags_.enable_start_tag)
-                expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, start_tag_idx, root_idx_ });
-            else
-                expressions_.emplace_back(std::in_place_type<concat>, std::vector{ repeater_idx, root_idx_ });
-            root_idx_ = new_root_idx;
-        }
+        /* this returns an over-approximation of the tags which need staging;
+         * only lhs tag for capturing groups which contain a
+         * backreference to themselves need to be staged                      */
+        return capture_info_.get_staged_tags();
     }
 }
 
@@ -4417,7 +4705,7 @@ namespace rx::detail::parser
 {
     struct capture_flags
     {
-        enum class flag_value : std::uint8_t
+        enum class flag_value : unsigned char
         {
             enabled,
             disabled,
@@ -4432,9 +4720,11 @@ namespace rx::detail::parser
 
     class capture_stack
     {
+        using number_t = std::uint_least16_t;
+
         struct cse
         {
-            enum class modes : std::int_least8_t
+            enum class modes : unsigned char
             {
                 normal,
                 flag_assigning,
@@ -4444,8 +4734,8 @@ namespace rx::detail::parser
 
             using cf = capture_flags::flag_value;
 
-            std::uint_least16_t number;
-            std::uint_least16_t number_end;
+            number_t number;
+            number_t number_end;
             capture_flags flags;
             modes mode;
 
@@ -4455,7 +4745,7 @@ namespace rx::detail::parser
                   flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
                   mode{ modes::non_capturing } {}
 
-            constexpr explicit cse(std::uint_least16_t cur, std::uint_least16_t end) noexcept
+            constexpr explicit cse(number_t cur, number_t end) noexcept
                 : number{ cur },
                   number_end{ end },
                   flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit },
@@ -4534,14 +4824,14 @@ namespace rx::detail::parser
             }
         }
 
-        [[nodiscard]] constexpr std::optional<std::uint_least16_t> capture_count() const noexcept
+        [[nodiscard]] constexpr std::optional<number_t> capture_count() const noexcept
         {
             if (elems_.empty())
                 return base_.number_end;
             return {};
         }
 
-        constexpr std::optional<std::uint_least16_t> pop()
+        constexpr std::optional<number_t> pop()
         {
             if (elems_.empty())
                 return {};
@@ -4554,11 +4844,9 @@ namespace rx::detail::parser
             /* overwrite containing capturing group's flags when elem is an empty capturing group */
             if (elem.mode == cse::modes::flag_assigning)
             {
-
-                if (elem.flags.caseless  != cf::inherit) target.flags.caseless  = elem.flags.caseless;
-                if (elem.flags.multiline != cf::inherit) target.flags.multiline = elem.flags.multiline;
-                if (elem.flags.dotall    != cf::inherit) target.flags.dotall    = elem.flags.dotall;
-                if (elem.flags.ungreedy  != cf::inherit) target.flags.ungreedy  = elem.flags.ungreedy;
+                template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
+                    if (elem.flags.[: e :] != cf::inherit)
+                        target.flags.[: e :] = elem.flags.[: e :];
             }
 
             if (elem.mode == cse::modes::branch_reset)
@@ -4572,60 +4860,35 @@ namespace rx::detail::parser
                 return {};
         }
 
-        [[nodiscard]] constexpr bool caseless() const
+    private:
+        template<std::meta::info CaptureFlagReflection>
+        [[nodiscard]] constexpr bool get() const
         {
             for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.caseless != cf::inherit)
-                    return elem.flags.caseless == cf::enabled;
-            return base_.flags.caseless == cf::enabled;
+                if (elem.flags.[: CaptureFlagReflection :] != cf::inherit)
+                    return elem.flags.[: CaptureFlagReflection :] == cf::enabled;
+            return base_.flags.[: CaptureFlagReflection :] == cf::enabled;
         }
 
-        [[nodiscard]] constexpr bool multiline() const
+        template<std::meta::info CaptureFlagReflection>
+        constexpr void set(bool value)
         {
-            for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.multiline != cf::inherit)
-                    return elem.flags.multiline == cf::enabled;
-            return base_.flags.multiline == cf::enabled;
+            ((elems_.empty()) ? base_ : elems_.back()).flags.[: CaptureFlagReflection :] = (value) ? cf::enabled : cf::disabled;
         }
 
-        [[nodiscard]] constexpr bool dotall() const
-        {
-            for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.dotall != cf::inherit)
-                    return elem.flags.dotall == cf::enabled;
-            return base_.flags.dotall == cf::enabled;
-        }
+    public:
+        [[nodiscard]] constexpr bool caseless()  const { return get<^^capture_flags::caseless>(); }
+        [[nodiscard]] constexpr bool multiline() const { return get<^^capture_flags::multiline>(); }
+        [[nodiscard]] constexpr bool dotall()    const { return get<^^capture_flags::dotall>(); }
+        [[nodiscard]] constexpr bool ungreedy()  const { return get<^^capture_flags::ungreedy>(); }
 
-        [[nodiscard]] constexpr bool ungreedy() const
-        {
-            for (const auto& elem : elems_ | std::views::reverse)
-                if (elem.flags.ungreedy != cf::inherit)
-                    return elem.flags.ungreedy == cf::enabled;
-            return base_.flags.ungreedy == cf::enabled;
-        }
-
-        constexpr void set_caseless(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.caseless = (value) ? cf::enabled : cf::disabled;
-        }
-
-        constexpr void set_multiline(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.multiline = (value) ? cf::enabled : cf::disabled;
-        }
-
-        constexpr void set_dotall(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.dotall = (value) ? cf::enabled : cf::disabled;
-        }
-
-        constexpr void set_ungreedy(bool value) noexcept
-        {
-            ((elems_.empty()) ? base_ : elems_.back()).flags.ungreedy = (value) ? cf::enabled : cf::disabled;
-        }
+        constexpr void set_caseless(bool value)  noexcept { return set<^^capture_flags::caseless>(value); }
+        constexpr void set_multiline(bool value) noexcept { return set<^^capture_flags::multiline>(value); }
+        constexpr void set_dotall(bool value)    noexcept { return set<^^capture_flags::dotall>(value); }
+        constexpr void set_ungreedy(bool value)  noexcept { return set<^^capture_flags::ungreedy>(value); }
 
     private:
-        [[nodiscard]] constexpr std::uint_least16_t next_number() const noexcept
+        [[nodiscard]] constexpr number_t next_number() const noexcept
         {
             auto& target{ elems_.empty() ? base_ : elems_.back() };
             return target.number_end;
@@ -4688,8 +4951,8 @@ namespace rx::detail::parser
         [[nodiscard]] constexpr capture_info& get_capture_info() { return ref_.get().capture_info_; }
         [[nodiscard]] constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
-        template<in_variant<typename lexer<char_type>::token_t> T>
-        static constexpr std::size_t tok_index{ index_of_impl<typename lexer<char_type>::token_t, T>::value };
+        template<typename T>
+        static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^typename lexer<char_type>::token_t) };
 
         template<in_variant<type> T, typename... Args>
         [[nodiscard]] constexpr std::size_t new_expression(Args... args)
@@ -4719,9 +4982,9 @@ namespace rx::detail::parser
 
     /* helper classes (and enum) for parser */
 
-    enum class nonterminal : std::uint_least8_t { S, E, E_, F, F_, G, R, R_, H, P };
+    enum class nonterminal : unsigned char { S, E, E_, F, F_, G, R, R_, H, P };
 
-    enum class semantic_action : std::int_least8_t
+    enum class semantic_action : unsigned char
     {
         make_empty,
         make_dot,
@@ -4834,9 +5097,9 @@ namespace rx::detail::parser
             const auto top{ std::move(stack.root()) };
             stack.pop();
 
-            if (const auto* const term{ std::get_if<terminal>(&top) })
+            if (const auto* const term{ get_if<terminal>(&top) })
             {
-                if (std::holds_alternative<tok::end_of_input>(*term))
+                if (holds_alternative<tok::end_of_input>(*term))
                 {
                     /* parsing is done */
                     loop = false;
@@ -4853,7 +5116,7 @@ namespace rx::detail::parser
                     throw pattern_error("Parse Error");
                 }
             }
-            else if (const auto* const nonterm{ std::get_if<nonterminal>(&top) })
+            else if (const auto* const nonterm{ get_if<nonterminal>(&top) })
             {
                 /* predict */
 
@@ -5087,7 +5350,7 @@ namespace rx::detail::parser
                     break;
                 }
             }
-            else if (const auto* const action{ std::get_if<semantic_action>(&top) })
+            else if (const auto* const action{ get_if<semantic_action>(&top) })
             {
                 using sa = semantic_action;
 
@@ -5118,72 +5381,72 @@ namespace rx::detail::parser
                 }
                 case sa::make_assert:
                 {
-                    assertion as{ std::get<assertion>(std::get<terminal>(semstack.pop())) }; /* pop tok::assertion */
+                    assertion as{ get<assertion>(get<terminal>(semstack.pop())) }; /* pop tok::assertion */
                     semstack.push(sa_make_assert(std::move(as)));
                     break;
                 }
                 case sa::make_char_lit:
                 {
-                    char_str lit{ std::get<char_str>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+                    char_str lit{ get<char_str>(get<terminal>(semstack.pop())) }; /* pop tok::char_str */
                     semstack.push(sa_make_char_lit(std::move(lit)));
                     break;
                 }
                 case sa::make_char_class:
                 {
-                    char_class cc{ std::get<char_class>(std::get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+                    char_class cc{ get<char_class>(get<terminal>(semstack.pop())) }; /* pop tok::char_str */
                     semstack.push(sa_make_char_class(std::move(cc)));
                     break;
                 }
                 case sa::make_alt:
                 {
-                    const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto rhs_idx{ get<std::size_t>(semstack.pop()) };
                     std::ignore = semstack.pop(); /* pop tok::vert */
-                    const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto lhs_idx{ get<std::size_t>(semstack.pop()) };
                     semstack.push(sa_make_alt(lhs_idx, rhs_idx));
                     break;
                 }
                 case sa::make_concat:
                 {
-                    const auto rhs_idx{ std::get<std::size_t>(semstack.pop()) };
-                    const auto lhs_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto rhs_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto lhs_idx{ get<std::size_t>(semstack.pop()) };
                     semstack.push(sa_make_concat(lhs_idx, rhs_idx));
                     break;
                 }
                 case sa::make_bref:
                 {
-                    const auto bref{ std::get<tok::backref>(std::get<terminal>(semstack.pop())) }; /* pop tok::backref */
+                    const auto bref{ get<tok::backref>(get<terminal>(semstack.pop())) }; /* pop tok::backref */
                     semstack.push(sa_make_bref(bref));
                     break;
                 }
                 case sa::make_star:
                 {
-                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    const auto mode{ get<repeater_mode>(semstack.pop()) };
                     std::ignore = semstack.pop(); /* pop tok::star */
-                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
                     semstack.push(sa_make_star(child_idx, mode));
                     break;
                 }
                 case sa::make_plus:
                 {
-                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    const auto mode{ get<repeater_mode>(semstack.pop()) };
                     std::ignore = semstack.pop(); /* pop tok::plus */
-                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
                     semstack.push(sa_make_plus(child_idx, mode));
                     break;
                 }
                 case sa::make_quest:
                 {
-                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
+                    const auto mode{ get<repeater_mode>(semstack.pop()) };
                     std::ignore = semstack.pop(); /* pop tok::quest */
-                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
                     semstack.push(sa_make_quest(child_idx, mode));
                     break;
                 }
                 case sa::make_repeat:
                 {
-                    const auto mode{ std::get<repeater_mode>(semstack.pop()) };
-                    const auto rep{ std::get<tok::repeat_n_m>(std::get<terminal>(semstack.pop())) };
-                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto mode{ get<repeater_mode>(semstack.pop()) };
+                    const auto rep{ get<tok::repeat_n_m>(get<terminal>(semstack.pop())) };
+                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
                     semstack.push(sa_make_repeat(child_idx, rep, mode));
                     break;
                 }
@@ -5212,7 +5475,7 @@ namespace rx::detail::parser
                 case sa::cap_pop:
                 {
                     std::ignore = semstack.pop(); /* pop tok::rparen */
-                    const auto child_idx{ std::get<std::size_t>(semstack.pop()) };
+                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
                     std::ignore = semstack.pop(); /* pop tok::lparen */
                     semstack.push(sa_cap_pop(child_idx));
                     break;
@@ -5244,7 +5507,7 @@ namespace rx::detail::parser
         }
 
         if (not semstack.empty())
-            root_idx() = std::get<std::size_t>(semstack.pop());
+            root_idx() = get<std::size_t>(semstack.pop());
     }
 
     /* semantic action implementations */
@@ -5315,7 +5578,7 @@ namespace rx::detail::parser
                 if (is_alphabetic(*c))
                 {
                     const auto new_idx{ new_expression<char_class>() };
-                    auto& target{ std::get<char_class>(get_expr(new_idx)).data };
+                    auto& target{ get<char_class>(get_expr(new_idx)).data };
 
                     target.insert(*c);
                     target.make_caseless();
@@ -5348,8 +5611,8 @@ namespace rx::detail::parser
                         {
                             /* insert character class of [cC] into cat */
                             const auto new_idx{ new_expression<char_class>() };
-                            auto& target{ std::get<char_class>(get_expr(new_idx)).data };
-                            std::get<concat>(get_expr(cat_idx)).idxs.push_back(new_idx);
+                            auto& target{ get<char_class>(get_expr(new_idx)).data };
+                            get<concat>(get_expr(cat_idx)).idxs.push_back(new_idx);
 
                             target.insert(c);
                             target.make_caseless();
@@ -5358,14 +5621,14 @@ namespace rx::detail::parser
                         {
                             /* insert character string into cat */
                             const auto new_idx{ new_expression<char_str>() };
-                            auto& target{ std::get<char_str>(get_expr(new_idx)).data };
+                            auto& target{ get<char_str>(get_expr(new_idx)).data };
 
                             target.push_back(c);
 
                             while (lit_it != lit_end and is_alphabetic(*lit_it))
                                 target.push_back(*lit_it++);
 
-                            std::get<concat>(get_expr(cat_idx)).idxs.push_back(new_idx);
+                            get<concat>(get_expr(cat_idx)).idxs.push_back(new_idx);
                         }
                     }
 
@@ -5389,9 +5652,9 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_alt(const std::size_t lhs_idx, const std::size_t rhs_idx)
     {
-        if (type& ast{ get_expr(rhs_idx) }; std::holds_alternative<alt>(ast))
+        if (type& ast{ get_expr(rhs_idx) }; holds_alternative<alt>(ast))
         {
-            auto& ast_alt{ std::get<alt>(ast) };
+            auto& ast_alt{ get<alt>(ast) };
 
             if (flags().enable_alttocc and not ast_alt.idxs.empty())
             {
@@ -5399,21 +5662,21 @@ namespace rx::detail::parser
                 type& rhs{ get_expr(ast_alt.idxs.front()) };
                 type& lhs{ get_expr(lhs_idx) };
 
-                if (std::holds_alternative<char_class>(rhs))
+                if (holds_alternative<char_class>(rhs))
                 {
-                    auto& target{ std::get<char_class>(rhs).data };
+                    auto& target{ get<char_class>(rhs).data };
 
-                    if (std::holds_alternative<char_class>(lhs))
+                    if (holds_alternative<char_class>(lhs))
                     {
                         /* merge char classes */
-                        auto& other{ std::get<char_class>(lhs).data };
+                        auto& other{ get<char_class>(lhs).data };
                         target.insert(other);
                         overwritable_.push_back(lhs_idx);
                         return rhs_idx;
                     }
-                    else if (std::holds_alternative<char_str>(lhs))
+                    else if (holds_alternative<char_str>(lhs))
                     {
-                        if (auto to_insert{ std::get<char_str>(lhs).get_if_single() })
+                        if (auto to_insert{ get<char_str>(lhs).get_if_single() })
                         {
                             /* insert char into char class */
                             target.insert(*to_insert);
@@ -5422,31 +5685,31 @@ namespace rx::detail::parser
                         }
                     }
                 }
-                else if (std::holds_alternative<char_str>(rhs))
+                else if (holds_alternative<char_str>(rhs))
                 {
                     const auto saved_idx{ ast_alt.idxs.front() };
 
-                    if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
+                    if (auto to_insert{ get<char_str>(rhs).get_if_single() })
                     {
-                        if (std::holds_alternative<char_class>(lhs))
+                        if (holds_alternative<char_class>(lhs))
                         {
                             /* replace rhs with lhs in alt, and insert char into char class */
-                            auto& target{ std::get<char_class>(lhs).data };
+                            auto& target{ get<char_class>(lhs).data };
                             ast_alt.idxs.front() = lhs_idx;
                             target.insert(*to_insert);
                             overwritable_.push_back(saved_idx);
                             return rhs_idx;
                         }
-                        else if (std::holds_alternative<char_str>(lhs))
+                        else if (holds_alternative<char_str>(lhs))
                         {
-                            if (auto other_insert{ std::get<char_str>(lhs).get_if_single() })
+                            if (auto other_insert{ get<char_str>(lhs).get_if_single() })
                             {
                                 /* replace rhs with new char class in alt */
                                 const auto new_idx{ new_expression<char_class>() };
-                                auto& target{ std::get<char_class>(get_expr(new_idx)).data };
+                                auto& target{ get<char_class>(get_expr(new_idx)).data };
 
                                 /* calling new_expression invalidates references, so we must re-get ast_alt */
-                                auto& ast_alt2{ std::get<alt>(get_expr(rhs_idx)) };
+                                auto& ast_alt2{ get<alt>(get_expr(rhs_idx)) };
                                 ast_alt2.idxs.front() = new_idx;
 
                                 target.insert(*to_insert);
@@ -5472,21 +5735,21 @@ namespace rx::detail::parser
                 type& rhs{ get_expr(rhs_idx) };
                 type& lhs{ get_expr(lhs_idx) };
 
-                if (std::holds_alternative<char_class>(rhs))
+                if (holds_alternative<char_class>(rhs))
                 {
-                    auto& target{ std::get<char_class>(rhs).data };
+                    auto& target{ get<char_class>(rhs).data };
 
-                    if (std::holds_alternative<char_class>(lhs))
+                    if (holds_alternative<char_class>(lhs))
                     {
                         /* merge char classes */
-                        auto& other{ std::get<char_class>(lhs).data };
+                        auto& other{ get<char_class>(lhs).data };
                         target.insert(other);
                         overwritable_.push_back(lhs_idx);
                         return rhs_idx;
                     }
-                    else if (std::holds_alternative<char_str>(lhs))
+                    else if (holds_alternative<char_str>(lhs))
                     {
-                        if (auto to_insert{ std::get<char_str>(lhs).get_if_single() })
+                        if (auto to_insert{ get<char_str>(lhs).get_if_single() })
                         {
                             /* insert char into char class */
                             target.insert(*to_insert);
@@ -5495,25 +5758,25 @@ namespace rx::detail::parser
                         }
                     }
                 }
-                else if (std::holds_alternative<char_str>(rhs))
+                else if (holds_alternative<char_str>(rhs))
                 {
-                    if (auto to_insert{ std::get<char_str>(rhs).get_if_single() })
+                    if (auto to_insert{ get<char_str>(rhs).get_if_single() })
                     {
-                        if (std::holds_alternative<char_class>(lhs))
+                        if (holds_alternative<char_class>(lhs))
                         {
                             /* insert (rhs) char into (lhs) char class */
-                            auto& target{ std::get<char_class>(lhs).data };
+                            auto& target{ get<char_class>(lhs).data };
                             target.insert(*to_insert);
                             overwritable_.push_back(rhs_idx);
                             return lhs_idx;
                         }
-                        else if (std::holds_alternative<char_str>(lhs))
+                        else if (holds_alternative<char_str>(lhs))
                         {
-                            if (auto other_insert{ std::get<char_str>(lhs).get_if_single() })
+                            if (auto other_insert{ get<char_str>(lhs).get_if_single() })
                             {
                                 /* create new char class */
                                 const auto new_idx{ new_expression<char_class>() };
-                                auto& target{ std::get<char_class>(get_expr(new_idx)).data };
+                                auto& target{ get<char_class>(get_expr(new_idx)).data };
 
                                 target.insert(*to_insert);
                                 target.insert(*other_insert);
@@ -5534,18 +5797,18 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, const std::size_t rhs_idx)
     {
-        if (type& ast{ get_expr(lhs_idx) }; std::holds_alternative<concat>(ast))
+        if (type& ast{ get_expr(lhs_idx) }; holds_alternative<concat>(ast))
         {
             /* append rhs into existing concat */
             /* this case _should_ only arise from captures, so we can skip merging strings */
-            auto& target{ std::get<concat>(ast).idxs };
+            auto& target{ get<concat>(ast).idxs };
 
             type& rhs{ get_expr(rhs_idx) };
 
-            if (std::holds_alternative<concat>(rhs))
+            if (holds_alternative<concat>(rhs))
             {
                 /* append contents of rhs concat to lhs concat  */
-                auto& src{ std::get<concat>(rhs).idxs };
+                auto& src{ get<concat>(rhs).idxs };
                 target.append_range(src);
                 src.clear();
                 overwritable_.push_back(rhs_idx);
@@ -5558,10 +5821,10 @@ namespace rx::detail::parser
 
             return lhs_idx;
         }
-        else if (type& ast{ get_expr(rhs_idx) }; std::holds_alternative<concat>(ast))
+        else if (type& ast{ get_expr(rhs_idx) }; holds_alternative<concat>(ast))
         {
             /* insert lhs into existing concat */
-            auto& ast_concat{ std::get<concat>(ast) };
+            auto& ast_concat{ get<concat>(ast) };
             bool merged{ false };
 
             if (not ast_concat.idxs.empty())
@@ -5569,11 +5832,11 @@ namespace rx::detail::parser
                 type& rhs{ get_expr(ast_concat.idxs.front()) };
                 type& lhs{ get_expr(lhs_idx) };
 
-                if (std::holds_alternative<char_str>(rhs) and std::holds_alternative<char_str>(lhs))
+                if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
                 {
                     /* merge lhs string with first entry of rhs (also a string) */
-                    auto& target{ std::get<char_str>(rhs).data };
-                    auto& lhs_str{ std::get<char_str>(lhs).data };
+                    auto& target{ get<char_str>(rhs).data };
+                    auto& lhs_str{ get<char_str>(lhs).data };
                     lhs_str.append(target);
                     std::swap(lhs_str, target);
                     overwritable_.push_back(lhs_idx);
@@ -5594,11 +5857,11 @@ namespace rx::detail::parser
             type& rhs{ get_expr(rhs_idx) };
             type& lhs{ get_expr(lhs_idx) };
 
-            if (std::holds_alternative<char_str>(rhs) and std::holds_alternative<char_str>(lhs))
+            if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
             {
                 /* lhs and rhs are both strings: merge strings into one instead of creating concat  */
-                auto& target{ std::get<char_str>(rhs).data };
-                auto& lhs_str{ std::get<char_str>(lhs).data };
+                auto& target{ get<char_str>(rhs).data };
+                auto& lhs_str{ get<char_str>(lhs).data };
                 lhs_str.append(target);
                 std::swap(lhs_str, target);
                 overwritable_.push_back(lhs_idx);
@@ -5630,19 +5893,19 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_star(const std::size_t child_idx, const repeater_mode mode)
     {
-        return new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ -1 }, mode);
+        return new_expression<repeat>(child_idx, 0, -1, mode);
     }
 
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_plus(const std::size_t child_idx, const repeater_mode mode)
     {
-        return new_expression<repeat>(child_idx, std::int_least16_t{ 1 }, std::int_least16_t{ 0 }, mode);
+        return new_expression<repeat>(child_idx, 1, 0, mode);
     }
 
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_quest(const std::size_t child_idx, const repeater_mode mode)
     {
-        return new_expression<repeat>(child_idx, std::int_least16_t{ 0 }, std::int_least16_t{ 1 }, mode);
+        return new_expression<repeat>(child_idx, 0, 1, mode);
     }
 
     template<typename CharT>
@@ -5689,7 +5952,7 @@ namespace rx::detail::parser
         {
             type& ast{ get_expr(child_idx) };
 
-            if (char_str* lit{ std::get_if<char_str>(&ast) }; lit != nullptr and lit->data.empty())
+            if (char_str* lit{ get_if<char_str>(&ast) }; lit != nullptr and lit->data.empty())
             {
                 /* empty capturing group; only insert one tag */
 
@@ -5702,7 +5965,7 @@ namespace rx::detail::parser
                 overwritable_.push_back(child_idx);
                 return new_expression<tag>(tag_num);
             }
-            else if (std::holds_alternative<concat>(ast))
+            else if (holds_alternative<concat>(ast))
             {
                 /* insert tags on either end of existing concat */
                 const tag_number_t lhs_tag{ tag_count()++ };
@@ -5716,7 +5979,7 @@ namespace rx::detail::parser
                 const auto rhs_tag_entry{ new_expression<tag>(rhs_tag) };
 
                 /* calling new_expression invalidates references, so we must re-get ast for target */
-                auto& target{ std::get<concat>(get_expr(child_idx)).idxs };
+                auto& target{ get<concat>(get_expr(child_idx)).idxs };
                 target.insert(target.cbegin(), lhs_tag_entry);
                 target.insert(target.cend(), rhs_tag_entry);
                 return child_idx;
@@ -5955,12 +6218,14 @@ namespace rx::detail::tnfa
         continue_at_t continue_at{ 0 };        /* only meaningful if is_final */
     };
 
+    template<typename CharT>
     struct continue_info
     {
         using sub_e_closure = std::optional<std::vector<state_t>>;
 
         state_t value;
 
+        charset_t<CharT> cs;  
     };
 
     /* predicates for variations of e-closure */
@@ -5981,7 +6246,7 @@ namespace rx::detail::tnfa
         static constexpr bool operator()(const transition<CharT>& tr)
         {
             /* only count e-transitions */
-            return std::holds_alternative<epsilon_tr>(tr.type);
+            return holds_alternative<epsilon_tr>(tr.type);
         }
     };
 }
@@ -6025,8 +6290,8 @@ namespace rx::detail
         using ast_t = expr_tree<char_type>;
         using transition_info = tnfa::transition<char_type>::transition_type;
 
-        template<in_variant<typename ast_t::type> T>
-        static constexpr state_t ast_index{ index_of_impl<typename ast_t::type, T>::value };
+        template<typename T>
+        static constexpr state_t ast_index{ index_in_variant(^^T, ^^typename ast_t::type) };
 
         /* fundamental helpers */
 
@@ -6083,12 +6348,12 @@ namespace rx::detail
 
         /* data members */
 
-        std::vector<tnfa::node>                  nodes_{ 2 };
-        std::vector<tnfa::transition<char_type>> transitions_;
-        capture_info                             capture_info_;
-        std::size_t                              tag_count_;
-        state_t                                  start_node_{ default_start_node };
-        std::vector<tnfa::continue_info>         cont_info_;
+        std::vector<tnfa::node>                     nodes_{ 2 };
+        std::vector<tnfa::transition<char_type>>    transitions_;
+        capture_info                                capture_info_;
+        std::size_t                                 tag_count_;
+        state_t                                     start_node_{ default_start_node };
+        std::vector<tnfa::continue_info<char_type>> cont_info_;
 
         fsm_flags flags_;
 
@@ -6233,7 +6498,7 @@ namespace rx::detail
             switch (entry.index())
             {
             case ast_index<typename ast_t::char_str>:
-                if (const auto& str{ std::get<typename ast_t::char_str>(entry) }; not str.data.empty())
+                if (const auto& str{ get<typename ast_t::char_str>(entry) }; not str.data.empty())
                 {
                     for (const auto c : str.data | std::views::take(str.data.size() - 1))
                     {
@@ -6252,7 +6517,7 @@ namespace rx::detail
 
             case ast_index<typename ast_t::char_class>:
             {
-                const auto& cla{ std::get<typename ast_t::char_class>(entry) };
+                const auto& cla{ get<typename ast_t::char_class>(entry) };
 
                 if constexpr (char_is_utf8<char_type>)
                 {
@@ -6277,7 +6542,7 @@ namespace rx::detail
             }
 
             case ast_index<typename ast_t::concat>:
-                if (const auto& cat{ std::get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
+                if (const auto& cat{ get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
                 {
                     for (const auto i : cat.idxs | std::views::take(cat.idxs.size() - 1))
                     {
@@ -6295,7 +6560,7 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::alt>:
-                if (const auto& alt{ std::get<typename ast_t::alt>(entry) }; not alt.idxs.empty())
+                if (const auto& alt{ get<typename ast_t::alt>(entry) }; not alt.idxs.empty())
                 {
                     if (tag_vec.empty() or tag_vec.at(idx).empty())
                     {
@@ -6352,7 +6617,7 @@ namespace rx::detail
 
             case ast_index<typename ast_t::repeat>:
             {
-                const auto& rep{ std::get<typename ast_t::repeat>(entry) };
+                const auto& rep{ get<typename ast_t::repeat>(entry) };
 
                 if (rep.mode == repeater_mode::possessive)
                     throw tnfa_error("Possessive repetition is unimplemented");
@@ -6436,14 +6701,14 @@ namespace rx::detail
             case ast_index<typename ast_t::tag>:
             {
                 /* in tree_expr tags start at 0, whereas here they start at 1 */
-                const auto& tag_entry{ std::get<typename ast_t::tag>(entry) };
+                const auto& tag_entry{ get<typename ast_t::tag>(entry) };
                 make_epsilon(q0, qf, 0, tag_entry.number + 1);
                 break;
             }
 
             case ast_index<typename ast_t::assertion>:
             {
-                const typename ast_t::assertion& assertion{ std::get<typename ast_t::assertion>(entry) };
+                const typename ast_t::assertion& assertion{ get<typename ast_t::assertion>(entry) };
 
                 using cs = nontransient_constexpr_version_of_t<charset_type>;
                 using p = cs::char_interval;
@@ -6476,7 +6741,7 @@ namespace rx::detail
                     has_eof_anchor_ = true;
                     break;
 
-                case assert_type::word_boundary:
+                case assert_type::ascii_word_boundary:
                 {
                     const state_t q1{ node_create() };
                     const state_t q2{ node_create() };
@@ -6496,7 +6761,7 @@ namespace rx::detail
                     break;
                 }
 
-                case assert_type::not_word_boundary:
+                case assert_type::not_ascii_word_boundary:
                 {
                     const state_t q1{ node_create() };
                     const state_t q2{ node_create() };
@@ -6539,11 +6804,12 @@ namespace rx::detail
     constexpr auto tagged_nfa<CharT>::closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const
     {
         using result_t = maybe_type_t<B, std::vector<state_t>>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         std::vector to_visit{ std::forward<Vec>(qs) };
         std::ranges::reverse(to_visit);
 
-        std::vector<bool> visited(node_count(), false);
+        bitset_t visited(node_count(), false);
         result_t result;
 
         for (const auto q : to_visit)
@@ -6610,6 +6876,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::remove_dead_and_unreachable_states()
     {
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+
         /* determine reachable states */
 
         std::vector<state_t> initial_nodes{ start_node_ };
@@ -6632,10 +6900,9 @@ namespace rx::detail
 
         /* remove transitions containing dead and unreachable nodes */
 
-        std::vector<bool> live_and_reachable(nodes_.size(), false);
-        std::ranges::transform(live_nodes, reachable_nodes, live_and_reachable.begin(), std::logical_and{});
+        const auto live_and_reachable{ live_nodes & reachable_nodes };
 
-        std::vector<bool> removed_transitions(transitions_.size(), false);
+        bitset_t removed_transitions(transitions_.size(), false);
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
@@ -6653,7 +6920,7 @@ namespace rx::detail
 
         /* remove dead and unreachable nodes and transitions from nodes */
 
-        const auto pred = [&](const std::size_t i) { return removed_transitions.at(i); };
+        const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i) { return rt.at(i); };
 
         for (state_t q{ 0 }; q < nodes_.size(); ++q)
         {
@@ -6678,7 +6945,7 @@ namespace rx::detail
     constexpr void tagged_nfa<CharT>::rewrite_sof_anchors()
     {
         static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
-            return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookbehind_1_tr>(tr.type);
+            return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookbehind_1_tr>(tr.type);
         };
 
         const auto ec{ epsilon_closure({ start_node() }, pred) };
@@ -6705,17 +6972,17 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(i) };
 
-                if (std::holds_alternative<normal_tr>(tr.type))
+                if (holds_alternative<normal_tr>(tr.type))
                 {
                     /* transition from copied e-closure to main graph */
                     make_copy(p, tr.dst, tr.type);
                 }
-                else if (std::holds_alternative<sof_anchor_tr>(tr.type))
+                else if (holds_alternative<sof_anchor_tr>(tr.type))
                 {
                     /* replace sof anchor with e-transition in copied subgraph */
                     make_epsilon(p, mapped_states.at(tr.dst));
                 }
-                else if (not std::holds_alternative<lookbehind_1_tr>(tr.type))
+                else if (not holds_alternative<lookbehind_1_tr>(tr.type))
                 {
                     /* transition within copied e-closure */
                     make_copy(p, mapped_states.at(tr.dst), tr.type);
@@ -6729,7 +6996,7 @@ namespace rx::detail
         {
             auto& tr{ transitions_[i] };
 
-            if (not std::holds_alternative<sof_anchor_tr>(tr.type))
+            if (not holds_alternative<sof_anchor_tr>(tr.type))
                 continue;
 
             /* delete transition */
@@ -6749,10 +7016,10 @@ namespace rx::detail
         /* NOTE: this function must be called before any other function which adds final nodes */
 
         static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
-            return not std::holds_alternative<normal_tr>(tr.type) and not std::holds_alternative<lookahead_1_tr>(tr.type);
+            return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookahead_1_tr>(tr.type);
         };
 
-        std::vector<bool> bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
+        const auto bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
 
         std::vector<state_t> initial;
         std::vector<tr_index> to_revisit;
@@ -6761,7 +7028,7 @@ namespace rx::detail
         {
             const auto& tr{ transitions_[i] };
 
-            if (not std::holds_alternative<eof_anchor_tr>(tr.type))
+            if (not holds_alternative<eof_anchor_tr>(tr.type))
                 continue;
 
             to_revisit.emplace_back(i);
@@ -6809,11 +7076,11 @@ namespace rx::detail
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                 const auto& tr{ get_tr(i) };
 
-                if (std::holds_alternative<normal_tr>(tr.type))
+                if (holds_alternative<normal_tr>(tr.type))
                 {
                     /* do not insert transition */
                 }
-                else if (std::holds_alternative<eof_anchor_tr>(tr.type))
+                else if (holds_alternative<eof_anchor_tr>(tr.type))
                 {
                     /* replace eof anchor with e-transition in copied subgraph */
                     make_epsilon(p, mapped_states.at(tr.dst));
@@ -6867,7 +7134,7 @@ namespace rx::detail
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
             const auto& tr{ transitions_[i] };
-            if (const auto* ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+            if (const auto* ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 sc_transitions[ptr->cs].emplace_back(i);
         }
 
@@ -6898,10 +7165,10 @@ namespace rx::detail
 
             auto pred = [&](const tnfa::transition<char_type>& tr) {
                 /* skip normal transitions and eof anchors */
-                if (std::holds_alternative<normal_tr>(tr.type) or std::holds_alternative<eof_anchor_tr>(tr.type))
+                if (holds_alternative<normal_tr>(tr.type) or holds_alternative<eof_anchor_tr>(tr.type))
                     return false;
 
-                if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 {
                     if (auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
                     {
@@ -6956,19 +7223,19 @@ namespace rx::detail
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                     const auto& tr{ get_tr(i) };
 
-                    if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+                    if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally transition from copied e-closure to main graph */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                             make_transition(p, tr.dst, std::move(new_edge));
                     }
-                    else if (const auto* const ptr{ std::get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+                    else if (const auto* const ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally e-transition between copied subgraphs */
                         if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                             make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));
                     }
-                    else if (not std::holds_alternative<eof_anchor_tr>(tr.type))
+                    else if (not holds_alternative<eof_anchor_tr>(tr.type))
                     {
                         /* transition within copied e-closure */
                         make_copy(p, mapped_states.at(tr.dst), tr.type);
@@ -7004,6 +7271,8 @@ namespace rx::detail
         if (cont_info_.size() > 1)
             throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: cont_info_.size() > 1");
 
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+
         using transition_map_t = std::flat_map<charset_type, std::vector<tr_index>>;
         using state_map_t = std::flat_map<state_t, state_t>;
         using all_states_map_t = std::flat_map<charset_type, state_map_t>;
@@ -7032,7 +7301,7 @@ namespace rx::detail
 
         static constexpr auto search_predicate = [](lb_info& lb, const charset_type& edge, const tnfa::transition<char_type>& tr, const tr_index i) static {
             /* assign results here instead of using the normal return value */
-            if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+            if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
             {
                 if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                     lb.tr_into.emplace_back(i);
@@ -7041,11 +7310,11 @@ namespace rx::detail
             }
 
             /* skip sof anchors */
-            if (std::holds_alternative<sof_anchor_tr>(tr.type))
+            if (holds_alternative<sof_anchor_tr>(tr.type))
                 return false;
 
             /* intersection with lookbehind_1 transition requires cloned subgraph */
-            if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+            if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
             {
                 if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
                     lb.tr_between.emplace_back(i);
@@ -7077,7 +7346,7 @@ namespace rx::detail
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
             const auto& tr{ transitions_[i] };
-            const auto* ptr{ std::get_if<lookbehind_1_tr>(&tr.type) };
+            const auto* ptr{ get_if<lookbehind_1_tr>(&tr.type) };
 
             if (ptr == nullptr)
                 continue;
@@ -7116,7 +7385,7 @@ namespace rx::detail
 
         /* determine closure start bitvec */
 
-        std::vector<bool> is_closure_start(transitions_.size(), false);
+        bitset_t is_closure_start(transitions_.size(), false);
 
         for (const auto& [_, lb] : lb_closures)
             for (const tr_index i : lb.tr_into)
@@ -7135,7 +7404,7 @@ namespace rx::detail
         {
             const auto fn = [this](const tr_index i) {
                 const auto& tr{ get_tr(i) };
-                return std::cref(std::get<lookbehind_1_tr>(tr.type).cs);
+                return std::cref(get<lookbehind_1_tr>(tr.type).cs);
             };
 
             const std::vector refs{ std::from_range, wraparounds | std::views::transform(fn) };
@@ -7156,11 +7425,11 @@ namespace rx::detail
             for (const auto& edge : wrap_starts)
             {
                 for (const tr_index i : wraparound_lb_closure->tr_into)
-                    if (auto new_edge{ edge & std::get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                    if (auto new_edge{ edge & get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
                         start_transitions[i].try_emplace(std::move(new_edge));
 
                 for (const tr_index i : wraparound_lb_closure->tr_between)
-                    if (auto new_edge{ edge & std::get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                    if (auto new_edge{ edge & get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
                         to_insert[std::move(new_edge)].emplace_back(i);
             }
 
@@ -7182,11 +7451,11 @@ namespace rx::detail
                 const auto& lb{ lb_closures.at(lb_tr_index) };
 
                 for (const tr_index i : lb.tr_into)
-                    if (auto new_edge{ edge & std::get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                    if (auto new_edge{ edge & get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
                         start_transitions[i].try_emplace(std::move(new_edge));
 
                 for (const tr_index i : lb.tr_between)
-                    if (auto new_edge{ edge & std::get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                    if (auto new_edge{ edge & get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
                         to_insert[std::move(new_edge)].emplace_back(i);
             }
 
@@ -7241,10 +7510,10 @@ namespace rx::detail
             auto& mapped_states{ all_mapped_states[edge] };
 
             auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr) {
-                if (std::holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
+                if (holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                     return false;
 
-                if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+                if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
                     return (e | ptr->cs) == ptr->cs;
 
                 return true;
@@ -7277,7 +7546,8 @@ namespace rx::detail
                 throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
 
             continue_ats.emplace_back(std::saturate_cast<tnfa::continue_at_t>(cont_info_.size()));
-            cont_info_.emplace_back(mapped_cont);
+            cont_info_.emplace_back(mapped_cont, edge);
+            cont_info_.at(0).cs -= edge; /* note: cont_info should be non-empty to begin with */
         }
 
         if (continue_state.has_value())
@@ -7325,13 +7595,13 @@ namespace rx::detail
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
                     const auto& tr{ get_tr(i) };
 
-                    if (const auto* const ptr{ std::get_if<normal_tr>(&tr.type) }; ptr != nullptr)
+                    if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* this should be valid since in our tnfa, nodes by construction either only have outgoing
                          * normal transitions, or have outgoing e-transitions (or assertions), but never both */
                         make_epsilon(p, q);
                     }
-                    else if (const auto* const ptr{ std::get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
+                    else if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
                     {
                         if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
                         {
@@ -7341,7 +7611,7 @@ namespace rx::detail
                                 make_epsilon(p, tr.dst); /* transition from copied subgraph back to main graph */
                         }
                     }
-                    else if (not std::holds_alternative<sof_anchor_tr>(tr.type))
+                    else if (not holds_alternative<sof_anchor_tr>(tr.type))
                     {
                         /* transition within copied e-closure (if necessary) */
                         if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
@@ -7365,7 +7635,7 @@ namespace rx::detail
                         continue;
 
                     auto& tr{ transitions_.at(i) };
-                    auto* const ptr{ std::get_if<normal_tr>(&tr.type) };
+                    auto* const ptr{ get_if<normal_tr>(&tr.type) };
 
                     if (ptr == nullptr)
                         continue;
@@ -7423,7 +7693,7 @@ namespace rx::detail
         dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
 
         if (flags_.is_iterator)
-            cont_info_.emplace_back(default_start_node);
+            cont_info_.emplace_back(default_start_node, ~charset_type{});
 
         thompson(ast);
     }
@@ -7541,10 +7811,12 @@ namespace rx::detail
 
         explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
         constexpr void optimise_registers();
+        constexpr void compact_regop_blocks();
         constexpr void minimise_states();
         constexpr void minimise_transition_edges();
         constexpr void make_default_transitions();
         constexpr void make_shared_transitions();
+        constexpr void de_default_edges();
 
         friend class tdfa::factory<char_type>;
         friend class tdfa::opt<char_type>;
@@ -7647,7 +7919,7 @@ namespace rx::detail::tdfa
     };
 
     using state_info_t = std::vector<node_info>;
-    using continue_info_t = std::flat_map<std::size_t, std::uint16_t>;
+    using continue_info_t = std::flat_map<std::size_t, tdfa::continue_at_t>;
 
     class tag_op_map
     {
@@ -7690,6 +7962,13 @@ namespace rx::detail::tdfa
         constexpr explicit factory(const tnfa_t& input, tdfa_t& result, std::size_t tag_count);
 
     private:
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
+
+        using epsilon_tr_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
+        using normal_tr_t  = std::pair<tnfa::state_t, std::reference_wrapper<const tnfa::charset_t<char_type>>>;
+        using epsilon_tr_info_t = std::vector<std::vector<epsilon_tr_t>>;
+        using normal_tr_info_t  = std::vector<std::vector<normal_tr_t>>;
+
         [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
         [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, regops_t& o);
         [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
@@ -7697,6 +7976,7 @@ namespace rx::detail::tdfa
         [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
         [[nodiscard]] constexpr regop::op_t regop_rhs(const std::vector<bool>& hist) const;
         [[nodiscard]] constexpr std::vector<bool> history(const tag_sequence_t& hist, tag_t tag) const;
+        [[nodiscard]] constexpr bool has_history(const tag_sequence_t& hist, tag_t tag) const;
         [[nodiscard]] constexpr bool mappable(const node_info& state, std::size_t mapped_state, regops_t& o, reg_t regcount) const;
 
         constexpr void fallback_regops(tdfa_t& result);
@@ -7704,25 +7984,45 @@ namespace rx::detail::tdfa
 
         constexpr std::size_t make_initial_state(tdfa_t& result, tnfa::state_t tnfa_state);
 
+        constexpr void factory_init();
+
+        static constexpr std::size_t hash_state(const node_info& state);
+        static constexpr std::size_t hash_mappability(const node_info& state);
+
         const tnfa_t* tnfa_ptr_;
         state_info_t state_info_;
         continue_info_t cont_info_;
+        epsilon_tr_info_t epsilon_transitions_;
+        normal_tr_info_t normal_transitions_;
         reg_t tag_count_;
         fsm_flags flags_;
+
+        std::vector<std::size_t> state_hashes_keys_;
+        std::vector<std::size_t> state_hashes_values_;
+        std::vector<std::size_t> mappable_candidate_keys_;
+        std::vector<std::size_t> mappable_candidate_values_;
     };
+
+    template<typename CharT>
+    constexpr std::size_t factory<CharT>::hash_state(const node_info& state)
+    {
+        std::size_t hash{ hash::init() };
+        hash::append(hash, state);
+        return hash;
+    }
+
+    template<typename CharT>
+    constexpr std::size_t factory<CharT>::hash_mappability(const node_info& state)
+    {
+        std::size_t hash{ hash::init() };
+        for (const auto& cfg: state.config)
+            hash::append(hash, cfg.tnfa_state);
+        return hash;
+    }
 
     template<typename CharT>
     constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
     {
-
-        using bitset_t = std::vector<bool>;
-
-        static constexpr auto compose = [](const auto& g, const auto& f) {
-            return [=]<typename T>(T&& arg) {
-                return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
-            };
-        };
-
         closure_t new_closure;
 
         closure_t stack{ std::move(c) };
@@ -7744,26 +8044,15 @@ namespace rx::detail::tdfa
             const closure_entry& ce{ new_closure.back() };
             visited.at(ce.tnfa_state) = true;
 
-            using epsilon_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
-            std::vector et{
-                std::from_range,
-                tnfa_ptr_->get_node(ce.tnfa_state).out_tr
-                | std::views::transform([&](const std::size_t i) { return tnfa_ptr_->get_tr(i); })
-                | std::views::filter([](const auto& t) { return std::holds_alternative<tnfa::epsilon_tr>(t.type); })
-                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, std::get<tnfa::epsilon_tr>(t.type) }; })
-            };
-
-            std::ranges::sort(et, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_t::second));
-
-            for (const auto& [next, e] : et)
+            for (const auto& [next, e] : epsilon_transitions_.at(ce.tnfa_state))
             {
-                if (not visited.at(next))
-                {
-                    auto newer_tag_seq{ ce.new_tag_seq };
-                    if (e.tag != 0)
-                        newer_tag_seq.push_back(e.tag);
-                    stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
-                }
+                if (visited.at(next))
+                    continue;
+
+                auto newer_tag_seq{ ce.new_tag_seq };
+                if (e.tag != 0)
+                    newer_tag_seq.push_back(e.tag);
+                stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
             }
         }
 
@@ -7771,9 +8060,10 @@ namespace rx::detail::tdfa
         {
             /* this version is needed for full matches, but below is needed for laziness in prefix matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
-                if (tnfa_ptr_->get_node(ce.tnfa_state).is_fallback) return false;
-                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
-                                                  [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
+                const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
+                if (node.is_final or node.is_fallback)
+                    return false;
+                return normal_transitions_.at(ce.tnfa_state).empty();
             });
         }
         else
@@ -7789,8 +8079,7 @@ namespace rx::detail::tdfa
                     return false;
                 }
                 if (node.is_final) return false;
-                return 0 != std::ranges::count_if(tnfa_ptr_->get_node(ce.tnfa_state).out_tr,
-                                                  [&](const std::size_t i) { return not std::holds_alternative<tnfa::normal_tr<CharT>>(tnfa_ptr_->get_tr(i).type); });
+                return normal_transitions_.at(ce.tnfa_state).empty();
             });
         }
 
@@ -7800,22 +8089,77 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> std::size_t
     {
+        static constexpr std::size_t map_usage_threshold{ 128 };
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; 
+
         node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) } };
+        std::size_t new_state{ state_info_.size() };
 
-        const std::size_t new_state{ static_cast<std::size_t>(std::ranges::distance(state_info_.begin(), std::ranges::find(state_info_, current_info))) };
+        if (new_state < map_usage_threshold) [[likely]]
+        {
+            /* check if state already exists */
+            const std::size_t sh_key{ hash_state(current_info) };
+            for (std::size_t existing_state{ 0 }, size{ state_hashes_keys_.size() }; existing_state < size; ++existing_state)
+                if (sh_key == state_hashes_keys_[existing_state]) [[unlikely]]
+                    if (mappable(current_info, existing_state, o, result.register_count_))
+                        return existing_state;
 
-        /* check if state already exists */
-        if (new_state < state_info_.size())
-            return new_state;
+            /* check if state can be mapped to an existing state */
+            const std::size_t mc_key{ hash_mappability(current_info) };
+            for (std::size_t mapped_state{ 0 }, size{ mappable_candidate_keys_.size() }; mapped_state < size; ++mapped_state)
+                if (mc_key == mappable_candidate_keys_[mapped_state]) [[unlikely]]
+                    if (mappable(current_info, mapped_state, o, result.register_count_))
+                        return mapped_state;
 
-        /* check if state can be mapped to an existing state */
-        for (std::size_t mapped_state{ 0 }; mapped_state < state_info_.size(); ++mapped_state)
-            if (mappable(current_info, mapped_state, o, result.register_count_))
-                return mapped_state;
+            /* create new state */
+            result.nodes_.emplace_back();
+            state_info_.emplace_back(std::move(current_info));
 
-        /* create new state */
-        result.nodes_.emplace_back();
-        state_info_.emplace_back(std::move(current_info));
+            state_hashes_keys_.emplace_back(sh_key);
+            mappable_candidate_keys_.emplace_back(mc_key);
+
+            /* switch to using maps at threshold */
+            if (state_info_.size() == map_usage_threshold)
+            {
+                state_hashes_values_.assign_range(std::views::iota(0uz, new_state));
+                mappable_candidate_values_.assign_range(std::views::iota(0uz, new_state));
+
+                std::ranges::sort(std::views::zip(state_hashes_keys_, state_hashes_values_), {}, key_proj);
+                std::ranges::sort(std::views::zip(mappable_candidate_keys_, mappable_candidate_values_), {}, key_proj);
+            }
+        }
+        else
+        {
+            /* check if state already exists */
+            auto sh_zv = std::views::zip(state_hashes_keys_, state_hashes_values_);
+            const std::size_t sh_key{ hash_state(current_info) };
+            const auto sh_eq_range{ std::ranges::equal_range(sh_zv, sh_key, {}, key_proj) };
+
+            for (const auto& [_, state] : sh_eq_range)
+                if (current_info == state_info_.at(state))
+                    return state;
+
+            /* check if state can be mapped to an existing state */
+            auto mc_zv = std::views::zip(mappable_candidate_keys_, mappable_candidate_values_);
+            const std::size_t mc_key{ hash_mappability(current_info) };
+            const auto mc_eq_range{ std::ranges::equal_range(mc_zv, mc_key, {}, key_proj) };
+
+            for (const auto& [_, mapped_state] : mc_eq_range)
+                if (mappable(current_info, mapped_state, o, result.register_count_))
+                    return mapped_state;
+
+            /* create new state */
+            result.nodes_.emplace_back();
+            state_info_.emplace_back(std::move(current_info));
+
+            const auto sh_offset{ std::ranges::distance(sh_zv.begin(), sh_eq_range.end()) };
+            state_hashes_keys_.emplace(state_hashes_keys_.cbegin() + sh_offset, sh_key);
+            state_hashes_values_.emplace(state_hashes_values_.cbegin() + sh_offset, new_state);
+
+            const auto mc_offset{ std::ranges::distance(mc_zv.begin(), mc_eq_range.end()) };
+            mappable_candidate_keys_.emplace(mappable_candidate_keys_.cbegin() + mc_offset, mc_key);
+            mappable_candidate_values_.emplace(mappable_candidate_values_.cbegin() + mc_offset, new_state);
+        }
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
@@ -7862,21 +8206,13 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::multistep(std::size_t state) const -> multistep_closures_t<char_type>
     {
-        auto configs{ state_info_.at(state).config };
-
         using elem_t = tnfa::charset_t<char_type>::template ref_pair<closure_entry>;
 
         std::vector<elem_t> transitions;
 
-        for (const auto& cfg : configs)
-        {
-            for (std::size_t tr_idx : tnfa_ptr_->get_node(cfg.tnfa_state).out_tr)
-            {
-                const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
-                if (const auto* const ptr{ std::get_if<tnfa::normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
-                    transitions.emplace_back(std::cref(ptr->cs), closure_entry{ tr.dst, cfg.registers, cfg.tag_seq });
-            }
-        }
+        for (const auto& cfg : state_info_.at(state).config)
+            for (const auto& [dst, cs] : normal_transitions_.at(cfg.tnfa_state))
+                transitions.emplace_back(cs, closure_entry{ dst, cfg.registers, cfg.tag_seq });
 
         return charset_t<char_type>::partition_ext(transitions);
     }
@@ -7944,9 +8280,17 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr auto factory<CharT>::history(const tag_sequence_t& h, tag_t tag) const -> std::vector<bool>
     {
-        return h | std::views::filter([tag](tag_t i) { return /* std::abs(i) == tag */ (i == -tag) or (i == tag); }) 
-                 | std::views::transform([](tag_t i) -> bool { return i >= 0; })
-                 | std::ranges::to<std::vector>();
+        std::vector<bool> result;
+        for (const tag_t x : h)
+            if (tag == (x < 0 ? -x : x))
+                result.push_back(x >= 0);
+        return result;
+    }
+
+    template<typename CharT>
+    constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, tag_t tag) const
+    {
+        return std::ranges::contains(h, tag, [](auto x) { return x < 0 ? -x : x; });
     }
 
     template<typename CharT>
@@ -7973,17 +8317,26 @@ namespace rx::detail::tdfa
 
                 for (tag_t t{ 1 }; std::cmp_less_equal(t, tag_count_); ++t)
                 {
-                    auto h{ history(ce1.tag_seq, t) };
+                    if (has_history(ce1.tag_seq, t))
+                        continue;
 
-                    if (h.empty())
+                    const reg_t i{ ce1.registers.at(t - 1) };
+                    const reg_t j{ ce2.registers.at(t - 1) };
+
+                    const auto it{ map.lower_bound(i) };
+                    const auto jt{ rmap.lower_bound(j) };
+
+                    bool not_i_match{ it == map.end() or (*it).first != i };
+                    bool not_j_match{ jt == rmap.end() or (*jt).first != j };
+
+                    if (not_i_match and not_j_match)
                     {
-                        const reg_t i{ ce1.registers.at(t - 1) };
-                        const reg_t j{ ce2.registers.at(t - 1) };
-
-                        if (not map.contains(i) and not rmap.contains(j))
-                            map[i] = j, rmap[j] = i;
-                        else if (not (map.contains(i) and map.at(i) == j) or not (rmap.contains(j) and rmap.at(j) == i))
-                            return false;
+                        map.emplace_hint(it, i, j);
+                        rmap.emplace_hint(jt, j, i);
+                    }
+                    else if (not_i_match or not_j_match or (*it).second != j or (*jt).second != i)
+                    {
+                        return false;
                     }
                 }
             }
@@ -7995,15 +8348,18 @@ namespace rx::detail::tdfa
         {
             const auto i{ it->dst };
 
-            if (not map.contains(i))
+            const auto map_it{ map.find(i) };
+            const auto map_end{ map.end() };
+
+            if (map_it == map_end)
             {
                 /* skip mapping registers with history */
                 it = o_copy.erase(it);
                 continue;
             }
 
-            it->dst = map.at(i);
-            map.erase(i);
+            it->dst = (*map_it).second;
+            map.erase(map_it);
             ++it;
         }
 
@@ -8039,8 +8395,8 @@ namespace rx::detail::tdfa
 
             /* determine clobbered registers */
 
-            std::vector<bool> added(result.nodes_.size(), false);
-            std::vector<bool> clobbered(result.register_count_, false);
+            bitset_t added(result.nodes_.size(), false);
+            bitset_t clobbered(result.register_count_, false);
 
             std::vector<std::pair<std::size_t, std::size_t>> stack;
             stack.emplace_back(state, 0);
@@ -8082,7 +8438,7 @@ namespace rx::detail::tdfa
 
             for (const auto& f : final_ops)
             {
-                if (auto* cpy{ std::get_if<regop::copy>(&f.op) }; cpy != nullptr and clobbered.at(cpy->src))
+                if (auto* cpy{ get_if<regop::copy>(&f.op) }; cpy != nullptr and clobbered.at(cpy->src))
                     backup_regops(result, state, f.dst, cpy->src);
                 else
                     o.emplace_back(f);
@@ -8134,9 +8490,51 @@ namespace rx::detail::tdfa
     }
 
     template<typename CharT>
+    constexpr void factory<CharT>::factory_init()
+    {
+        static constexpr auto compose = [](const auto& g, const auto& f) {
+            return [=]<typename T>(T&& arg) {
+                return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
+            };
+        };
+
+        const std::size_t node_count{ tnfa_ptr_->node_count() };
+        epsilon_transitions_.resize(node_count);
+        normal_transitions_.resize(node_count);
+
+        for (std::size_t q{ 0 }; q < node_count; ++q)
+        {
+            auto& current_etr{ epsilon_transitions_.at(q) };
+            auto& current_tr{ normal_transitions_.at(q) };
+
+            for (const auto tr_idx : tnfa_ptr_->get_node(q).out_tr)
+            {
+                const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
+
+                if (const auto* const ptr{ get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
+                {
+                    current_tr.emplace_back(tr.dst, std::cref(ptr->cs));
+                }
+                else if (const auto* const ptr{ get_if<tnfa::epsilon_tr>(&tr.type) }; ptr != nullptr)
+                {
+                    current_etr.emplace_back(tr.dst, *ptr);
+                }
+                else
+                {
+                    throw tnfa_error("Input contains un-rewritten assertions");
+                }
+            }
+
+            std::ranges::sort(current_etr, std::ranges::greater{}, compose(&tnfa::epsilon_tr::priority, &epsilon_tr_t::second));
+        }
+    }
+
+    template<typename CharT>
     constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
         : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
     {
+        factory_init();
+
         result.register_count_ = tag_count_ * 2;
         result.final_registers_.resize(tag_count_);
         std::ranges::iota(result.final_registers_, tag_count_);
@@ -8196,63 +8594,128 @@ namespace rx::detail::tdfa
 
     constexpr bool toposort_regops(const regops_t::iterator beg, const regops_t::iterator end, const reg_t regcount)
     {
-        std::vector<std::size_t> indeg(regcount, 0);
+        static constexpr reg_t regop_threshold{ 64 };
 
-        for (auto it{ beg }; it != end; ++it)
+        if (regcount < regop_threshold) [[likely]]
         {
-            if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
-                ++indeg.at(copy->src);
-        }
+            std::vector<unsigned int> indeg(regcount, 0);
 
-        regops_t o_new;
-        regops_t o_copy{ beg, end };
-        bool cycle_detected{ false };
-
-        while (not o_copy.empty())
-        {
-            bool added{ false };
-
-            for (auto it{ o_copy.begin() }; it != o_copy.end();)
+            for (auto it{ beg }; it != end; ++it)
             {
-                if (indeg.at(it->dst) == 0)
-                {
-                    if (const auto* copy{ std::get_if<regop::copy>(&it->op) }; copy != nullptr)
-                        --indeg.at(copy->src);
-
-                    o_new.emplace_back(*it);
-                    it = o_copy.erase(it);
-                    added = true;
-                }
-                else
-                {
-                    ++it;
-                }
+                if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
+                    ++indeg.at(copy->src);
             }
 
-            if (not added and not o_copy.empty())
+            regops_t o_new;
+            regops_t o_copy{ beg, end };
+            bool cycle_detected{ false };
+
+            while (not o_copy.empty())
             {
-                for (const auto& oc : o_copy)
+                bool added{ false };
+
+                for (auto it{ o_copy.begin() }; it != o_copy.end();)
                 {
-                    /* ignore copying to self */
-                    if (const auto* copy{ std::get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                    if (indeg.at(it->dst) == 0)
                     {
-                        cycle_detected = true;
-                        break;
+                        if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
+                            --indeg.at(copy->src);
+
+                        o_new.emplace_back(*it);
+                        it = o_copy.erase(it);
+                        added = true;
+                    }
+                    else
+                    {
+                        ++it;
                     }
                 }
 
-                o_new.append_range(o_copy);
-                break;
+                if (not added and not o_copy.empty())
+                {
+                    for (const auto& oc : o_copy)
+                    {
+                        /* ignore copying to self */
+                        if (const auto* copy{ get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                        {
+                            cycle_detected = true;
+                            break;
+                        }
+                    }
+
+                    o_new.append_range(o_copy);
+                    break;
+                }
             }
+
+            if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
+                cycle_detected = true; /* unknown error */
+
+            if (not cycle_detected)
+                std::ranges::move(o_copy, beg);
+
+            return not cycle_detected;
         }
+        else
+        {
+            std::flat_map<reg_t, unsigned int> indeg;
 
-        if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
-            cycle_detected = true; /* unknown error */
+            for (auto it{ beg }; it != end; ++it)
+            {
+                if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
+                    ++indeg[copy->src];
+            }
 
-        if (not cycle_detected)
-            std::ranges::move(o_copy, beg);
+            regops_t o_new;
+            regops_t o_copy{ beg, end };
+            bool cycle_detected{ false };
 
-        return not cycle_detected;
+            while (not o_copy.empty())
+            {
+                bool added{ false };
+
+                for (auto it{ o_copy.begin() }; it != o_copy.end();)
+                {
+                    if (indeg[it->dst] == 0)
+                    {
+                        if (const auto* copy{ get_if<regop::copy>(&it->op) }; copy != nullptr)
+                            --indeg[copy->src];
+
+                        o_new.emplace_back(*it);
+                        it = o_copy.erase(it);
+                        added = true;
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+
+                if (not added and not o_copy.empty())
+                {
+                    for (const auto& oc : o_copy)
+                    {
+                        /* ignore copying to self */
+                        if (const auto* copy{ get_if<regop::copy>(&oc.op) }; copy != nullptr and copy->src != oc.dst)
+                        {
+                            cycle_detected = true;
+                            break;
+                        }
+                    }
+
+                    o_new.append_range(o_copy);
+                    break;
+                }
+            }
+
+            if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
+                cycle_detected = true; /* unknown error */
+
+            if (not cycle_detected)
+                std::ranges::move(o_copy, beg);
+
+            return not cycle_detected;
+        }
     }
 
     /* tdfa normalisation */
@@ -8272,18 +8735,18 @@ namespace rx::detail::tdfa
         for (auto it{ o.begin() }; it != o.end();)
         {
             auto local_end{ it + 1 };
-            if (std::holds_alternative<regop::set>(it->op))
+            if (holds_alternative<regop::set>(it->op))
             {
-                while (local_end != o.end() and std::holds_alternative<regop::set>(local_end->op))
+                while (local_end != o.end() and holds_alternative<regop::set>(local_end->op))
                     ++local_end;
 
                 local_end = dedup_regops(o, it, local_end);
                 std::ranges::sort(it, local_end, std::ranges::less{}, &regop::dst);
                 it = local_end;
             }
-            else if (std::holds_alternative<regop::copy>(it->op))
+            else if (holds_alternative<regop::copy>(it->op))
             {
-                while (local_end != o.end() and std::holds_alternative<regop::copy>(local_end->op))
+                while (local_end != o.end() and holds_alternative<regop::copy>(local_end->op))
                     ++local_end;
 
                 local_end = dedup_regops(o, it, local_end);
@@ -8312,8 +8775,7 @@ namespace rx::detail::tdfa
         [[nodiscard]] constexpr bool block_valid(std::size_t block_idx) const { return block_idx < data_.size(); }
 
     private:
-
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         std::vector<bitset_t> data_;
     };
@@ -8335,8 +8797,7 @@ namespace rx::detail::tdfa
         }
 
     private:
-
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         bitset_t data_;
         std::size_t reg_count_;
@@ -8347,8 +8808,7 @@ namespace rx::detail::tdfa
     {
     public:
         using tdfa_t = tagged_dfa<CharT>;
-
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         constexpr explicit opt(std::size_t i = 2) noexcept : iterations_{ i } {}
         constexpr void operator()(tdfa_t& dfa);
@@ -8401,12 +8861,13 @@ namespace rx::detail::tdfa
 
         /* calculate reachability matrix (initial reachability is added above) */
 
-        for (std::size_t i{ 0 }; i < reachable.side_length(); ++i)
+        const auto side_length{ reachable.side_length() };
+        for (std::size_t i{ 0 }; i < side_length; ++i)
             reachable[i, i] = true;
 
-        for (std::size_t k{ 0 }; k < reachable.side_length(); ++k)
-            for (std::size_t i{ 0 }; i < reachable.side_length(); ++i)
-                for (std::size_t j{ 0 }; j < reachable.side_length(); ++j)
+        for (std::size_t k{ 0 }; k < side_length; ++k)
+            for (std::size_t i{ 0 }; i < side_length; ++i)
+                for (std::size_t j{ 0 }; j < side_length; ++j)
                     if (not reachable[i, j])
                         reachable[i, j] = reachable[i, k] and reachable[k, j];
 
@@ -8448,7 +8909,7 @@ namespace rx::detail::tdfa
         {
             for (auto& op : block)
             {
-                if (auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                if (auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     visited.at(cpy->src) = true;
                 visited.at(op.dst) = true;
             }
@@ -8470,7 +8931,7 @@ namespace rx::detail::tdfa
             for (auto it{ std::ranges::begin(block) }; it != std::ranges::end(block);)
             {
                 it->dst = remap.at(it->dst);
-                if (auto* cpy{ std::get_if<regop::copy>(&it->op) }; cpy != nullptr)
+                if (auto* cpy{ get_if<regop::copy>(&it->op) }; cpy != nullptr)
                 {
                     cpy->src = remap.at(cpy->src);
 
@@ -8555,6 +9016,9 @@ namespace rx::detail::tdfa
             for (const reg_t final_reg : dfa.final_registers_)
                 liveness.at(fni.op_index, final_reg) = true;
 
+        bitset_t current_row_copy;
+        bitset_t successor_row_copy;
+
         for (bool loop{ true }; loop;)
         {
             loop = false;
@@ -8568,19 +9032,19 @@ namespace rx::detail::tdfa
 
                 const auto block_idx{ opt.value() };
 
-                bitset_t current_row_copy{ liveness.row(block_idx) };
+                current_row_copy = liveness.row(block_idx);
 
                 for (const std::size_t sblock_idx : block_graph_.at(block_idx))
                 {
-                    bitset_t successor_row_copy{ liveness.row(sblock_idx) };
+                    successor_row_copy = liveness.row(sblock_idx);
 
                     for (const auto& op : dfa.regops_.at(sblock_idx) | std::views::reverse) /* todo: in post order? */
                     {
-                        if (std::holds_alternative<regop::set>(op.op))
+                        if (holds_alternative<regop::set>(op.op))
                         {
                             successor_row_copy.at(op.dst) = false;
                         }
-                        else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                        else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         {
                             if (successor_row_copy.at(op.dst))
                             {
@@ -8594,11 +9058,10 @@ namespace rx::detail::tdfa
                         }
                     }
 
-                    for (std::size_t i{ 0 }; i < current_row_copy.size(); ++i)
-                        current_row_copy[i] = current_row_copy[i] or successor_row_copy[i];
+                    current_row_copy |= successor_row_copy;
                 }
 
-                if (not std::ranges::equal(current_row_copy, liveness.row(block_idx)))
+                if (current_row_copy != liveness.row(block_idx))
                 {
                     liveness.row(block_idx) = std::move(current_row_copy);
                     loop = true;
@@ -8606,13 +9069,14 @@ namespace rx::detail::tdfa
             }
         }
 
+        bitset_t current_row(reg_count, false);
+        bitset_t added(dfa.nodes_.size(), false);
+
         for (const auto [fallback_state, fbni] : dfa.fallback_nodes_)
         {
-            bitset_t current_row;
-
             if (fbni.op_index == no_transition_regops)
             {
-                current_row = bitset_t(reg_count, false);
+                current_row.reset();
 
                 for (const std::size_t final_reg : dfa.final_registers_)
                     current_row.at(final_reg) = true;
@@ -8628,13 +9092,13 @@ namespace rx::detail::tdfa
                     current_row.at(op.dst) = false;
 
                 for (const auto& op : dfa.regops_.at(fbni.op_index))
-                    if (auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                    if (auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         current_row.at(cpy->src) = false;
             }
 
             /* traverse nodes that can possibly fallback to fallback_state */
 
-            bitset_t added(dfa.nodes_.size(), false);
+            added.reset();
             std::vector<std::pair<std::size_t, std::size_t>> stack;
             stack.emplace_back(fallback_state, 0);
             added.at(fallback_state) = true;
@@ -8655,8 +9119,7 @@ namespace rx::detail::tdfa
                     *       not a total function, making a fallback possible from every non-final state */
 
                     if (liveness.block_valid(tr.op_index))
-                        for (std::size_t j{ 0 }; j < block_count; ++j)
-                            liveness[tr.op_index, j] = liveness[tr.op_index, j] or current_row[j];
+                        liveness.row(tr.op_index) |= current_row;
 
                     ++i;
                     if (not added.at(tr.next))
@@ -8685,9 +9148,9 @@ namespace rx::detail::tdfa
 
                 if (current_row_copy.at(op.dst))
                 {
-                    if (std::holds_alternative<regop::set>(op.op))
+                    if (holds_alternative<regop::set>(op.op))
                         current_row_copy.at(op.dst) = false;
-                    else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                    else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                         current_row_copy.at(op.dst) = false, current_row_copy.at(cpy->src) = true;
                     else
                         std::unreachable();
@@ -8707,19 +9170,19 @@ namespace rx::detail::tdfa
         square_matrix overlapping_lifetimes(dfa.register_count_);
         std::vector<std::optional<regop::op_t>> histories(dfa.register_count_);
 
-        for (std::size_t block_idx{ 0 }; block_idx < dfa.regops_.size(); ++block_idx)
+        for (std::size_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
         {
             const auto& block{ dfa.regops_.at(block_idx) };
 
             for (const auto& op : block)
-                if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     histories.at(cpy->src) = op.op;
 
             for (const auto& op : block)
             {
-                if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+                if (const auto* set{ get_if<regop::set>(&op.op) }; set != nullptr)
                     histories.at(op.dst) = op.op;
-                else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     histories.at(op.dst) = histories.at(cpy->src);
                 else
                     std::unreachable();
@@ -8729,9 +9192,9 @@ namespace rx::detail::tdfa
             {
                 bitset_t current_row_copy{ liveness.row(block_idx) };
 
-                if (const auto* set{ std::get_if<regop::set>(&op.op) }; set != nullptr)
+                if (const auto* set{ get_if<regop::set>(&op.op) }; set != nullptr)
                     current_row_copy.at(op.dst) = false;
-                else if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr)
+                else if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr)
                     current_row_copy.at(op.dst) = false, current_row_copy.at(cpy->src) = false;
                 else
                     std::unreachable();
@@ -8762,7 +9225,7 @@ namespace rx::detail::tdfa
         {
             for (const auto& op : block)
             {
-                if (const auto* cpy{ std::get_if<regop::copy>(&op.op) }; cpy != nullptr and op.dst != cpy->src)
+                if (const auto* cpy{ get_if<regop::copy>(&op.op) }; cpy != nullptr and op.dst != cpy->src)
                 {
                     reg_t x{ representative_map.at(op.dst) };
                     reg_t y{ representative_map.at(cpy->src) };
@@ -8937,7 +9400,9 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::optimise_registers()
     {
-        std::invoke(tdfa::opt<char_type>{}, *this);
+        tdfa::opt<char_type> regoptimise;
+        regoptimise(*this);
+        compact_regop_blocks();
     }
 }
 
@@ -8951,50 +9416,16 @@ namespace rx::detail::tdfa
         using tdfa_t = tagged_dfa<CharT>;
 
         static constexpr void operator()(tdfa_t& dfa);
-        static constexpr void compact_regop_blocks(tdfa_t& dfa);
         static constexpr std::vector<std::vector<std::size_t>> dry_run(const tdfa_t& dfa);
 
     private:
-
-        using bitset_t = std::vector<bool>;
+        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         using partition_t = std::vector<bitset_t>;
 
         static constexpr partition_t init_hopcroft_partition(const tdfa_t& dfa);
         static constexpr partition_t hopcroft(const tdfa_t& dfa);
     };
-
-    template<typename CharT>
-    constexpr void min<CharT>::compact_regop_blocks(tdfa_t& dfa)
-    {
-        std::vector<std::size_t> regop_block_map(dfa.regops_.size());
-        std::flat_map<regops_t, std::size_t> regop_map;
-        typename tdfa_t::regop_data_t new_regops;
-
-        for (std::size_t i{ 0 }; i < dfa.regops_.size(); ++i)
-        {
-            auto [it, inserted]{ regop_map.try_emplace(dfa.regops_[i], new_regops.size()) };
-
-            if (inserted)
-                new_regops.emplace_back(dfa.regops_[i]);
-
-            regop_block_map[i] = it->second;
-        }
-
-        /* remap regop block indicies in dfa */
-
-        for (auto& node : dfa.nodes_)
-            for (auto& tr : node.tr)
-                tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : no_transition_regops;
-
-        for (auto it{ dfa.final_nodes_.begin() }, last{ dfa.final_nodes_.end() }; it != last; ++it)
-            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : no_transition_regops;
-
-        for (auto it{ dfa.fallback_nodes_.begin() }, last{ dfa.fallback_nodes_.end() }; it != last; ++it)
-            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : no_transition_regops;
-
-        dfa.regops_ = std::move(new_regops);
-    }
 
     template<typename CharT>
     constexpr auto min<CharT>::init_hopcroft_partition(const tdfa_t& dfa) -> partition_t
@@ -9071,17 +9502,11 @@ namespace rx::detail::tdfa
 
                     for (std::size_t p{ 0 }; p < partitions.size(); ++p)
                     {
-                        bitset_t intersection(bitset_size, false);
-                        bitset_t rel_complement(bitset_size, false);
+                        bitset_t intersection{ partitions[p] & transitions_from };
+                        bitset_t rel_complement{ partitions[p] - transitions_from };
 
-                        for (std::size_t i{ 0 }; i < bitset_size; ++i)
-                        {
-                            intersection[i] = partitions[p][i] and transitions_from[i];
-                            rel_complement[i] = partitions[p][i] and not transitions_from[i];
-                        }
-
-                        const auto i_count{ std::ranges::count(intersection, true) };
-                        const auto c_count{ std::ranges::count(rel_complement, true) };
+                        const auto i_count{ intersection.count() };
+                        const auto c_count{ rel_complement.count() };
 
                         using gt = std::ranges::greater;
 
@@ -9130,7 +9555,6 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr void min<CharT>::operator()(tdfa_t& dfa)
     {
-        compact_regop_blocks(dfa);
         const partition_t partitions{ hopcroft(dfa) };
 
         /* create map for node remapping */
@@ -9206,14 +9630,49 @@ namespace rx::detail::tdfa
 namespace rx::detail
 {
     template<typename CharT>
+    constexpr void tagged_dfa<CharT>::compact_regop_blocks()
+    {
+        std::vector<std::size_t> regop_block_map(regops_.size());
+        std::flat_map<tdfa::regops_t, std::size_t> regop_map;
+        regop_data_t new_regops;
+
+        for (std::size_t i{ 0 }; i < regops_.size(); ++i)
+        {
+            auto [it, inserted]{ regop_map.try_emplace(regops_[i], new_regops.size()) };
+
+            if (inserted)
+                new_regops.emplace_back(regops_[i]);
+
+            regop_block_map[i] = it->second;
+        }
+
+        /* remap regop block indicies in dfa */
+
+        for (auto& node : nodes_)
+            for (auto& tr : node.tr)
+                tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : tdfa::no_transition_regops;
+
+        for (auto it{ final_nodes_.begin() }, last{ final_nodes_.end() }; it != last; ++it)
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
+
+        for (auto it{ fallback_nodes_.begin() }, last{ fallback_nodes_.end() }; it != last; ++it)
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
+
+        regops_ = std::move(new_regops);
+    }
+
+    template<typename CharT>
     constexpr void tagged_dfa<CharT>::minimise_states()
     {
-        std::invoke(tdfa::min<char_type>{}, *this);
+        tdfa::min<char_type> minimise{};
+        minimise(*this);
     }
 
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::minimise_transition_edges()
     {
+        /* mutually exclusive with make_default_transitions */
+
         /* Note: this function relaxes the requirement for a character to appear at most once in any
                  transition edge, and requires the transitions to be checked in the provided order */
 
@@ -9232,10 +9691,10 @@ namespace rx::detail
             std::vector scored_pairs{
                 std::from_range, 
                 std::views::zip(std::views::iota(0uz), node.tr | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
-                | std::views::filter([largest_index](const auto& x) { return std::get<0>(x) != largest_index; })
+                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
             };
 
-            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return std::get<1>(x); });
+            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
             scored_pairs.emplace_back(largest_index, 0 /* unimportant */);
 
             std::vector<tr_type> new_tr;
@@ -9284,6 +9743,8 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::make_default_transitions()
     {
+        /* mutually exclusive with minimise_transition_edges */
+
         using tr_type = tdfa::transition<char_type>;
 
         for (auto& node : nodes_)
@@ -9292,7 +9753,7 @@ namespace rx::detail
                 continue;
 
             const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
-            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(sizes.begin(), std::ranges::max_element(sizes))) };
 
             auto& largest{ node.tr[largest_index] };
             tdfa::charset_t<char_type> largest_cs{ largest.cs };
@@ -9324,8 +9785,8 @@ namespace rx::detail
         std::vector keys{ std::from_range, nodes_ | std::views::transform([](const node_type& n) { return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr); }) };
         std::vector values{ std::from_range, std::views::iota(0uz, nodes_.size()) };
 
-        static constexpr auto value_proj = [](const auto& v) -> decltype(auto) { return std::get<0>(v); }; 
-        std::ranges::sort(std::views::zip(keys, values), {}, value_proj); 
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; 
+        std::ranges::sort(std::views::zip(keys, values), {}, key_proj); 
 
         data_t new_nodes{};
         new_nodes.reserve(nodes_.size());
@@ -9345,7 +9806,7 @@ namespace rx::detail
             {
                 const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
 
-                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, value_proj) }; fst != snd; ++fst)  
+                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, key_proj) }; fst != snd; ++fst)  
                 {
                     auto [_, index]{ *fst };
 
@@ -9380,6 +9841,19 @@ namespace rx::detail
 
         nodes_ = std::move(new_nodes);
     }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::de_default_edges()
+    {
+        for (auto& node : nodes_)
+        {
+            if (node.default_tr.has_value())
+            {
+                node.tr.emplace_back(node.default_tr->next, node.default_tr->op_index, ~(tdfa::charset_t<char_type>{}));
+                node.default_tr.reset();
+            }
+        }
+    }
 }
 
 namespace rx::detail
@@ -9388,32 +9862,22 @@ namespace rx::detail
     {
         explicit consteval final_capture_info(const capture_info& ci)
         {
-            using namespace std::placeholders;
-
             std::vector<capture_info::tag_pair_t> captures_tmp;
-            std::vector<capture_info::tag_pair_t> overflow_tmp;
 
             for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
             {
                 const auto range{ ci.lookup(i) };
 
-                if (std::ranges::size(range) == 1)
-                {
-                    captures_tmp.emplace_back(*std::ranges::begin(range));
-                }
-                else
-                {
-                    const auto begin{ std::saturate_cast<int>(overflow_tmp.size()) };
-                    overflow_tmp.append_range(range);
-                    const auto end{ std::saturate_cast<int>(overflow_tmp.size()) };
-                    captures_tmp.emplace_back(capture_info::pair_entry{ .tag_number = end_of_input_tag, .offset = begin },
-                                              capture_info::pair_entry{ .tag_number = start_of_input_tag, .offset = end });
-                }
+                if (std::ranges::size(range) != 1)
+                    throw tree_error("Capture info contains branch reset");
+
+                captures_tmp.emplace_back(*std::ranges::begin(range));
             }
 
             captures = static_span{ captures_tmp };
-            overflow = static_span{ overflow_tmp };
         }
+
+        consteval final_capture_info() = default;
 
         [[nodiscard]] consteval std::size_t capture_count() const noexcept
         {
@@ -9422,22 +9886,16 @@ namespace rx::detail
 
         [[nodiscard]] consteval bool has_match_start() const
         {
-            for (const auto& [fst, snd] : captures)
-            {
-                if (fst.tag_number == end_of_input_tag and snd.tag_number == start_of_input_tag)
-                    continue;
-                if (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag)
-                    return true;
-            }
+            static constexpr auto pred = [](const capture_info::tag_pair_t& pair) {
+                const auto& [fst, snd]{ pair };
+                return (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag);
+            };
 
-            return std::ranges::any_of(overflow, [](const capture_info::tag_pair_t& p) {
-                return p.first.tag_number == start_of_input_tag or p.second.tag_number == start_of_input_tag;
-            });
+            return std::ranges::any_of(captures, pred);
         }
 
         /* data members (public so that final_capture_info is structural) */
-        static_span<capture_info::tag_pair_t> captures; /* use invalid tag pairs to point towards overflow being used */
-        static_span<capture_info::tag_pair_t> overflow;
+        static_span<capture_info::tag_pair_t> captures;
     };
 
     struct static_match_result_info
@@ -9475,6 +9933,11 @@ namespace rx::detail
             return static_transition{ tr.next, tr.op_index, static_span{ tr.cs.get_intervals() } };
         }
 
+        static consteval auto make_static_outer_transition(const std::pair<std::size_t, tnfa::charset_t<char_type>>& otr)
+        {
+            return static_transition{ otr.first, tdfa::no_transition_regops, static_span{ otr.second.get_intervals() } };
+        }
+
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)
         {
             return static_span{ n.tr | std::views::transform(make_static_transition) };
@@ -9484,9 +9947,9 @@ namespace rx::detail
         {
             return static_span{ o | std::views::transform(
                 [](const tdfa::regop& op) consteval -> register_operation {
-                    if (const auto* set{ std::get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
+                    if (const auto* set{ get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
                         return { .dst = op.dst, .cpy_src = 0, .set_val = set->val, .is_copy = false };
-                    else if (const auto* cpy{ std::get_if<tdfa::regop::copy>(&op.op) }; cpy != nullptr)
+                    else if (const auto* cpy{ get_if<tdfa::regop::copy>(&op.op) }; cpy != nullptr)
                         return { .dst = op.dst, .cpy_src = cpy->src, .set_val = false, .is_copy = true };
                     else
                         std::unreachable();
@@ -9494,30 +9957,90 @@ namespace rx::detail
             };
         }
 
-        static consteval auto make_default_transitions(const std::vector<tdfa::node<char_type>>& ns)
+        static consteval auto make_continue_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
         {
-            std::flat_map<std::size_t, tdfa::default_transition> result;
-            for (std::size_t i{ 0 }; i < ns.size(); ++i)
-                if (const auto& n{ ns[i] }; n.default_tr.has_value())
-                    result.emplace_hint(result.end(), i, *n.default_tr);
-            return result;
+            /* adapted from tagged_dfa::minimise_transition_edges */
+            using tr_type = std::pair<std::size_t, tdfa::charset_t<char_type>>;
+
+            std::vector<tr_type> vec;
+
+            for (const auto& [nfa_cont, dfa_cont] : std::views::zip(nfa.get_cont_info(), dfa.continue_nodes()))
+                vec.emplace_back(dfa_cont, std::cref(nfa_cont.cs));
+
+            if (not vec.empty())
+            {
+                std::vector scored_pairs{
+                    std::from_range, 
+                    std::views::zip(std::views::iota(0uz), vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
+                };
+
+                std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
+
+                std::vector<tr_type> new_tr;
+                std::vector<tdfa::charset_t<char_type>> dont_cares;
+                tdfa::charset_t<char_type> acc;
+
+                for (const auto [i, _] : scored_pairs)
+                {
+                    auto& tr{ vec.at(i) };
+                    dont_cares.emplace_back(acc);
+                    acc |= tr.second;
+                    new_tr.emplace_back(std::move(tr));
+                }
+
+                if (acc.full())
+                {
+                    new_tr.back().second = std::move(acc);
+                    dont_cares.back() = tdfa::charset_t<char_type>{};
+                }
+
+                /* fill gaps where possible */
+
+                for (const auto& [tr_ref, dont_cares] : std::views::zip(std::ranges::ref_view(new_tr), dont_cares))
+                {
+                    tr_type& tr{ tr_ref };
+
+                    if (dont_cares.empty())
+                        continue;
+
+                    using interval_t = tdfa::charset_t<char_type>::char_interval;
+                    std::vector<interval_t> to_insert;
+
+                    std::ranges::set_intersection((~tr.second).get_intervals(), dont_cares.get_intervals(), std::back_inserter(to_insert));
+
+                    for (const auto [beg, end] : to_insert)
+                    {
+                        if (beg == end)
+                            tr.second.insert(beg);
+                        else
+                            tr.second.insert(beg, end);
+                    }
+                }
+
+                vec = std::move(new_tr);
+            }
+
+            return static_span{ vec | std::views::transform(make_static_outer_transition) };
         }
 
     public:
-        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa)
+        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
             : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
               regops{ dfa.regops_ | std::views::transform(make_register_operations) },
               continue_nodes{ dfa.continue_nodes() },
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
-              default_transitions{ make_default_transitions(dfa.nodes_) },
               final_registers{ dfa.final_registers() },
               register_count{ dfa.reg_count() },
               match_start{ dfa.match_start },
-              captures{ dfa.get_capture_info() } {}
+              captures{ dfa.get_capture_info() },
+              outer_transitions{ make_continue_info(dfa, nfa) } {}
 
-        consteval static_match_result_info make_match_result_info(bool has_continue) const
+        [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
         {
+            if (has_continue and continue_nodes.size() == 1 and continue_nodes[0] == match_start)
+                has_continue = false;
+
             return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue };
         }
 
@@ -9527,16 +10050,17 @@ namespace rx::detail
         static_span<std::size_t> continue_nodes;
         static_map<std::size_t, tdfa::final_node_info> final_nodes;
         static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
-        static_map<std::size_t, tdfa::default_transition> default_transitions;
         static_span<tdfa::reg_t> final_registers;
 
         std::size_t register_count{ 0 };
         std::size_t match_start{ 0 };
         final_capture_info captures;
+
+        static_span<static_transition<char_type>> outer_transitions;
     };
 
-    template<typename CharT, std::size_t N>
-    consteval tdfa_info<CharT> compile_pattern(string_literal<CharT, N> pattern, fsm_flags f)
+    template<typename CharT>
+    consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern, fsm_flags f)
     {
         /* set parser flags as appropriate */
         parser_flags p{};
@@ -9544,7 +10068,7 @@ namespace rx::detail
         if (f.return_bool) p.enable_start_tag = false;
 
         /* parse pattern string into tree */
-        expr_tree ast{ pattern.view(), p };
+        expr_tree ast{ pattern, p };
         if (f.is_search) ast.insert_search_prefix();
         ast.optimise_tags();
 
@@ -9559,14 +10083,15 @@ namespace rx::detail
         /* optimise transition edges and their order to produce fewest comparisons */
         /* (if using tables, do `dfa.make_default_tr_if_possible()` instead) */
         dfa.minimise_transition_edges();
+        dfa.de_default_edges();
 
-        return tdfa_info{ dfa };
+        return tdfa_info{ dfa, nfa };
     }
 
     template<string_literal Pattern, fsm_flags Flags>
     struct compiled_dfa
     {
-        static constexpr auto value{ compile_pattern(Pattern, Flags) };
+        static constexpr auto value{ compile_pattern(Pattern.view(), Flags) };
     };
 }
 
@@ -9574,6 +10099,12 @@ namespace rx::detail
 {
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306_matcher;
+
+    template<string_literal Pattern, fsm_flags Flags>
+    struct p1306_searcher;
+
+    template<rx::string_literal Pattern>
+    struct p1306_naive_impl;
 }
 
 namespace rx
@@ -9602,8 +10133,6 @@ namespace rx
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
-            if constexpr (has_enabled)
-                enabled_.fill(false);
         }
 
         /* observers */
@@ -9696,47 +10225,19 @@ namespace rx
         requires (N < submatch_count)
         [[nodiscard]] constexpr submatch_type get() const noexcept
         {
-            using namespace detail;
-
-            static constexpr auto current{ Captures.fci.captures[N] };
-
-            if (not this->has_value())
-                return {};
-
-            if constexpr (current.first.tag_number == end_of_input_tag and current.second.tag_number == start_of_input_tag)
-            {
-
-                throw std::logic_error("Branch reset not implemented");
-            }
-            else
-            {
-                if constexpr (current.first.tag_number == current.second.tag_number)
-                {
-                    if (this->tag_enabled<current.first.tag_number>())
-                    {
-                        return factory::make_submatch(
-                            std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                            std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
-                        );
-                    }
-                }
-                else
-                {
-                    if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
-                    {
-                        return factory::make_submatch(
-                            std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                            std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
-                        );
-                    }
-                }
-            }
-
+            if (this->has_value())
+                return this->force_get<N>();
             return {};
         }
 
         template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
         friend struct detail::p1306_matcher;
+
+        template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
+        friend struct detail::p1306_searcher;
+
+        template<rx::string_literal Pattern>
+        friend struct detail::p1306_naive_impl;
 
         template<std::ranges::bidirectional_range V, typename Regex>
         requires std::ranges::view<V>
@@ -9749,14 +10250,21 @@ namespace rx
         static constexpr bool has_success{ not std::contiguous_iterator<I> };
         static constexpr bool has_enabled{ has_registers and has_success };
         static constexpr bool has_match_start{ Captures.fci.has_match_start() };
+        static constexpr bool has_continue{ Captures.has_continue };
 
         explicit constexpr static_regex_match_result(I start)
-            : match_start_{ start }
+            : match_start_{ std::move(start) }
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
-            if constexpr (has_enabled)
-                enabled_.fill(false);
+        }
+
+        constexpr void clear_match()
+        {
+            if constexpr (std::contiguous_iterator<I>)
+                match_end_ = I{};
+            else
+                match_success_ = false;
         }
 
         template<detail::tag_number_t N>
@@ -9781,6 +10289,36 @@ namespace rx
                 return reg_[Captures.final_registers[N]];
         }
 
+        template<size_type N>
+        requires (N < submatch_count)
+        [[nodiscard]] constexpr submatch_type force_get() const noexcept
+        {
+            static constexpr auto current{ Captures.fci.captures[N] };
+
+            if constexpr (current.first.tag_number == current.second.tag_number)
+            {
+                if (this->tag_enabled<current.first.tag_number>())
+                {
+                    return factory::make_submatch(
+                        std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                        std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                    );
+                }
+            }
+            else
+            {
+                if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
+                {
+                    return factory::make_submatch(
+                        std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
+                        std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                    );
+                }
+            }
+
+            return {};
+        }
+
         constexpr void range_check(size_type n) const
         {
             if (n >= this->size())
@@ -9792,10 +10330,10 @@ namespace rx
         using registers_type   = detail::maybe_type_t<has_registers, std::array<I, Captures.register_count>>;
         using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, Captures.register_count>>;
         using match_start_type = detail::maybe_type_t<has_match_start, I>;
-        using continue_type    = detail::maybe_type_t<Captures.has_continue, detail::tdfa::continue_at_t>;
+        using continue_type    = detail::maybe_type_t<has_continue, detail::tdfa::continue_at_t>;
         using success_type     = detail::maybe_type_t<has_success, bool>;
 
-        [[no_unique_address]] registers_type reg_{};
+        [[no_unique_address]] registers_type reg_;
         [[no_unique_address]] match_start_type match_start_{};
         I match_end_{};
         [[no_unique_address]] enabled_type enabled_{};
@@ -9822,7 +10360,7 @@ namespace rx
 
         proxy_iterator() = default;
 
-        constexpr proxy_iterator(const static_regex_match_result* ptr, std::size_t pos)
+        constexpr proxy_iterator(const static_regex_match_result* ptr, size_type pos)
             : ptr_{ ptr }, pos_{ pos } {}
 
         constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) requires Const
@@ -9902,7 +10440,7 @@ namespace rx
 
     private:
         const static_regex_match_result* ptr_{ nullptr };
-        std::size_t pos_{ 0 };
+        size_type pos_{ 0 };
     };
 }
 
@@ -9921,38 +10459,962 @@ struct std::tuple_element<N, rx::static_regex_match_result<Iter, Captures>>
 
 namespace rx::detail
 {
-    /* p1306 matcher implementation */
-
-    template<typename CharT, CharT Lower, CharT Upper>
-    [[gnu::always_inline]] constexpr bool tr_possible_interval_impl(CharT c)
+    template<typename CharT>
+    struct tree_info
     {
-        if constexpr (Lower == Upper)
-            return (c == Lower);
-        else
-            return (Lower <= c and c <= Upper);
-    }
+        using old_type = expr_tree<CharT>::type;
 
-    template<typename CharT, std::pair<CharT, CharT>... Intervals>
-    [[gnu::always_inline]] constexpr bool tr_possible_impl(CharT c)
-    {
-        return (tr_possible_interval_impl<CharT, Intervals.first, Intervals.second>(c) or ...);
-    }
+        struct transition
+        {
+            static constexpr bool is_narrow{ std::same_as<CharT, char> };
+            using underlying_char_type = std::conditional_t<is_narrow, char, char32_t>;
+
+            consteval explicit(false) transition(const char_class_impl<is_narrow>& cci)
+                : cs{ cci.intervals() } {}
+
+            static_span<std::pair<underlying_char_type, underlying_char_type>> cs;
+        };
+
+        template<typename U>
+        struct nttp_of;
+
+        consteval
+        {
+            for (const auto expr_type : template_arguments_of(dealias(^^old_type)))
+            {
+                if (is_aggregate_type(expr_type) and is_trivially_copyable_type(expr_type))
+                    continue;
+
+                auto spec{ nonstatic_data_members_of(expr_type, std::meta::access_context::current()) };
+
+                for (auto& info : spec)
+                {
+                    std::meta::data_member_options options{ .name = identifier_of(info) };
+                    const auto type{ type_of(info) };
+
+                    if (has_template_arguments(type) and (template_of(type) == ^^std::vector or template_of(type) == ^^std::basic_string))
+                        info = data_member_spec(substitute(^^static_span, { template_arguments_of(type)[0] }), options);
+                    else if (has_template_arguments(type) and template_of(type) == ^^char_class_impl)
+                        info = data_member_spec(^^transition, options);
+                    else if (is_integral_type(type) or is_enum_type(type) or (is_aggregate_type(type) and is_trivially_copyable_type(type)))
+                        info = data_member_spec(type, options);
+                    else
+                        throw regex_error("unsupported variant type ");
+                }
+
+                define_aggregate(substitute(^^nttp_of, { dealias(expr_type) }), spec);
+            }
+        }
+
+        struct type
+        {
+            struct empty {};
+
+            union value_t;
+
+            consteval
+            {
+                auto mems{ template_arguments_of(dealias(^^old_type)) };
+                for (auto& member : mems)
+                {
+                    std::string_view name;
+
+                    if (has_template_arguments(dealias(member)))
+                        name = display_string_of(template_of(dealias(member)));
+                    else
+                        name = display_string_of(member);
+
+                    member = dealias(member);
+
+                    if (not (is_aggregate_type(member) and is_trivially_copyable_type(member)))
+                        member = substitute(^^nttp_of, { member });
+
+                    member = data_member_spec(member, { .name = name });
+                }
+                define_aggregate(^^value_t, mems);
+            }
+
+            static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^value_t, std::meta::access_context::unchecked())) };
+
+            using index_t = unsigned char;
+
+            value_t value;
+            index_t index;
+        };
+
+    private:
+        static consteval type to_static_expression(const old_type& expr)
+        {
+            constexpr auto original_type{ dealias(^^old_type) };
+
+            /* splicing designated initializers is unsupported in C++26; if it was, we could do something like this: */
+
+            /* we do this instead as a temporary workaround */
+
+            using index_t = type::index_t;
+
+            return expr.visit(overloads{
+                [](const typename expr_tree<CharT>::assertion& e) -> type
+                {
+                    const auto& [...mems]{ e };
+                    return { .value{ .assertion{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
+                },
+                [](const typename expr_tree<CharT>::char_str& e) -> type
+                {
+                     const auto& [...mems]{ e };
+                     return { .value{ .char_str{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
+                },
+                [](const typename expr_tree<CharT>::char_class& e) -> type
+                {
+                     const auto& [...mems]{ e };
+                     return { .value{ .char_class{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
+                },
+                [](const typename expr_tree<CharT>::backref& e) -> type
+                {
+                    const auto& [...mems]{ e };
+                    return { .value{ .backref{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
+                },
+                [](const typename expr_tree<CharT>::alt& e) -> type
+                {
+                    const auto& [...mems]{ e };
+                    return { .value{ .alt{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
+                },
+                [](const typename expr_tree<CharT>::concat& e) -> type
+                {
+                    const auto& [...mems]{ e };
+                    return { .value{ .concat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, ^^old_type)) };
+                },
+                [](const typename expr_tree<CharT>::tag& e) -> type
+                {
+                    const auto& [...mems]{ e };
+                    return { .value{ .tag{  mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
+
+                },
+                [](const typename expr_tree<CharT>::repeat& e) -> type
+                {
+                    const auto& [...mems]{ e };
+                    return { .value{ .repeat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
+                }
+
+            });
+        }
+
+    public:
+        consteval tree_info(const expr_tree<CharT>& ast, const capture_info::staging_info_t& tag_info)
+            : root_idx{ ast.root_idx() },
+              tag_count{ ast.tag_count() },
+              exprs{ ast.get_all_exprs() | std::views::transform(to_static_expression) },
+              staging{ tag_info },
+              fci{ ast.get_capture_info() } {}
+
+        [[nodiscard]] consteval static_match_result_info make_match_result_info() const
+        {
+            static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
+            return { .fci = fci, .final_registers = regs, .register_count = tag_count, .has_continue = false };
+        }
+
+        std::size_t root_idx;
+        std::size_t tag_count;
+        static_span<type> exprs;
+        static_map<tag_number_t, tag_number_t> staging;
+
+        final_capture_info fci;
+    };
 
     template<typename CharT>
-    consteval auto tr_possible_make_refl(static_transition<CharT> tr)
+    consteval tree_info<CharT> parse_pattern(std::basic_string_view<CharT> pattern)
     {
-        std::vector<std::meta::info> result{ ^^CharT };
-        result.reserve(1 + tr.cs.size());
-        for (const auto& pair : tr.cs)
-            result.emplace_back(std::meta::reflect_constant(pair));
-        return result;
+        /* set parser flags as appropriate */
+        parser_flags p{
+            .enable_possessive = true,
+            .enable_backrefs = true,
+            .enable_branchreset = true
+        };
+
+        /* parse pattern string into tree */
+        expr_tree ast{ pattern, p };
+        ast.simplify_counted_repeat();
+        ast.optimise_exact_repeat();
+        auto tag_info{ ast.tag_to_register() };
+
+        return tree_info{ ast, tag_info };
     }
 
+    template<static_span Intervals, typename CharT>
+    [[gnu::always_inline]] constexpr bool cs_possible(CharT c)
+    {
+
+        template for (constexpr auto pair : Intervals)
+        {
+            if (pair.first <= c and c <= pair.second)
+                return true;
+        }
+
+        return false;
+    }
+
+    template<string_literal Pattern>
+    struct p1306_naive_impl
+    {
+        using char_type = decltype(Pattern)::char_type;
+
+    private:
+        using ast_t = expr_tree<char_type>;
+        using info_t = tree_info<char_type>;
+
+        template<typename T>
+        static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^typename expr_tree<char_type>::type) };
+
+        static constexpr info_t ast{ parse_pattern(Pattern.view()) };
+
+        static constexpr std::size_t require_full_match{ std::numeric_limits<std::size_t>::max() };
+
+        template<typename I>
+        using result = static_regex_match_result<I, ast.make_match_result_info()>;
+
+        template<typename I>
+        struct result_helper
+        {
+            std::array<I, ast.staging.size()> reg;
+        };
+
+        template<typename I>
+        using staging_info = maybe_type_t<not ast.staging.empty(), result_helper<I>>;
+
+        static consteval std::size_t get_staging_index(tag_number_t tagnum)
+        {
+            return static_cast<std::size_t>(std::ranges::distance(ast.staging.begin(), ast.staging.find(tagnum)));
+        }
+
+        template<typename I>
+        [[gnu::always_inline]] static constexpr void apply_final_staging_info(result<I>& res, staging_info<I>& si)
+        {
+            if constexpr (not ast.staging.empty())
+            {
+                static constexpr auto staged = [] consteval {
+                    std::vector<tag_number_t> vec;
+                    for (const auto& [k, v] : ast.staging)
+                        if (v == end_of_input_tag)
+                            vec.emplace_back(k);
+                    std::ranges::sort(vec);
+                    auto [it, _]{ std::ranges::unique(vec) };
+                    vec.erase(it, vec.end());
+                    return std::define_static_array(vec);
+                }();
+
+                template for (constexpr auto tagnum : staged)
+                    res.reg_[tagnum] = si.reg[get_staging_index(tagnum)];
+
+                if constexpr (not std::contiguous_iterator<I>)
+                    template for (constexpr auto tagnum : staged)
+                        res.enabled_[tagnum] = true;
+            }
+        }
+
+        template<bool Fwd, std::size_t... Ints>
+        struct state {};
+
+        template<bool Fwd>
+        struct state<Fwd>
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, staging_info<I>& /* si */, const I /* first */, const S /* last */, I& /* it */)
+            {
+                return true;
+            }
+        };
+
+        template<bool Fwd>
+        struct state<Fwd, require_full_match>
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, staging_info<I>& /* si */, const I /* first */, const S last, I& it)
+            {
+                return (it == last);
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_str>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto str{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_str>] :] };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            {
+                if constexpr (Fwd)
+                {
+                    if constexpr (std::random_access_iterator<I> and std::sized_sentinel_for<S, I>)
+                    {
+                        if (static_cast<std::size_t>(std::ranges::distance(it, last)) < str.data.size())
+                            return false;
+
+                        int mismatch{ false };  /* encourage vectorisation */
+                        for (std::size_t i{ 0 }; i < str.data.size(); ++i)
+                            mismatch |= (it[i] != str.data[i]);
+
+                        if (mismatch)
+                            return false;
+
+                        std::ranges::advance(it, static_cast<std::ptrdiff_t>(str.data.size()));
+                    }
+                    else
+                    {
+                        template for (constexpr char_type c : str.data)
+                        {
+                            if (it == last or *it != c)
+                                return false;
+
+                            ++it;
+                        }
+                    }
+                }
+                else
+                {
+                    if constexpr (std::random_access_iterator<I> and std::sized_sentinel_for<S, I>)
+                    {
+                        if (static_cast<std::size_t>(std::ranges::distance(first, it)) < str.data.size())
+                            return false;
+
+                        std::ranges::advance(it, -static_cast<std::ptrdiff_t>(str.data.size()));
+
+                        int mismatch{ false };  /* encourage vectorisation */
+                        for (std::size_t i{ 0 }; i < str.data.size(); ++i)
+                            mismatch |= (it[i] != str.data[i]);
+
+                        if (mismatch)
+                            return false;
+                    }
+                    else
+                    {
+                        template for (constexpr char_type c : str.data | std::views::reverse)
+                        {
+                            if (it == first)
+                                return false;
+
+                            --it;
+
+                            if (*it != c)
+                                return false;
+                        }
+                    }
+                }
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_class>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto cla{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_class>] :] };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (std::same_as<char_type, char> or std::same_as<char_type, char32_t>)
+            {
+                if constexpr (Fwd)
+                {
+                    if (it == last)
+                        return false;
+                }
+                else
+                {
+                    if (it == first)
+                        return false;
+
+                    --it;
+                }
+
+                if (not cs_possible<cla.data.cs>(*it))
+                    return false;
+
+                if constexpr (Fwd)
+                    ++it;
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, staging_info<I>& /* si */, const I /* first */, const S /* last */, I& /* it */)
+            requires (not std::same_as<char_type, char> and not std::same_as<char_type, char32_t>)
+            {
+
+                static_assert("Unimplemented");
+                return false;
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::alt>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto alt{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::alt>] :] };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator() (result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (not alt.idxs.empty())
+            {
+                template for (constexpr std::size_t Next : alt.idxs | std::views::take(alt.idxs.size() - 1))
+                {
+                    if (auto saved_it{ it }; state<Fwd, Next, Cont...>::operator()(res, si, first, last, it))
+                        return true;
+                    else
+                        it = saved_it;
+                }
+
+                [[clang::musttail]] return state<Fwd, alt.idxs.back(), Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator() (result<I>& /* res */, const I /* first */, const S /* last */, I& /* it */)
+            requires (alt.idxs.empty())
+            {
+                return false;
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::concat>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto cat{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::concat>] :] };
+
+            template<typename T> struct helper {};
+            template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            {
+                using next_sequence_t = [: [] consteval {
+                    std::vector<std::meta::info> vec{};
+                    vec.reserve(cat.idxs.size());
+                    if (Fwd)
+                    {
+                        for (const auto idx: cat.idxs)
+                            vec.push_back(std::meta::reflect_constant(idx));
+                    }
+                    else
+                    {
+                        for (const auto idx: cat.idxs | std::views::reverse)
+                            vec.push_back(std::meta::reflect_constant(idx));
+                    }
+                    return substitute(^^std::index_sequence, vec);
+                }() :];
+
+                using next_state = helper<next_sequence_t>::type;
+                [[clang::musttail]] return next_state::operator()(res, si, first, last, it);
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::repeat>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto rep{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::repeat>] :] };
+
+            template<typename T> struct helper {};
+            template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == rep.max)
+            {
+                using next_sequence_t = [: [] consteval {
+                    std::vector vec(rep.min, std::meta::reflect_constant(rep.idx));
+                    return substitute(^^std::index_sequence, vec);
+                }() :];
+
+                /* workaround for the above */
+
+                using next_state = helper<next_sequence_t>::type;
+
+                [[clang::musttail]] return next_state::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::greedy)
+            {
+                if (auto saved_it{ it }; state<Fwd, rep.idx, Expr, Cont...>::operator()(res, si, first, last, it))
+                    return true;
+                else
+                    it = saved_it;
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::lazy)
+            {
+                if (auto saved_it{ it }; state<Fwd, Cont...>::operator()(res, si, first, last, it))
+                    return true;
+                else
+                    it = saved_it;
+
+                [[clang::musttail]] return state<Fwd, rep.idx, Expr, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::possessive)
+            {
+                while (true)
+                {
+                    if (auto saved_it{ it }; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
+                    {
+                        it = saved_it;
+                        break;
+                    }
+                }
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::greedy)
+            {
+                if (auto saved_it{ it }; state<Fwd, rep.idx, Cont...>::operator()(res, si, first, last, it))
+                    return true;
+                else
+                    it = saved_it;
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::lazy)
+            {
+                if (auto saved_it{ it }; state<Fwd, Cont...>::operator()(res, si, first, last, it))
+                    return true;
+                else
+                    it = saved_it;
+
+                [[clang::musttail]] return state<Fwd, rep.idx, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::possessive)
+            {
+                if (auto saved_it{ it }; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
+                    it = saved_it;
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::assertion>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto asr{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::assertion>] :] };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S  /* last */, const I it)
+            requires (asr.type == assert_type::text_start)
+            {
+                return (it == first);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool check_impl(const I  /* first */, const S last, const I it)
+            requires (asr.type == assert_type::text_end)
+            {
+                return (it == last);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S  /* last */, const I it)
+            requires (asr.type == assert_type::line_start)
+            {
+                return (it == first or *std::ranges::prev(it) == '\n');
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool check_impl(const I  /* first */, const S last, const I it)
+            requires (asr.type == assert_type::line_end)
+            {
+                return (it == last or *it == '\n');
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
+            requires (asr.type == assert_type::ascii_word_boundary)
+            {
+                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
+                    return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
+                };
+
+                if (it == first or not is_ascii_word_character(*std::ranges::prev(it)))
+                    return (it != last and is_ascii_word_character(*it));
+                else /* if (it != first and is_ascii_word_character(*std::ranges::prev(it))) */
+                    return (it == last or not is_ascii_word_character(*it));
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
+            requires (asr.type == assert_type::not_ascii_word_boundary)
+            {
+                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
+                    return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
+                };
+
+                if (it == first or not is_ascii_word_character(*std::ranges::prev(it)))
+                    return (it == last or not is_ascii_word_character(*it));
+                else /* if (it != first and is_ascii_word_character(*std::ranges::prev(it))) */
+                    return (it != last and is_ascii_word_character(*it));
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            {
+
+                if (check_impl(first, last, it))
+                    [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+
+                return false;
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::backref>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto bref{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::backref>] :] };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            {
+                static_assert(bref.number < result<I>::submatch_count, "Backreference to non-existent submatch");
+
+                const auto submatch{ res.template force_get<bref.number>() };
+
+                if (not submatch.matched())
+                    return false;
+
+                if constexpr (Fwd)
+                {
+                    if constexpr (std::random_access_iterator<I> and std::sized_sentinel_for<S, I>)
+                    {
+                        if (static_cast<std::size_t>(std::ranges::distance(it, last)) < submatch.size())
+                            return false;
+
+                        auto submatch_it{ submatch.begin() };
+                        int mismatch{ false };  /* encourage vectorisation */
+                        for (std::size_t i{ 0 }; i < submatch.size(); ++i)
+                            mismatch |= (it[i] != submatch_it[i]);
+
+                        if (mismatch)
+                            return false;
+
+                        std::ranges::advance(it, static_cast<std::ptrdiff_t>(submatch.size()));
+                    }
+                    else
+                    {
+                        for (char_type c : submatch)
+                        {
+                            if (it == last or *it != c)
+                                return false;
+
+                            ++it;
+                        }
+                    }
+                }
+                else
+                {
+                    if constexpr (std::random_access_iterator<I> and std::sized_sentinel_for<S, I>)
+                    {
+                        if (static_cast<std::size_t>(std::ranges::distance(first, it)) < submatch.size())
+                            return false;
+
+                        std::ranges::advance(it, -static_cast<std::ptrdiff_t>(submatch.size()));
+
+                        auto submatch_it{ submatch.begin() };
+                        int mismatch{ false };  /* encourage vectorisation */
+                        for (std::size_t i{ 0 }; i < submatch.size(); ++i)
+                            mismatch |= (it[i] != submatch_it[i]);
+
+                        if (mismatch)
+                            return false;
+                    }
+                    else
+                    {
+                        for (char_type c : submatch | std::views::reverse)
+                        {
+                            if (it == first)
+                                return false;
+
+                            --it;
+
+                            if (*it != c)
+                                return false;
+                        }
+                    }
+                }
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+        };
+
+        template<bool Fwd, std::size_t Expr, std::size_t... Cont>
+        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::tag>)
+        struct state<Fwd, Expr, Cont...>
+        {
+            static constexpr auto tag{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::tag>] :] };
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (ast.staging.contains(tag.number))
+            {
+                si.reg[get_staging_index(tag.number)] = it;
+
+                [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
+            requires (not ast.staging.contains(tag.number))
+            {
+                static_assert(tag.number < res.reg_.size());
+
+                static constexpr auto staged = [] consteval {
+                    std::vector<tag_number_t> vec;
+                    for (const auto& [k, v] : ast.staging)
+                        if (v == tag.number)
+                            vec.emplace_back(k);
+                    std::ranges::sort(vec);
+                    auto [it, _]{ std::ranges::unique(vec) };
+                    vec.erase(it, vec.end());
+                    return std::define_static_array(vec);
+                }();
+
+                using saved_t = std::conditional_t<std::contiguous_iterator<I>, I, bool>;
+                std::array<saved_t, 1 + staged.size()> saved;
+
+                if constexpr (std::contiguous_iterator<I>)
+                {
+                    saved.back() = res.reg_[tag.number];
+
+                    if constexpr (not ast.staging.empty())
+                        template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                            saved[i] = res.reg_[staged[i]];
+                }
+                else
+                {
+                    saved.back() = res.enabled_[tag.number];
+
+                    if constexpr (not ast.staging.empty())
+                        template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                            saved[i] = res.enabled_[staged[i]];
+                }
+
+                res.reg_[tag.number] = it;
+
+                if constexpr (not ast.staging.empty())
+                    template for (constexpr auto tagnum : staged)
+                        res.reg_[tagnum] = si.reg[get_staging_index(tagnum)];
+
+                if constexpr (not std::contiguous_iterator<I>)
+                {
+                    res.enabled_[tag.number] = true;
+
+                    if constexpr (not ast.staging.empty())
+                        template for (constexpr auto tagnum : staged)
+                            res.enabled_[tagnum] = true;
+                }
+
+                if (auto saved_it{ it }; state<Fwd, Cont...>::operator()(res, si, first, last, it))
+                    return true;
+                else
+                    it = saved_it;
+
+                if constexpr (std::contiguous_iterator<I>)
+                {
+                    res.reg_[tag.number] = saved.back();
+
+                    if constexpr (not ast.staging.empty())
+                        template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                            res.reg_[staged[i]] = saved[i];
+                }
+                else
+                {
+                    res.enabled_[tag.number] = saved.back();
+
+                    if constexpr (not ast.staging.empty())
+                        template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                            res.enabled_[staged[i]] = saved[i];
+                }
+
+                return false;
+            }
+        };
+
+    public:
+        template<bool Full>
+        struct match
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last)
+            requires (Full)
+            {
+                result<I> res{ first };
+                staging_info<I> si{};
+                if (I it{ first }; state<true, ast.root_idx, require_full_match>::operator()(res, si, first, last, it))
+                {
+                    apply_final_staging_info(res, si);
+                    res.match_end_ = it;
+
+                    if constexpr (not std::contiguous_iterator<I>)
+                        res.match_success_ = true;
+                }
+                return res;
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last)
+            requires (not Full)
+            {
+                result<I> res{ first };
+                staging_info<I> si{};
+                if (I it{ first }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
+                {
+                    apply_final_staging_info(res, si);
+                    res.match_end_ = it;
+
+                    if constexpr (not std::contiguous_iterator<I>)
+                        res.match_success_ = true;
+                }
+                return res;
+            }
+        };
+
+        template<bool Single>
+        struct search
+        {
+        private:
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
+            {
+                result<I> res{};
+                staging_info<I> si{};
+                while (true)
+                {
+                    if (I it{ continue_from }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
+                    {
+                        apply_final_staging_info(res, si);
+                        res.match_end_ = it;
+                        res.match_start_ = continue_from;
+
+                        if constexpr (not std::contiguous_iterator<I>)
+                            res.match_success_ = true;
+                        return res;
+                    }
+
+                    res.clear_match();
+
+                    if (continue_from == last)
+                        return res;
+
+                    ++continue_from;
+                }
+            }
+
+        public:
+            template<std::bidirectional_iterator I>
+            using result = p1306_naive_impl::result<I>;
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last)
+            {
+                return outer_state(first, last, first);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last, I continue_from)
+            requires (not Single)
+            {
+                return outer_state(first, last, continue_from);
+            }
+        };
+
+        static consteval auto get_matcher(fsm_flags f)
+        {
+            if (f.longest_match)
+            {
+                if (not f.is_search and not f.enable_fallback and not f.is_iterator)
+                    return ^^match<true>;
+            }
+            else if (f.enable_fallback)
+            {
+                if (not f.is_search)
+                {
+                    if (not f.is_iterator)
+                        return ^^match<false>;
+                }
+                else if (not f.is_iterator)
+                {
+                    return ^^search<true>;
+                }
+                else
+                {
+                    return ^^search<false>;
+                }
+            }
+
+            /* invalid flag combination */
+            throw regex_error("p1306_naive_adaptor: invalid fsm flag combination");
+        }
+    };
+
+    template<string_literal Pattern, fsm_flags Flags>
+    struct p1306_naive_adaptor : public [: p1306_naive_impl<Pattern>::get_matcher(Flags) :] {};
+
+    template<string_literal Pattern, fsm_flags Flags>
+    requires (Flags.return_bool)
+    struct p1306_naive_adaptor<Pattern, Flags>
+    {
+        using underlying = p1306_naive_adaptor<Pattern, [](fsm_flags f) consteval { f.return_bool = false; return f; }(Flags)>;
+
+        template<typename... Ts>
+        static constexpr bool operator()(Ts&&... args)
+        {
+            return underlying::operator()(std::forward<Ts>(args)...);
+        }
+    };
+
+}
+
+namespace rx::detail
+{
     template<static_transition Tr, typename CharT>
     [[gnu::always_inline]] constexpr bool tr_possible(CharT c)
     {
-        constexpr auto func{ std::meta::substitute(^^tr_possible_impl, tr_possible_make_refl(Tr)) };
-        return [: func :](c);
+
+        template for (constexpr auto pair : Tr.cs)
+        {
+            if (pair.first <= c and c <= pair.second)
+                return true;
+        }
+
+        return false;
+    }
+
+    template<static_transition Tr, typename CharT>
+    [[gnu::always_inline]] constexpr bool tr_possible_exclude_null(CharT c)
+    {
+        if constexpr (tr_possible<Tr>(CharT{}))
+        {
+            if (c == CharT{})
+                return false;
+        }
+
+        return tr_possible<Tr>(c);
     }
 
     template<string_literal Pattern, fsm_flags Flags>
@@ -9962,47 +11424,63 @@ namespace rx::detail
         using char_type = decltype(Pattern)::char_type;
 
         template<typename I>
-        using result_type = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
-
-        template<typename I>
-        struct result
-        {
-            template<typename... Args>
-            constexpr explicit result(Args... args) noexcept(noexcept(result_type{ args... }))
-                : value(std::forward<Args>(args)...) {}
-
-            [[no_unique_address]] result_type<I> value;
-        };
+        using result = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
 
         template<std::size_t Blk, std::bidirectional_iterator I>
-        static constexpr void register_operations(I it, result<I>& res)
+        static constexpr void register_operations(result<I>& res, I it)
         {
             if constexpr (Blk != tdfa::no_transition_regops)
             {
                 template for (constexpr register_operation op : dfa_t::value.regops.at(Blk))
                 {
                     if constexpr (op.is_copy)
-                        res.value.reg_[op.dst] = res.value.reg_[op.cpy_src];
+                        res.reg_[op.dst] = res.reg_[op.cpy_src];
                     else if constexpr (op.set_val)
-                        res.value.reg_[op.dst] = it;
+                        res.reg_[op.dst] = it;
                     else if constexpr (std::contiguous_iterator<I>)
-                        res.value.reg_[op.dst] = I{};
+                        res.reg_[op.dst] = I{};
 
                     if constexpr (not std::contiguous_iterator<I>)
                     {
-                        res.value.enabled_[op.dst] = (op.is_copy or op.set_val);
+                        if constexpr (op.is_copy)
+                            res.enabled_[op.dst] = res.enabled_[op.cpy_src];
+                        else
+                            res.enabled_[op.dst] = op.set_val;
                     }
                 }
             }
         }
 
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr void fallback(I /* it */, result<I>& res, const S /* last */, std::size_t fallback_state, I fallback_it)
-        requires (Flags.enable_fallback)
+        template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I>
+        static constexpr void set_final_info(result<I>& res, const I it)
         {
+            register_operations<Blk>(res, it);
+            res.match_end_ = std::ranges::prev(it, Offset);
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+
+        template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I>
+        static constexpr void set_fallback_info(result<I>& res, const I it)
+        {
+            set_final_info<Blk, Offset>(res, it);
+
+            if constexpr (result<I>::has_continue)
+            {
+                if constexpr (ContinueAt != tdfa::no_continue)
+                    res.continue_at_ = ContinueAt;
+            }
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr void fallback(result<I>& res, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state)
+        {
+            static_assert(Flags.enable_fallback);
+
             if (fallback_state == fallback_disabled)
                 return;
 
@@ -10011,55 +11489,14 @@ namespace rx::detail
                 if (fallback_state == pair.first)
                 {
                     static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
-
-                    register_operations<pair.second.op_index>(fallback_it, res);
-                    res.value.match_end_ = std::ranges::prev(fallback_it, fni.final_offset);
-
-                    if constexpr (not std::contiguous_iterator<I>)
-                        res.value.match_success_ = true;
-
-                    if constexpr (Flags.is_iterator)
-                    {
-                        if constexpr (pair.second.continue_at != tdfa::no_continue)
-                            res.value.continue_at_ = pair.second.continue_at;
-                    }
-
+                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, fallback_it);
                     return;
                 }
             }
         }
 
         template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr void transition(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
-        {
-            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
-            {
-                if (tr_possible<tr>(*it))
-                {
-                    register_operations<tr.op_index>(it, res);
-                    [[clang::musttail]] return state<tr.next>(++it, res, last, fallback_state, fallback_it);
-                }
-            }
-
-            if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
-            {
-                if constexpr ((*dt).second.op_index == tdfa::default_transition_is_not_state)
-                {
-                    [[clang::musttail]] return transition<(*dt).second.next>(it, res, last, fallback_state, fallback_it);
-                }
-                else
-                {
-                    register_operations<(*dt).second.op_index>(it, res);
-                    [[clang::musttail]] return state<(*dt).second.next>(++it, res, last, fallback_state, fallback_it);
-                }
-            }
-
-            if constexpr (Flags.enable_fallback)
-                [[clang::musttail]] return fallback(it, res, last, fallback_state, fallback_it);
-        }
-
-        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr void state(I it, result<I>& res, const S last, std::size_t fallback_state, I fallback_it)
+        static constexpr void state(result<I>& res, I it, const S last, I fallback_it, std::size_t fallback_state)
         {
             if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
             {
@@ -10067,47 +11504,365 @@ namespace rx::detail
                 fallback_it = it;
             }
 
-            if (it != last) [[likely]]
-                [[clang::musttail]] return transition<DFAState>(it, res, last, fallback_state, fallback_it);
-
-            if constexpr (static constexpr auto fn{ dfa_t::value.final_nodes.find(DFAState) }; fn != dfa_t::value.final_nodes.end())
+            if (it != last)
             {
-                register_operations<(*fn).second.op_index>(it, res);
-                res.value.match_end_ = std::ranges::prev(it, (*fn).second.final_offset);
+                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+                {
+                    if (tr_possible<tr>(*it))
+                    {
+                        register_operations<tr.op_index>(res, it);
+                        [[clang::musttail]] return state<tr.next>(res, ++it, last, fallback_it, fallback_state);
+                    }
+                }
 
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.value.match_success_ = true;
-
-                return;
+                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                {
+                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                    {
+                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, it);
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                {
+                    set_final_info<fn->op_index, fn->final_offset>(res, it);
+                    return;
+                }
             }
 
             if constexpr (Flags.enable_fallback)
-                [[clang::musttail]] return fallback(it, res, last, fallback_state, fallback_it);
+                [[clang::musttail]] return fallback(res, it, last, fallback_it, fallback_state);
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I>
+        static constexpr void state(result<I>& res, I it, const cstr_sentinel_t last, I fallback_it, std::size_t fallback_state)
+        {
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
+            {
+                fallback_state = DFAState;
+                fallback_it = it;
+            }
+
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible_exclude_null<tr>(*it))
+                {
+                    register_operations<tr.op_index>(res, it);
+                    [[clang::musttail]] return state<tr.next>(res, ++it, last, fallback_it, fallback_state);
+                }
+            }
+
+            if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+            {
+                if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                {
+                    set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, it);
+                    return;
+                }
+                else
+                {
+                    if (it == last) [[likely]]
+                    {
+                        set_final_info<fn->op_index, fn->final_offset>(res, it);
+                        return;
+                    }
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(res, it, last, fallback_it, fallback_state);
         }
 
     public:
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto operator()(const I first, const S last)
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
         {
             result<I> res{ first };
-            state<dfa_t::value.match_start>(first, res, last, fallback_disabled, first);
-            return res.value;
+            state<dfa_t::value.match_start>(res, first, last, first, fallback_disabled);
+            return res;
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) requires (Flags.is_iterator)
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
+        requires result<I>::has_continue
         {
             result<I> res{ first };
 
             template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.continue_nodes.size()))
             {
                 if (i == continue_at)
-                    state<dfa_t::value.continue_nodes[i]>(first, res, last, fallback_disabled, first);
+                {
+                    state<dfa_t::value.continue_nodes[i]>(res, first, last, first, fallback_disabled);
+                    break;
+                }
             }
 
-            return res.value;
+            return res;
+        }
+    };
+
+    template<string_literal Pattern, fsm_flags Flags>
+    struct p1306_searcher
+    {
+        static_assert(Flags.is_search);
+
+        using dfa_t = compiled_dfa<Pattern, adapt_searcher_flags_to_matcher(Flags)>;
+        using char_type = decltype(Pattern)::char_type;
+
+        template<typename I>
+        using result = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
+
+    private:
+        struct generation
+        {
+            std::array<std::size_t, dfa_t::value.register_count> reg{};
+            std::size_t current{ 0 };
+        };
+
+        using gen_info = maybe_type_t<(dfa_t::value.register_count > 0), generation>;
+
+        static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+
+        template<std::bidirectional_iterator I>
+        static constexpr void clean_generations(result<I>& res, const gen_info& gen)
+        {
+            if constexpr (dfa_t::value.register_count > 0)
+            {
+                if constexpr (std::contiguous_iterator<I>)
+                {
+                    for (std::size_t i{ 0 }; i < dfa_t::value.register_count; ++i)
+                        res.reg_[i] = (gen.reg[i] == gen.current) ? res.reg_[i] : I{};
+                }
+                else
+                {
+                   for (std::size_t i{ 0 }; i < dfa_t::value.register_count; ++i)
+                        res.enabled_[i] = (gen.reg[i] == gen.current);
+                }
+            }
+        }
+
+        template<std::size_t Blk, std::bidirectional_iterator I>
+        static constexpr void register_operations(result<I>& res, gen_info& gen, const I it)
+        {
+            if constexpr (Blk != tdfa::no_transition_regops)
+            {
+                static_assert(dfa_t::value.register_count > 0);
+
+                template for (constexpr register_operation op : dfa_t::value.regops.at(Blk))
+                {
+                    if constexpr (op.is_copy)
+                        res.reg_[op.dst] = res.reg_[op.cpy_src];
+                    else if constexpr (op.set_val)
+                        res.reg_[op.dst] = it;
+                }
+
+                template for (constexpr register_operation op : dfa_t::value.regops.at(Blk))
+                {
+                    if constexpr (op.is_copy)
+                        gen.reg[op.dst] = gen.reg[op.cpy_src];
+                    else if constexpr (op.set_val)
+                        gen.reg[op.dst] = gen.current;
+                    else
+                        gen.reg[op.dst] = 0;
+                }
+            }
+        }
+
+        template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I>
+        static constexpr void set_final_info(result<I>& res, gen_info& gen, const I it)
+        {
+            register_operations<Blk>(res, gen, it);
+            res.match_end_ = std::ranges::prev(it, Offset);
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+
+        template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I>
+        static constexpr void set_fallback_info(result<I>& res, gen_info& gen, const I it)
+        {
+            set_final_info<Blk, Offset>(res, gen, it);
+
+            if constexpr (result<I>::has_continue)
+                if constexpr (ContinueAt != tdfa::no_continue)
+                    res.continue_at_ = ContinueAt;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool fallback(result<I>& res, gen_info& gen, I /* it */, const S /* last */, I fallback_it, std::size_t fallback_state)
+        {
+            static_assert(Flags.enable_fallback);
+
+            if (fallback_state == fallback_disabled)
+                return false;
+
+            template for (constexpr const auto& pair : dfa_t::value.fallback_nodes)
+            {
+                if (fallback_state == pair.first)
+                {
+                    static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
+                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, gen, fallback_it);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool state(result<I>& res, gen_info& gen, I it, const S last, I fallback_it, std::size_t fallback_state)
+        {
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
+            {
+                fallback_state = DFAState;
+                fallback_it = it;
+            }
+
+            if (it != last)
+            {
+                template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+                {
+                    if (tr_possible<tr>(*it))
+                    {
+                        register_operations<tr.op_index>(res, gen, it);
+                        [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
+                    }
+                }
+
+                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                {
+                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                    {
+                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
+                        return true;
+                    }
+                }
+            }
+            else
+            {
+                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                {
+                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                    return true;
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state);
+
+            return false;
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I>
+        static constexpr bool state(result<I>& res, gen_info& gen, I it, const cstr_sentinel_t last, I fallback_it, std::size_t fallback_state)
+        {
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
+            {
+                fallback_state = DFAState;
+                fallback_it = it;
+            }
+
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible_exclude_null<tr>(*it))
+                {
+                    register_operations<tr.op_index>(res, gen, it);
+                    [[clang::musttail]] return state<tr.next>(res, gen, ++it, last, fallback_it, fallback_state);
+                }
+            }
+
+            if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+            {
+                if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                {
+                    set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
+                    return true;
+                }
+                else
+                {
+                    if (it == last) [[likely]]
+                    {
+                        set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                        return true;
+                    }
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(res, gen, it, last, fallback_it, fallback_state);
+
+            return false;
+        }
+
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr void outer_state(result<I>& res, gen_info& gen, I it, const S last)
+        {
+            if constexpr (dfa_t::value.register_count > 0)
+                ++gen.current;
+
+            if (it != last)
+            {
+                if (state<DFAState>(res, gen, it, last, it, fallback_disabled))
+                {
+                    if constexpr (result<I>::has_match_start)
+                        res.match_start_ = it;
+                    return;
+                }
+            }
+            else
+            {
+                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                {
+                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                    if constexpr (result<I>::has_match_start)
+                        res.match_start_ = it;
+                }
+                return;
+            }
+
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.outer_transitions)
+            {
+                if (tr_possible<tr>(*it))
+                    [[clang::musttail]] return outer_state<tr.next>(res, gen, ++it, last);
+            }
+        }
+
+    public:
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
+        {
+            result<I> res{ first };
+            gen_info gen{};
+            outer_state<dfa_t::value.match_start>(res, gen, first, last);
+            clean_generations(res, gen);
+            return res;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
+        requires (result<I>::has_continue)
+        {
+            result<I> res{ first };
+            gen_info gen{};
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.continue_nodes.size()))
+            {
+                if (i == continue_at)
+                {
+                    outer_state<dfa_t::value.continue_nodes[i]>(res, gen, first, last);
+                    break;
+                }
+            }
+
+            clean_generations(res, gen);
+            return res;
         }
     };
 
@@ -10119,6 +11874,9 @@ namespace rx::detail
         using char_type = decltype(Pattern)::char_type;
 
     private:
+        template<string_literal OtherPattern, fsm_flags OtherFlags>
+        friend struct p1306_searcher;
+
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -10146,14 +11904,6 @@ namespace rx::detail
                     [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
             }
 
-            if constexpr (static constexpr auto dt{ dfa_t::value.default_transitions.find(DFAState) }; dt != dfa_t::value.default_transitions.end())
-            {
-                if constexpr ((*dt).second.op_index == tdfa::default_transition_is_not_state)
-                    [[clang::musttail]] return transition<(*dt).second.next>(it, last, fallback_state);
-                else
-                    [[clang::musttail]] return state<(*dt).second.next>(++it, last, fallback_state);
-            }
-
             if constexpr (Flags.enable_fallback)
                 [[clang::musttail]] return fallback(it, last, fallback_state);
 
@@ -10178,6 +11928,37 @@ namespace rx::detail
             return false;
         }
 
+        template<std::size_t DFAState, std::bidirectional_iterator I>
+        static constexpr bool state(I it, const cstr_sentinel_t last, std::size_t fallback_state)
+        {
+            if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
+                fallback_state = DFAState;
+
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.nodes.at(DFAState))
+            {
+                if (tr_possible_exclude_null<tr>(*it))
+                    [[clang::musttail]] return state<tr.next>(++it, last, fallback_state);
+            }
+
+            if constexpr (dfa_t::value.final_nodes.contains(DFAState))
+            {
+                if constexpr (Flags.enable_fallback and dfa_t::value.fallback_nodes.contains(DFAState))
+                {
+                    return true;
+                }
+                else
+                {
+                    if (it == last) [[likely]]
+                        return true;
+                }
+            }
+
+            if constexpr (Flags.enable_fallback)
+                [[clang::musttail]] return fallback(it, last, fallback_state);
+
+            return false;
+        }
+
     public:
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
@@ -10190,23 +11971,89 @@ namespace rx::detail
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
     };
+
+    template<string_literal Pattern, fsm_flags Flags>
+    requires (Flags.return_bool)
+    struct p1306_searcher<Pattern, Flags>
+    {
+        static_assert(Flags.is_search);
+
+        using underlying = p1306_matcher<Pattern, adapt_searcher_flags_to_matcher(Flags)>;
+        using dfa_t = underlying::dfa_t;
+        using char_type = underlying::char_type;
+
+    private:
+        template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool outer_state(I it, const S last)
+        {
+            if (it != last)
+            {
+                if (underlying::template state<DFAState>(it, last, underlying::fallback_disabled))
+                    return true;
+            }
+            else
+            {
+                return dfa_t::value.final_nodes.contains(DFAState);
+            }
+
+            template for (constexpr static_transition<char_type> tr : dfa_t::value.outer_transitions)
+            {
+                if (tr_possible<tr>(*it))
+                    [[clang::musttail]] return outer_state<tr.next>(++it, last);
+            }
+
+            return false;
+        }
+
+    public:
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr bool operator()(const I first, const S last)
+        {
+            return outer_state<dfa_t::value.match_start>(first, last);
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
+    };
 }
 
 namespace rx
 {
-    template<string_literal Pattern>
-    requires std::same_as<char, typename decltype(Pattern)::char_type> /* temporary: remove later */
+    enum class mode : unsigned char
+    {
+        standard,
+        fast,
+        naive
+    };
+
+    namespace detail
+    {
+        consteval auto get_matcher_refl(mode i, bool is_search = false)
+        {
+            if (i == mode::naive)
+                return ^^detail::p1306_naive_adaptor;
+            else if (i == mode::standard and is_search)
+                return ^^detail::p1306_searcher;
+            else
+                return ^^detail::p1306_matcher;
+        }
+    }
+
+    template<string_literal Pattern, mode Mode = mode::standard>
     struct static_regex
     {
         using char_type = decltype(Pattern)::char_type;
+        static_assert(std::same_as<char, char_type>); /* temporary: remove later */
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, full_match> matcher;
-            return matcher(first, last);
+            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, full_match>;
+            return matcher_t{}(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
@@ -10228,8 +12075,8 @@ namespace rx
         [[nodiscard]] static constexpr auto prefix_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, partial_match> matcher;
-            return matcher(first, last);
+            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, partial_match>;
+            return matcher_t{}(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
@@ -10251,8 +12098,8 @@ namespace rx
         [[nodiscard]] static constexpr auto search(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, search_single> matcher;
-            return matcher(first, last);
+            using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, search_single>;
+            return matcher_t{}(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
@@ -10274,8 +12121,8 @@ namespace rx
         [[nodiscard]] static constexpr bool is_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, full_match | return_bool_modifier> matcher;
-            return matcher(first, last);
+            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(full_match)>;
+            return matcher_t{}(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
@@ -10297,8 +12144,8 @@ namespace rx
         [[nodiscard]] static constexpr bool starts_with_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, partial_match | return_bool_modifier> matcher;
-            return matcher(first, last);
+            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(partial_match)>;
+            return matcher_t{}(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
@@ -10320,8 +12167,8 @@ namespace rx
         [[nodiscard]] static constexpr bool contains_match(const I first, const S last)
         {
             using namespace detail::default_fsm_flags;
-            detail::p1306_matcher<Pattern, search_single | return_bool_modifier> matcher;
-            return matcher(first, last);
+            using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::adapt_flags_return_bool(search_single)>;
+            return matcher_t{}(first, last);
         }
 
         template<std::ranges::bidirectional_range R>
@@ -10337,27 +12184,47 @@ namespace rx
         {
             return contains_match(cstr, detail::cstr_sentinel);
         }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto range(const I first, const S last)
+        {
+            return range(std::ranges::subrange(first, last));
+        }
+
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
+        [[nodiscard]] static constexpr auto range(R&& r);
+
+        template<typename CharT>
+        requires std::same_as<CharT, char_type>
+        [[nodiscard]] static constexpr auto range(const CharT* cstr)
+        {
+            return range(std::ranges::subrange(cstr, detail::cstr_sentinel));
+        }
     };
 
     template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
     class regex_match_view
     {
-        static_assert("regex_match_view: invalid range");
+        static_assert("regex_match_view: invalid regex");
     };
 
-    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
     requires std::ranges::view<V>
-    class regex_match_view<V, static_regex<Pattern>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern>>>
+    class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>>
     {
         template<bool Const>
         struct iterator;
 
         struct sentinel {};
 
+        using Matcher = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+
     public:
         regex_match_view() requires std::default_initializable<V> = default;
-        constexpr explicit regex_match_view(V base, static_regex<Pattern> /* regex */) : base_{ std::move(base) } {}
+        constexpr explicit regex_match_view(V base, static_regex<Pattern, Mode> /* regex */) : base_{ std::move(base) } {}
 
         [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
         [[nodiscard]] constexpr V base() && { return std::move(base_); }
@@ -10388,20 +12255,19 @@ namespace rx
         V base_{};
     };
 
-    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
     requires std::ranges::view<V>
     template<bool Const>
-    struct regex_match_view<V, static_regex<Pattern>>::iterator
+    struct regex_match_view<V, static_regex<Pattern, Mode>>::iterator
     {
     private:
         using Parent  = detail::maybe_const_t<Const, regex_match_view>;
         using Base    = detail::maybe_const_t<Const, V>;
-        using Matcher = detail::p1306_matcher<Pattern, detail::default_fsm_flags::search_all>;
 
     public:
         using iterator_category = std::input_iterator_tag;
         using iterator_concept  = std::input_iterator_tag;
-        using value_type        = Matcher::template result_type<std::ranges::iterator_t<Base>>;
+        using value_type        = Matcher::template result<std::ranges::iterator_t<Base>>;
         using difference_type   = std::ranges::range_difference_t<Base>;
 
         iterator() requires std::default_initializable<std::ranges::iterator_t<Base>> = default;
@@ -10442,7 +12308,7 @@ namespace rx
             {
                 if (current_ == end_)
                 {
-                    result_ = value_type{};
+                    result_.clear_match();
                     return *this;
                 }
                 else
@@ -10455,7 +12321,10 @@ namespace rx
                 current_ = result_.match_end_;
             }
 
-            result_ = matcher_(current_, end_, result_.continue_at_);
+            if constexpr (value_type::has_continue)
+                result_ = matcher_(current_, end_, result_.continue_at_);
+            else
+                result_ = matcher_(current_, end_);
             return *this;
         }
 
@@ -10492,8 +12361,148 @@ namespace rx
         value_type result_;
     };
 
-    template<typename Range, string_literal Pattern>
-    regex_match_view(Range&&, static_regex<Pattern>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern>>;
+    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    requires std::ranges::view<V>
+    class regex_match_view<V, static_regex<Pattern, mode::naive>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, mode::naive>>>
+    {
+        template<bool Const>
+        struct iterator;
+
+        struct sentinel {};
+
+        using Matcher = [: detail::get_matcher_refl(mode::naive, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+
+    public:
+        regex_match_view() requires std::default_initializable<V> = default;
+        constexpr explicit regex_match_view(V base, static_regex<Pattern, mode::naive> /* regex */) : base_{ std::move(base) } {}
+
+        [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
+        [[nodiscard]] constexpr V base() && { return std::move(base_); }
+
+        [[nodiscard]] constexpr iterator<false> begin()
+        {
+            return iterator<false>{ this };
+        }
+
+        [[nodiscard]] constexpr iterator<true> begin() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return iterator<true>{ this };
+        }
+
+        [[nodiscard]] constexpr sentinel end()
+        {
+            return {};
+        }
+
+        [[nodiscard]] constexpr sentinel end() const
+        requires std::ranges::bidirectional_range<const V>
+        {
+            return {};
+        }
+
+    private:
+        V base_{};
+        [[no_unique_address]] Matcher matcher_;
+    };
+
+    template<std::ranges::bidirectional_range V, string_literal Pattern>
+    requires std::ranges::view<V>
+    template<bool Const>
+    struct regex_match_view<V, static_regex<Pattern, mode::naive>>::iterator
+    {
+    private:
+        using Parent  = detail::maybe_const_t<Const, regex_match_view>;
+        using Base    = detail::maybe_const_t<Const, V>;
+
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using iterator_concept  = std::input_iterator_tag;
+        using value_type        = Matcher::template result<std::ranges::iterator_t<Base>>;
+        using difference_type   = std::ranges::range_difference_t<Base>;
+
+        iterator() requires std::default_initializable<std::ranges::iterator_t<Base>> = default;
+
+        constexpr explicit iterator(Parent* parent)
+            : parent_{ parent }, result_{ matcher_(std::ranges::begin(parent_->base_), std::ranges::end(parent_->base_)) } {}
+
+        constexpr explicit(false) iterator(iterator<not Const> i)
+        requires Const and std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
+            : parent_{ i.parent_ }, result_{ std::move(i.result_) } {}
+
+        constexpr const std::ranges::iterator_t<Base>& base() const& noexcept
+        {
+            return result_.match_end;
+        }
+
+        constexpr const value_type& operator*() const
+        {
+            return result_;
+        }
+
+        constexpr const value_type* operator->() const
+        {
+            return &result_;
+        }
+
+        constexpr iterator& operator++()
+        {
+            if (not result_.has_value())
+                return *this;
+
+            auto current{ result_.match_end_ };
+
+            if (current == result_.match_start_)
+            {
+                if (current == std::ranges::end(parent_->base_))
+                {
+                    result_.clear_match();
+                    return *this;
+                }
+                else
+                {
+                    ++current;
+                }
+            }
+
+            result_ = matcher_(std::ranges::begin(parent_->base_), std::ranges::end(parent_->base_), current);
+            return *this;
+        }
+
+        constexpr void operator++(int)
+        {
+            ++*this;
+        }
+
+        friend constexpr bool operator==(const iterator& x, const iterator& y)
+        requires std::equality_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.result_.match_start == y.result_.match_start;
+        }
+
+        friend constexpr auto operator<=>(const iterator& x, const iterator& y)
+        requires std::three_way_comparable<std::ranges::iterator_t<Base>>
+        {
+            return x.result_.match_start <=> y.result_.match_start;
+        }
+
+        friend constexpr bool operator==(const iterator& x, sentinel /* y */)
+        {
+            return not x.result_.has_value();
+        }
+
+        template<std::ranges::input_range W, int...>
+        requires std::ranges::view<W>
+        friend class submatches_view;
+
+    private:
+        Parent* parent_;
+        [[no_unique_address]] Matcher matcher_;
+        value_type result_;
+    };
+
+    template<typename Range, string_literal Pattern, mode Mode>
+    regex_match_view(Range&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern, Mode>>;
 
     namespace detail
     {
@@ -11044,10 +13053,42 @@ namespace rx
         inline constexpr detail::submatches_adaptor submatches;
     }
 
+    template<string_literal Pattern, mode Mode>
+    template<std::ranges::bidirectional_range R>
+    requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type> and std::ranges::borrowed_range<R>
+    constexpr auto static_regex<Pattern, Mode>::range(R&& r)
+    {
+        return regex_match_view(r, static_regex<Pattern, Mode>{});
+    }
+
     namespace literals
     {
         template<string_literal Pattern>
         consteval static_regex<Pattern> operator ""_rx()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::fast> operator ""_rxf()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::fast> operator ""_rx_fast()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::naive> operator ""_rxn()
+        {
+            return {};
+        }
+
+        template<string_literal Pattern>
+        consteval static_regex<Pattern, mode::naive> operator ""_rx_naive()
         {
             return {};
         }
