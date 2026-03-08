@@ -3041,7 +3041,7 @@ namespace rx::detail
 
         struct backref
         {
-            int number;
+            unsigned int number;
         };
     }
 
@@ -3155,7 +3155,7 @@ namespace rx::detail
             case '7': return parse_bref_or_octal(escaped);
 
             case '8':
-            case '9': return backref{ escaped - '0' };
+            case '9': return backref{ static_cast<unsigned int>(escaped - '0') };
 
             case 'g': return parse_bref();
 
@@ -3429,7 +3429,7 @@ namespace rx::detail
                 if (rep.min == -1)
                     rep.min = c - '0';
                 else
-                    rep.min = std::add_sat(std::mul_sat(rep.min, base), c - '0');
+                    rep.min = std::add_sat(std::mul_sat(rep.min, base), static_cast<int>(c - '0'));
             }
             else if (c == ',')
             {
@@ -3461,7 +3461,7 @@ namespace rx::detail
                 if (rep.max == -1)
                     rep.max = c - '0';
                 else
-                    rep.max = std::add_sat(std::mul_sat(rep.max, base), c - '0');
+                    rep.max = std::add_sat(std::mul_sat(rep.max, base), static_cast<int>(c - '0'));
             }
             else if (c == '}')
             {
@@ -3495,10 +3495,10 @@ namespace rx::detail
     constexpr lexer<CharT>::token_t lexer<CharT>::parse_bref_or_octal(const CharT init)
     {
         using namespace tok;
-        static constexpr std::size_t base{ 010 };
+        static constexpr unsigned int base{ 010 };
 
-        std::size_t result{ static_cast<std::size_t>(init - '0') };
-        backref bref{ init - '0' };
+        backref bref{ static_cast<unsigned int>(init - '0') };
+        std::size_t result{ bref.number };
 
         for (int i{ 0 }; i < 2; ++i)
         {
