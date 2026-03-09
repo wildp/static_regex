@@ -4,22 +4,98 @@ Header `<rx/regex.hpp>` synopsis:
 
 ```cpp
 namespace rx {
+  enum class mode {
+    standard,
+    fast,
+    naive
+  };
+
   template<typename CharT, std::size_t N>
   struct string_literal;
 
-  template<string_literal Pattern>
+  template<string_literal Pattern, mode Mode>
   struct static_regex;
 
   template<std::bidirectional_iterator I, /* implementation details */>
+  requires std::default_initializable<I> and std::copyable<I>
   class static_regex_match_result;
 
   template<std::bidirectional_iterator I>
   class submatch;
 
+  template<std::ranges::bidirectional_range V, typename Regex>
+  requires std::ranges::view<V>
+  class regex_match_view;
+
+  template<std::ranges::input_range V, int... Submatches>
+  requires std::ranges::view<V>
+  class submatches_view;
+
+  namespace views {
+    inline constexpr /* range adaptor */ regex_match;
+    inline constexpr /* range adaptor */ submatches;
+  }
+
   namespace literals {
     template<string_literal Pattern>
     consteval static_regex<Pattern> operator ""_rx();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::fast> operator ""_rxf();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::fast> operator ""_rx_fast();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::naive> operator ""_rxn();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::naive> operator ""_rx_naive();
   }
+} // namespace rx
+```
+
+## Enum class `rx::mode`
+
+`mode` enumerates the possible regular expression matching implementations that `static_regex` can use.
+
+```cpp
+namespace rx {
+  enum class mode {
+    standard,
+    fast,
+    naive
+  };
+}
+```
+
+`mode::standard` is the default implementation for `static_regex`.
+It uses a deterministic finite automaton to match patterns in linear time.
+When performing a search, it attempts to match the pattern beginning at each character in the input.
+
+`mode::fast` uses the same implementation as `mode::standard` but instead performs searches in linear time using a single deterministic finite automaton.
+This mode is known to increase compile times (in some cases to an unacceptable duration), but depending on the pattern can result in performance improvements.
+Patterns that feature repetition tend to see the greatest improvement, while simple patterns with character classes (including case-insensitive matching) may experience performance degredation.
+When matching, `mode::fast` is identical to `mode::standard`.
+
+`mode::naive` uses a naive backtracking-based implementation for matching.
+The worst case complexity is exponential, in many cases trading runtime performance for faster compilation times.
+Unlike the finite automaton implementations, backreferences, possessive matching, and branch-reset groups are additionally supported.
+This mode should be avoided unless the additional features or improved compilation times are needed.
+
+
+## Class template `rx::string_literal`
+
+`string_literal` exists as a minimal placeholder for the proposed [`std::basic_fixed_string`](wg21.link/p3094), and allows for strings to be passed as template parameters.
+
+``` cpp
+namespace rx {
+  template<typename CharT, std::size_t N>
+  struct string_literal {
+    using char_type = CharT;
+    consteval string_literal(const char_type (&str)[N]);
+    constexpr std::basic_string_view<char_type> view() const;
+  };
 } // namespace rx
 ```
 
@@ -30,7 +106,7 @@ namespace rx {
 
 ```cpp
 namespace rx {
-  template<string_literal Pattern>
+  template<string_literal Pattern, mode Mode = mode::standard>
   struct static_regex {
     using char_type = decltype(Pattern)::char_type;
 
@@ -55,16 +131,17 @@ namespace rx {
     template<typename I, typename S> static constexpr bool contains_match(const I first, const S last);
     template<typename R>             static constexpr bool contains_match(R&& r);
     template<typename CharT>         static constexpr bool contains_match(const CharT* cstr);
-  };
 
-  namespace literals {
-    template<string_literal Pattern>
-    consteval static_regex<Pattern> operator ""_rx();
-  }
+    /* range returning algorithms; see below  */
+    template<typename I, typename S> static constexpr auto range(const I first, const S last);
+    template<typename R>             static constexpr auto range(R&& r);
+    template<typename CharT>         static constexpr auto range(const CharT* cstr);
+  };
 } // namespace rx
 ```
 
 `static_regex` has no data members, and the code for matching `Pattern` is only generated when the relevant member function template is instantiated.
+`Mode` dictates the implementation used by the matching functions *(see above section for more details)*.
 
 Instantiations of the member function templates `match`, `prefix_match`, and `search` return a `static_regex_match_result` corresponding to the substring (and capturing groups, if any) matched by `Pattern`.
 `match` attempts to match the entire input, while `search` finds the first substring which matches `Pattern`.
@@ -84,7 +161,10 @@ Their template requirements are as follows:
 
 `is_match`, `starts_with_match`, and `contains_match` correspond to `match`, `prefix_match`, and `contains_match` respectively, but return a bool instead.
 With these, the requirement for `R` to satisfy `std::ranges::borrowed_range` is removed.
-Depending on the regular expression involved, using these functions may allow for a smaller DFA to be generated.
+Depending on the regex pattern, using these functions may allow for a smaller DFA to be generated.
+
+`range` returns a `regex_match_view` over all substrings of the input matched by `Pattern`.
+The template parameter requirements for `range` are the same as for `match`, `prefix_match`, and `search`.
 
 
 ## Class template `rx::static_regex_match_result`
@@ -94,6 +174,7 @@ Depending on the regular expression involved, using these functions may allow fo
 ```cpp
 namespace rx {
   template<std::bidirectional_iterator I, /* implementation details */>
+  requires std::default_initializable<I> and std::copyable<I>
   class static_regex_match_result {
   public:
     using size_type              = std::size_t;
@@ -103,20 +184,20 @@ namespace rx {
     using reverse_iterator       = /* reverse proxy iterator to submatch_type */;
     using const_iterator         = /* proxy iterator to const submatch_type */;
     using const_reverse_iterator = /* reverse proxy iterator to const submatch_type */;
-  
+
     static constexpr size_type submatch_count;
-  
+
     constexpr static_regex_match_result() noexcept;
-  
+
     /* observers */
     constexpr bool has_value() const;
     constexpr explicit(false) operator bool() const;
     constexpr size_type size() const;
-  
+
     /* array-like access */
     constexpr submatch_type operator[](size_type n) const noexcept;
     constexpr submatch_type at(size_type i) const;
-  
+
     /* iterator support */
     constexpr iterator begin() const;
     constexpr iterator end() const;
@@ -126,7 +207,7 @@ namespace rx {
     constexpr const_iterator cend() const;
     constexpr const_reverse_iterator crbegin() const;
     constexpr const_reverse_iterator crend() const;
-  
+
     /* tuple support */
     template<size_type N> requires (N < submatch_count) constexpr submatch_type get() const noexcept;
   };
@@ -137,10 +218,13 @@ template<std::bidirectional_iterator I, /* ... */> struct std::tuple_size<rx::st
 template<std::size_t N, std::bidirectional_iterator I, /* ... */> struct std::tuple_element<N, rx::static_regex_match_result<I, /* ... */>>;
 ```
 
-The submatch with index `0` denotes the entire match, while any submatches after that correspond to the capturing groups in the matched regex pattern. 
-Whenever an individual capturing group is not matched, a default-constructed submatch is returned.
+The submatch with index `0` denotes the entire match, while any submatches after that correspond to the capturing groups in the matched regex pattern.
+The public static data member `submatch_count` denotes the maximum number of submatches that an object contains.
+It should be noted that `size()` returns `submatch_count` when `has_value()` is `true`, and `0` otherwise.
 
-Note: `size()` returns `submatch_count` when `has_value()` is `true`, and `0` otherwise.
+`static_regex_match_result` does not store individual submatches; instead submatches are re-constructed as needed.
+Whenever an individual capturing group is not matched, a default-constructed submatch is returned.
+As such, `iterator` satisfies `std::random_access_iterator` but due to being a proxy iterator only meets the requirements for *Cpp17InputIterator*.
 
 
 ## Class template `rx::submatch`
@@ -160,16 +244,16 @@ namespace rx {
     using size_type              = std::size_t;
     using string_type            = std::basic_string<value_type>;
     using view_type              = std::basic_string_view<value_type>;
-  
+
     constexpr submatch() = default;
-  
+
     /* observers */
     constexpr bool matched() const noexcept;
     constexpr explicit(false) operator bool() const noexcept;
     constexpr bool empty() const noexcept;
     constexpr size_type size() const;
     constexpr size_type length() const;
-  
+
     /* iterators */
     constexpr iterator begin() const noexcept;
     constexpr iterator end() const noexcept;
@@ -179,11 +263,11 @@ namespace rx {
     constexpr const_iterator cend() const noexcept;
     constexpr const_reverse_iterator crbegin() const noexcept;
     constexpr const_reverse_iterator crend() const noexcept;
-      
+
     /* structured binding support */
     template<std::size_t N> requires (N < 2) constexpr const auto& get() const &;
     template<std::size_t N> requires (N < 2) constexpr auto&& get() &&;
-  
+
     /* conversion */
     constexpr string_type str() const;
     constexpr view_type view() const requires std::contiguous_iterator<I>;
@@ -191,15 +275,15 @@ namespace rx {
     constexpr explicit(false) operator view_type() const requires std::contiguous_iterator<I>;;
     constexpr explicit(false) operator submatch<const_iterator>() const & requires (not std::same_as<const_iterator, iterator>);
     constexpr explicit(false) operator submatch<const_iterator>() && requires (not std::same_as<const_iterator, iterator>);
-  
+
     /* operators */
     friend constexpr bool operator==(const submatch& lhs, const submatch& rhs);
     friend constexpr bool operator==(const submatch& sub, const view_type view);
     friend constexpr auto operator<=>(const submatch& lhs, const submatch& rhs);
     friend constexpr auto operator<=>(const submatch& sub, const view_type view);
-    template<typename CharT, typename Traits> 
+    template<typename CharT, typename Traits>
     friend std::basic_ostream<CharT, Traits> operator<<(std::basic_ostream<CharT, Traits>& os, const submatch& sub);
-  
+
     /* misc */
     void swap(submatch& other) noexcept(std::is_nothrow_swappable_v<I>);
   };
@@ -213,24 +297,113 @@ template<std::size_t N, std::bidirectional_iterator I> requires (N < 2)  struct 
 template<std::bidirectional_iterator I> inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
 ```
 
+A `submatch` can be seen as an iterator pair that denotes a matched subrange of the input, combined with an additional bool to track whether the object contains a match, which can be checked through `matched()` or `operator bool()`.
 When a `submatch` is default-constructed, `matched() == false`.
-
-Note: `matched()` and `operator bool()` both return `true` when the `submatch` object does not contain a match and `false` otherwise,
-while `empty()` returns `true` additionally when the `submatch` object has matched an empty string.
+It should be noted that `submatch` objects can be empty (i.e. `begin() == end()`) while still containing a match; `empty()` should be used to check for the presence of empty or non-match-containing objects.
 
 
-## Class template `rx::string_literal`
+## Class template `rx::regex_match_view`
 
-`string_literal` exists as a minimal placeholder for the proposed [`std::basic_fixed_string`](wg21.link/p3094), and allows for strings to be passed as template parameters.
+`regex_match_view` provides a way to iterate over every regular expression match in an input string.
 
-``` cpp
-namespace rx
-{
-  template<typename CharT, std::size_t N>
-  struct string_literal {
-    using char_type = CharT;
-    consteval string_literal(const char_type (&str)[N]);
-    constexpr std::basic_string_view<char_type> view() const;
+```cpp
+namespace rx {
+  template<std::ranges::bidirectional_range V, typename Regex>
+  requires std::ranges::view<V>
+  class regex_match_view {};
+
+  /* rx::static_regex support */
+  template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+  requires std::ranges::view<V>
+  class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>> {
+    template<bool> struct iterator;
+    template<bool> struct sentinel;
+
+  public:
+    regex_match_view() requires std::default_initializable<V> = default;
+
+    constexpr explicit regex_match_view(V base, static_regex<Pattern, Mode> regex);
+
+    constexpr V base() const& requires std::copy_constructible<V>;
+    constexpr V base() &&;
+    constexpr iterator<false> begin();
+    constexpr iterator<true> begin() const requires std::ranges::bidirectional_range<const V>;
+    constexpr sentinel<false> end();
+    constexpr sentinel<true> end() const requires std::ranges::bidirectional_range<const V>;
   };
+
+  namespace views {
+    inline constexpr /* range adaptor */ regex_match;
+  }
 } // namespace rx
 ```
+
+`iterator` meets the syntactic requirements for `std::input_iterator` and *Cpp17InputIterator*, but not the complexity requirements.
+This is because matching is performed lazily: the first match is found at construction and subsequent matches are found whenever the iterator is incremented.
+Since positions of matches are not cached, these operations do not take place in constant time (amortized).
+
+
+## Class template `rx::submatches_view`
+
+`submatches_view` adapts a `regex_match_view` to flatten and iterate over the specified `submatch` objects from each regex match result object of the `regex_match_view`.
+
+```cpp
+namespace rx {
+  template<std::ranges::input_range V, int... Submatches>
+  requires std::ranges::view<V>
+  class submatches_view {};
+
+  /* compile time index support */
+  template<std::ranges::input_range V, int... Submatches>
+  requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
+  class submatches_view<V, Submatches...> : std::ranges::view_interface<submatches_view<V, Submatches...>> {
+    template<bool> struct iterator;
+    template<bool> struct sentinel;
+
+  public:
+    submatches_view() requires std::default_initializable<V> = default;
+
+    constexpr explicit submatches_view(V base, std::integer_sequence<int, Submatches...> submatches);
+
+    constexpr V base() const& requires std::copy_constructible<V>;
+    constexpr V base() &&;
+    constexpr iterator<false> begin();
+    constexpr iterator<true> begin() const requires std::ranges::bidirectional_range<const V>;
+    constexpr sentinel<false> end();
+    constexpr sentinel<true> end() const requires std::ranges::bidirectional_range<const V>;
+  };
+
+  /* run time index support */
+  template<std::ranges::input_range V>
+  requires std::ranges::view<V> and /* detail::static_regex_match_view_like<V> */
+  class submatches_view<V> : std::ranges::view_interface<submatches_view<V>> {
+    template<bool> struct iterator;
+    template<bool> struct sentinel {};
+
+  public:
+    submatches_view() requires std::default_initializable<V> = default;
+
+    template<std::ranges::input_range R>
+    requires std::same_as<std::ranges::range_value_t<R>, int>
+    constexpr explicit submatches_view(V base, R&& submatches);
+
+    constexpr V base() const& requires std::copy_constructible<V>;
+    constexpr V base() &&;
+    constexpr iterator<false> begin();
+    constexpr iterator<true> begin() const requires std::ranges::bidirectional_range<const V>;
+    constexpr sentinel<false> end()
+    constexpr sentinel<true> end() const requires std::ranges::bidirectional_range<const V>;
+  };
+
+  namespace views {
+    inline constexpr /* range adaptor */ submatches;
+  }
+} // namespace rx
+```
+
+A list of submatch indicies can be supplied to `submatches_view` either at compile time or at run time.
+In either case, the indicies must each be less than the submatch count in the regex match result object, and greater than or equal to `-1`.
+The index of `-1` denotes the substring that is not matched by the regex pattern.
+
+Where a `submatches_view` contains the submatch index of `-1`, the iterator becomes a suffix iterator just before comparing equal to the sentinel.
+If dereferenced, the suffix iterator returns a submatch object for the substring between the end of the last match and the end of the input.

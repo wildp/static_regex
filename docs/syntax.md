@@ -128,3 +128,35 @@ Additionally, octal escape sequences that are not prefixed by `\o` must be longe
 Named unicode characters are not supported.
 
 `\Q...\E` matches the literal text between `'\Q'` and `'\E'`.
+
+
+## Extensions when using the naive matcher
+
+In addition to the above features, the naive matcher additionally supports backreferences, branch reset groups, and possessive repetition.
+
+### Backreferences
+
+| $e ::=$           | matches                                             |
+|:------------------|:----------------------------------------------------|
+| `\X`              | capturing group X *(X is between 1 and 9)*          |
+| `\gX`             | capturing group X *(X is between 1 and 9)*          |
+| `\g{` $n$ `}`     | capturing group $n$ *(where $n$ is greater than 0)* |
+
+### Branch reset
+
+| $\textit{gp} ::=$            | is a                               |
+|:-----------------------------|:-----------------------------------|
+| <code>(&#124;</code> $e$ `)` | branch reset group (non-capturing) |
+
+### Possessive repetition
+
+| $\textit{rep} ::=$   | repeats a pattern                                    |
+|:---------------------|:-----------------------------------------------------|
+| `*+`                 | zero or more times *(possessive)*                    |
+| `++`                 | one or more times *(possessive)*                     |
+| `?+`                 | zero or one times *(possessive)*                     |
+| `{` $n$ `}+`         | $n$ times *(possessive)*                             |
+| `{` $n$ `,}+`        | $n$ or more times *(possessive)*                     |
+| `{` $n$ `,` $m$ `}+` | between $n$ and $m$ times inclusive *(possessive)*   |
+
+

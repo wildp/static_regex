@@ -1,6 +1,6 @@
 # wildp/regex
 
-wildp/regex is an experimental compile-time regular expression library for C++26, implemented using expansion statements.
+wildp/regex is an experimental compile-time regular expression library for C++26.
 
 *This library is still under development.*
 
