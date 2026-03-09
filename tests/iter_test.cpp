@@ -44,10 +44,25 @@ namespace
         return count;
     }
 
+    template<rx::string_literal Pattern, std::ranges::bidirectional_range T>
+    constexpr int submatch_count(T input, const std::vector<int>& vec)
+    {
+        int count{ 0 };
+        for (const auto& _ : input | rx::views::regex_match(rx::static_regex<Pattern>{}) | rx::views::submatches(vec))
+            ++count;
+        return count;
+    }
+
     template<rx::string_literal Pattern, typename Ints, typename CharT>
     constexpr int submatch_count(const CharT* input)
     {
         return submatch_count<Pattern, Ints>(std::ranges::subrange(input, rx::detail::cstr_sentinel));
+    }
+
+    template<rx::string_literal Pattern, typename CharT>
+    constexpr int submatch_count(const CharT* input, const std::vector<int>& vec)
+    {
+        return submatch_count<Pattern>(std::ranges::subrange(input, rx::detail::cstr_sentinel), vec);
     }
 
     template<std::size_t I, std::ranges::bidirectional_range R>
@@ -126,4 +141,20 @@ static_assert(submatch_count<"", ints<-1>>("abcdefg") == 8);
 static_assert(submatch_count<".", ints<-1>>("abcdefg") == 7);
 static_assert(submatch_count<"a", ints<-1>>("abadafa") == 4);
 static_assert(submatch_count<"a", ints<-1>>("abadaf") == 4);
+static_assert(submatch_count<"a", ints<-1, -1>>("abd") == 3);
+static_assert(submatch_count<"a(b)|(c)d", ints<0, 1, 2>>("abcd") == 6);
+static_assert(submatch_count<"b(c)|(e)f", ints<-1, 0, 1, 2>>("abcdefg") == 9);
+
+/* dynamic submatch result count tests */
+static_assert(submatch_count<"">("abcdefg", { 0 }) == 8);
+static_assert(submatch_count<".">("abcdefg", { 0 }) == 7);
+static_assert(submatch_count<"a">("abadafa", { 0 }) == 4);
+static_assert(submatch_count<"a">("abadaf", { 0 }) == 3);
+static_assert(submatch_count<"">("abcdefg", { -1 }) == 8);
+static_assert(submatch_count<".">("abcdefg", { -1 }) == 7);
+static_assert(submatch_count<"a">("abadafa", { -1 }) == 4);
+static_assert(submatch_count<"a">("abadaf", { -1 }) == 4);
+static_assert(submatch_count<"a">("abd", { -1, -1 }) == 3);
+static_assert(submatch_count<"a(b)|(c)d">("abcd", { 0, 1, 2 }) == 6);
+static_assert(submatch_count<"b(c)|(e)f">("abcdefg", { -1, 0, 1, 2 }) == 9);
 

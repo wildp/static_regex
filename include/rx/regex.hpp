@@ -513,11 +513,13 @@ namespace rx
     template<typename Range, string_literal Pattern, mode Mode>
     regex_match_view(Range&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern, Mode>>;
 
+
     namespace detail
     {
         template<typename R>
         concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_regex_match_result>;
     }
+
 
     template<std::ranges::input_range V, int... Submatches>
     requires std::ranges::view<V>
@@ -525,6 +527,7 @@ namespace rx
     {
         static_assert("submatches_view: invalid range");
     };
+
 
     template<std::ranges::input_range V, int... Submatches>
     requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
@@ -586,6 +589,8 @@ namespace rx
         using Base     = detail::maybe_const_t<Const, V>;
         using BaseBase = typename std::ranges::iterator_t<Base>::Base;
 
+        static constexpr std::size_t suffix_index{ -1uz };
+
     public:
         using iterator_category = std::input_iterator_tag;
         using iterator_concept  = std::input_iterator_tag;
@@ -638,18 +643,11 @@ namespace rx
                 index_ = 0;
 
                 if constexpr (has_suffix_iterator)
-                    suffix_start_ = current_.current_;
-            }
-
-            if constexpr (has_suffix_iterator)
-            {
-                if (current_ == end_)
                 {
-                    while (index_ < submatches.size() and submatches[index_] != -1)
-                        ++index_;
+                    suffix_start_ = current_.current_;
 
-                    if (index_ == submatches.size())
-                        return *this;
+                    if (current_ == end_)
+                        index_ = suffix_index;
                 }
             }
 
@@ -677,7 +675,7 @@ namespace rx
         friend constexpr bool operator==(const iterator& x, sentinel /* y */)
         {
             if constexpr (has_suffix_iterator)
-                return not x.current_->has_value() and x.index_ == submatches.size();
+                return not x.current_->has_value() and x.index_ != suffix_index;
             else
                 return not x.current_->has_value();
         }
@@ -692,43 +690,37 @@ namespace rx
         {
             if constexpr (has_suffix_iterator)
             {
-                if (submatches[index_] == -1)
+                using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
+
+                if (index_ == suffix_index)
                 {
-                    using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
-
-                    if (current_->has_value())
-                    {
-                        result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
-                    }
+                    if constexpr (std::ranges::common_range<BaseBase>)
+                        result_ = sf::make_submatch(suffix_start_, current_.end_);
                     else
-                    {
-                        if constexpr (std::ranges::common_range<BaseBase>)
-                        {
-                            result_ = sf::make_submatch(suffix_start_, current_.end_);
-                        }
-                        else if constexpr (std::ranges::random_access_range<BaseBase> and std::ranges::sized_range<BaseBase>)
-                        {
-                            result_ = sf::make_submatch(suffix_start_, suffix_start_ + (current_.end_ - suffix_start_));
-                        }
-                        else
-                        {
-                            std::ranges::iterator_t<BaseBase> suffix_end{ suffix_start_ };
-                            while (suffix_end != current_.end_)
-                                ++suffix_end;
+                        result_ = sf::make_submatch(suffix_start_, std::ranges::next(suffix_start_, std::ranges::distance(suffix_start_, current_.end_)));
 
-                            result_ = sf::make_submatch(suffix_start_, suffix_end);
-                        }
-
-                        if (result_.begin() == result_.end())
-                            index_ = submatches.size();
-                    }
+                    if (result_.begin() == result_.end())
+                        ++index_;
 
                     return;
                 }
             }
 
-            if (current_->has_value())
-                result_ = current_->operator[](submatches[index_]);
+            if (not current_->has_value())
+                return;
+
+            if constexpr (has_suffix_iterator)
+            {
+                using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
+
+                if (submatches[index_] == -1)
+                {
+                    result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
+                    return;
+                }
+            }
+
+            result_ = current_->operator[](submatches[index_]);
         }
 
 
@@ -808,6 +800,8 @@ namespace rx
         using Base     = detail::maybe_const_t<Const, V>;
         using BaseBase = typename std::ranges::iterator_t<Base>::Base;
 
+        static constexpr std::size_t suffix_index{ -1uz };
+
     public:
         using iterator_category = std::input_iterator_tag;
         using iterator_concept  = std::input_iterator_tag;
@@ -859,15 +853,9 @@ namespace rx
                 ++current_;
                 index_ = 0;
                 suffix_start_ = current_.current_;
-            }
 
-            if (current_ == end_)
-            {
-                while (index_ < parent_->submatches_.size() and parent_->submatches_.at(index_) != -1)
-                    ++index_;
-
-                if (index_ == parent_->submatches_.size())
-                    return *this;
+                if (current_ == end_ and std::ranges::contains(parent_->submatches_, -1))
+                    index_ = suffix_index;
             }
 
             this->stash_result();
@@ -893,47 +881,33 @@ namespace rx
 
         friend constexpr bool operator==(const iterator& x, sentinel /* y */)
         {
-            return not x.current_->has_value() and x.index_ == x.parent_->submatches_.size();
+            return not x.current_->has_value() and x.index_ != suffix_index;
         }
 
     private:
         constexpr void stash_result()
         {
-            if (parent_->submatches_.at(index_) == -1)
+            using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
+
+            if (index_ == suffix_index)
             {
-                using sf = detail::submatch_factory<std::ranges::iterator_t<BaseBase>>;
-
-                if (current_->has_value())
-                {
-                    result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
-                }
+                if constexpr (std::ranges::common_range<BaseBase>)
+                    result_ = sf::make_submatch(suffix_start_, current_.end_);
                 else
-                {
-                    if constexpr (std::ranges::common_range<BaseBase>)
-                    {
-                        result_ = sf::make_submatch(suffix_start_, current_.end_);
-                    }
-                    else if constexpr (std::ranges::random_access_range<BaseBase> and std::ranges::sized_range<BaseBase>)
-                    {
-                        result_ = sf::make_submatch(suffix_start_, suffix_start_ + (current_.end_ - suffix_start_));
-                    }
-                    else
-                    {
-                        std::ranges::iterator_t<BaseBase> suffix_end{ suffix_start_ };
-                        while (suffix_end != current_.end_)
-                            ++suffix_end;
+                    result_ = sf::make_submatch(suffix_start_, std::ranges::next(suffix_start_, std::ranges::distance(suffix_start_, current_.end_)));
 
-                        result_ = sf::make_submatch(suffix_start_, suffix_end);
-                    }
-
-                    if (result_.begin() == result_.end())
-                        index_ = parent_->submatches_.size();
-                }
+                if (result_.begin() == result_.end())
+                    ++index_;
 
                 return;
             }
 
-            if (current_->has_value())
+            if (not current_->has_value())
+                return;
+
+            if (parent_->submatches_.at(index_) == -1)
+                result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
+            else
                 result_ = current_->operator[](parent_->submatches_.at(index_));
         }
 
