@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include <boost/dynamic_bitset.hpp>
+#include "rx/etc/vec_bool_adaptor.hpp"
 
 
 namespace rx::detail
@@ -229,7 +229,6 @@ namespace rx::detail
 
     private:
         using underlying_t = std::vector<char_interval>;
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
         using partition_entry = std::pair<char_interval, bitset_t>;
         using partitioned_intervals = std::vector<partition_entry>;
 
@@ -850,7 +849,11 @@ namespace rx::detail
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
             bitset_t mask(input.size(), false);
+#if RX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
+#else
+            mask[input.size() - i - 1] = true;
+#endif
             for (const auto& pair : input[i].get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -876,7 +879,11 @@ namespace rx::detail
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
             bitset_t mask(input.size(), false);
+#if RX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
+#else
+            mask[input.size() - i - 1] = true;
+#endif
             for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -891,7 +898,11 @@ namespace rx::detail
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
             for (std::size_t i{ 0 }; i < input.size(); ++i)
+#if RX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
+#else
+                if (it->first.at(input.size() - i - 1))
+#endif
                     result.back().second.emplace_back(input[i].second);
         }
 
@@ -912,7 +923,11 @@ namespace rx::detail
         for (std::size_t i{ 0 }; i < input.size(); ++i)
         {
             bitset_t mask(input.size(), false);
+#if RX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
+#else
+            mask[input.size() - i - 1] = true;
+#endif
             for (const auto& pair : input[i].first.get().data_)
                 part.emplace_back(pair, mask);
         }
@@ -927,7 +942,11 @@ namespace rx::detail
         {
             result.emplace_back();
             for (std::size_t i{ 0 }; i < input.size(); ++i)
+#if RX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
+#else
+                if (it->first.at(input.size() - i - 1))
+#endif
                     result.back().emplace_back(input[i].second);
         }
 

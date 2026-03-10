@@ -16,9 +16,8 @@
 #include <utility>
 #include <variant>
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "rx/api/regex_error.hpp"
+#include "rx/etc/vec_bool_adaptor.hpp"
 
 
 namespace rx::detail::tdfa
@@ -127,8 +126,6 @@ namespace rx::detail::tdfa
         constexpr explicit factory(const tnfa_t& input, tdfa_t& result, std::size_t tag_count);
 
     private:
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
-
         using epsilon_tr_t = std::pair<tnfa::state_t, tnfa::epsilon_tr>;
         using normal_tr_t  = std::pair<tnfa::state_t, std::reference_wrapper<const tnfa::charset_t<char_type>>>;
         using epsilon_tr_info_t = std::vector<std::vector<epsilon_tr_t>>;

@@ -14,10 +14,8 @@
 #include <ranges>
 #include <vector>
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "rx/etc/util.hpp"
-
+#include "rx/etc/vec_bool_adaptor.hpp"
 
 namespace rx::detail::tdfa
 {
@@ -32,8 +30,6 @@ namespace rx::detail::tdfa
         static constexpr std::vector<std::vector<std::size_t>> dry_run(const tdfa_t& dfa);
 
     private:
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
-
         // TODO: maybe switch to using unordered_set or flat_set?
         using partition_t = std::vector<bitset_t>;
 
@@ -87,7 +83,6 @@ namespace rx::detail::tdfa
     {
         // Adapted from https://en.wikipedia.org/wiki/DFA_minimization#Hopcroft's_algorithm
         // WARNING: this function is extremely slow
-        // TODO: rewrite and switch to using boost::dynamic_bitset or similar?
 
         const std::size_t bitset_size{ dfa.node_count() };
 

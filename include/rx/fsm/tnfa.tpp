@@ -18,10 +18,9 @@
 #include <type_traits>
 #include <utility>
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "rx/api/regex_error.hpp"
 #include "rx/etc/static_charset.hpp"
+#include "rx/etc/vec_bool_adaptor.hpp"
 
 
 namespace rx::detail
@@ -474,7 +473,6 @@ namespace rx::detail
     constexpr auto tagged_nfa<CharT>::closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const
     {
         using result_t = maybe_type_t<B, std::vector<state_t>>;
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         std::vector to_visit{ std::forward<Vec>(qs) };
         std::ranges::reverse(to_visit);
@@ -548,8 +546,6 @@ namespace rx::detail
     template<typename CharT>
     constexpr void tagged_nfa<CharT>::remove_dead_and_unreachable_states()
     {
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
-
         /* determine reachable states */
 
         std::vector<state_t> initial_nodes{ start_node_ };
@@ -944,8 +940,6 @@ namespace rx::detail
     {
         if (cont_info_.size() > 1)
             throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: cont_info_.size() > 1");
-
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         using transition_map_t = std::flat_map<charset_type, std::vector<tr_index>>;
         using state_map_t = std::flat_map<state_t, state_t>;

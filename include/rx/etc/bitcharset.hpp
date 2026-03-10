@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-#include <boost/dynamic_bitset.hpp>
+#include "rx/etc/vec_bool_adaptor.hpp"
 
 
 namespace rx::detail
@@ -36,8 +36,6 @@ namespace rx::detail
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
         static_assert(sizeof(CharT) < sizeof(int));
-
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
     public:
         using char_type = CharT;

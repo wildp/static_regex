@@ -15,7 +15,7 @@
 #include <utility>
 #include <variant>
 
-#include <boost/dynamic_bitset.hpp>
+#include "rx/etc/vec_bool_adaptor.hpp"
 
 
 // TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
@@ -209,8 +209,6 @@ namespace rx::detail::tdfa
         [[nodiscard]] constexpr bool block_valid(std::size_t block_idx) const { return block_idx < data_.size(); }
 
     private:
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
-
         std::vector<bitset_t> data_;
     };
 
@@ -231,8 +229,6 @@ namespace rx::detail::tdfa
         }
 
     private:
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
-
         bitset_t data_;
         std::size_t reg_count_;
     };
@@ -243,7 +239,6 @@ namespace rx::detail::tdfa
     {
     public:
         using tdfa_t = tagged_dfa<CharT>;
-        using bitset_t = boost::dynamic_bitset<std::size_t>;
 
         constexpr explicit opt(std::size_t i = 2) noexcept : iterations_{ i } {}
         constexpr void operator()(tdfa_t& dfa);
