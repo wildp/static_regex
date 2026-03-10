@@ -7,7 +7,6 @@
 #pragma once
 
 #include <meta>
-#include <numeric>
 #include <ranges>
 #include <utility>
 #include <vector>
@@ -145,7 +144,7 @@ namespace rx::detail
                 std::vector<tdfa::charset_t<char_type>> dont_cares;
                 tdfa::charset_t<char_type> acc;
 
-                for (const auto [i, _] : scored_pairs)
+                for (const auto& [i, _] : scored_pairs)
                 {
                     auto& tr{ vec.at(i) };
                     dont_cares.emplace_back(acc);

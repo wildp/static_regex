@@ -10,7 +10,7 @@ This library is also available as a single header file, which can be regenerated
 
 Currently the only compiler supported is the [Clang P2996 fork](https://github.com/bloomberg/clang-p2996/tree/p2996).
 For most patterns it is necessary to to increase the constexpr evaluation step limit (e.g. `-fconstexpr-steps=4294967295` on clang-p2996).
-As of 2026-01-22, GCC trunk fails to compile the library.
+As of 2026-03-10, GCC trunk fails to compile the library.
 
 
 
