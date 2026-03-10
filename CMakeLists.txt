@@ -34,9 +34,6 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     )
 endif()
 
-find_package(Boost 1.90 REQUIRED)
-target_link_libraries(rx INTERFACE Boost::headers)
-
 add_subdirectory(tests/)
 add_subdirectory(bench/ EXCLUDE_FROM_ALL)
 add_subdirectory(trace/ EXCLUDE_FROM_ALL)
