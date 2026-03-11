@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "rx/api/submatch.hpp"
+#include "rx/api/static_regex.hpp"
 #include "rx/etc/string_literal.hpp"
 #include "rx/etc/util.hpp"
 #include "rx/fsm/flags.hpp"
@@ -26,190 +27,6 @@
 
 namespace rx
 {
-    enum class mode : unsigned char
-    {
-        standard,
-        fast,
-        naive
-    };
-
-    namespace detail
-    {
-        consteval auto get_matcher_refl(mode i, bool is_search = false)
-        {
-            if (i == mode::naive)
-                return ^^detail::p1306_naive_adaptor;
-            else if (i == mode::standard and is_search)
-                return ^^detail::p1306_searcher;
-            else
-                return ^^detail::p1306_matcher;
-        }
-    }
-
-    template<string_literal Pattern, mode Mode = mode::standard>
-    struct static_regex
-    {
-        using char_type = decltype(Pattern)::char_type;
-        static_assert(std::same_as<char, char_type>); /* temporary: remove later */
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto match(const I first, const S last)
-        {
-            using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, full_match>;
-            return matcher_t{}(first, last);
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
-        [[nodiscard]] static constexpr auto match(R&& r)
-        {
-            return match(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr auto match(const CharT* cstr)
-        {
-            return match(cstr, detail::cstr_sentinel);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto prefix_match(const I first, const S last)
-        {
-            using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, partial_match>;
-            return matcher_t{}(first, last);
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
-        [[nodiscard]] static constexpr auto prefix_match(R&& r)
-        {
-            return prefix_match(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr auto prefix_match(const CharT* cstr)
-        {
-            return prefix_match(cstr, detail::cstr_sentinel);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto search(const I first, const S last)
-        {
-            using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, search_single>;
-            return matcher_t{}(first, last);
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
-        [[nodiscard]] static constexpr auto search(R&& r)
-        {
-            return search(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr auto search(const CharT* cstr)
-        {
-            return search(cstr, detail::cstr_sentinel);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr bool is_match(const I first, const S last)
-        {
-            using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(full_match)>;
-            return matcher_t{}(first, last);
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
-        [[nodiscard]] static constexpr bool is_match(R&& r)
-        {
-            return is_match(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr bool is_match(const CharT* cstr)
-        {
-            return is_match(cstr, detail::cstr_sentinel);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr bool starts_with_match(const I first, const S last)
-        {
-            using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(partial_match)>;
-            return matcher_t{}(first, last);
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
-        [[nodiscard]] static constexpr bool starts_with_match(R&& r)
-        {
-            return starts_with_match(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr bool starts_with_match(const CharT* cstr)
-        {
-            return starts_with_match(cstr, detail::cstr_sentinel);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr bool contains_match(const I first, const S last)
-        {
-            using namespace detail::default_fsm_flags;
-            using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::adapt_flags_return_bool(search_single)>;
-            return matcher_t{}(first, last);
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type>
-        [[nodiscard]] static constexpr bool contains_match(R&& r)
-        {
-            return contains_match(std::ranges::begin(r), std::ranges::end(r));
-        }
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr bool contains_match(const CharT* cstr)
-        {
-            return contains_match(cstr, detail::cstr_sentinel);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto range(const I first, const S last)
-        {
-            return range(std::ranges::subrange(first, last));
-        }
-
-        template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
-        [[nodiscard]] static constexpr auto range(R&& r);
-
-        template<typename CharT>
-        requires std::same_as<CharT, char_type>
-        [[nodiscard]] static constexpr auto range(const CharT* cstr)
-        {
-            return range(std::ranges::subrange(cstr, detail::cstr_sentinel));
-        }
-    };
-
-
     template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
     class regex_match_view
@@ -512,13 +329,6 @@ namespace rx
 
     template<typename Range, string_literal Pattern, mode Mode>
     regex_match_view(Range&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern, Mode>>;
-
-
-    namespace detail
-    {
-        template<typename R>
-        concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_regex_match_result>;
-    }
 
 
     template<std::ranges::input_range V, int... Submatches>
@@ -929,12 +739,6 @@ namespace rx
     submatches_view(Range&&, Submatches&&) -> submatches_view<std::views::all_t<Range>>;
 
 
-    namespace detail
-    {
-        template<typename Regex>
-        concept static_regex_like = template_instantiation_of<Regex, ^^static_regex>;
-    }
-
     namespace views
     {
         namespace detail
@@ -1048,40 +852,6 @@ namespace rx
     constexpr auto static_regex<Pattern, Mode>::range(R&& r)
     {
         return regex_match_view(r, static_regex<Pattern, Mode>{});
-    }
-
-
-    namespace literals
-    {
-        template<string_literal Pattern>
-        consteval static_regex<Pattern> operator ""_rx()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::fast> operator ""_rxf()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::fast> operator ""_rx_fast()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::naive> operator ""_rxn()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::naive> operator ""_rx_naive()
-        {
-            return {};
-        }
     }
 }
 
