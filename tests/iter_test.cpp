@@ -71,7 +71,7 @@ namespace
         using namespace rx::literals;
         auto matcher = "(Hello)|(World)"_rx;
         auto result = matcher.match(std::forward<R>(r));
-        return result and result.template get<0>() == result.template get<I>();
+        return result and get<0>(result) == get<I>(result);
     }
 
     template<std::size_t I, std::ranges::bidirectional_range R>
@@ -80,7 +80,7 @@ namespace
         using namespace rx::literals;
         auto matcher = "(Hello)|(World)"_rx;
         auto result = matcher.match(r);
-        return result and result.template get<0>() == result.template get<I>();
+        return result and get<0>(result) == get<I>(result);
     }
 }
 

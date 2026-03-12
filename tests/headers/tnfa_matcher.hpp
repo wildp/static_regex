@@ -140,7 +140,7 @@ namespace rx::testing
         tag_vector m0(this->tag_count(), no_tag);
         closure_t c{ { this->start_node(), std::move(m0) } };
 
-        for (std::size_t k{ 0 }; k < input.size(); ++k)
+        for (std::size_t k{ 0 }, k_end{ input.size() }; k < k_end; ++k)
         {
             c = e_closure(std::move(c), k);
             c = step(c, input.at(k));

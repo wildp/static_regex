@@ -265,7 +265,7 @@ namespace rx::detail
 
         while (true)
         {
-            auto midpoint{ lower_bound + (std::ranges::distance(lower_bound, upper_bound) / 2) };
+            auto midpoint{ lower_bound + ((upper_bound - lower_bound) / 2) };
 
             if (midpoint->first != std::numeric_limits<char_type>::min() and c + 1 == midpoint->first)
             {
@@ -730,11 +730,11 @@ namespace rx::detail
 
         for (auto it{ part.begin() }; it != part.end(); ++it)
         {
-            const auto duplicate_begin{ std::next(it) };
+            const auto duplicate_begin{ std::ranges::next(it) };
             auto duplicate_it{ duplicate_begin };
 
             for (; duplicate_it != part.end() and duplicate_it->first == it->first; ++duplicate_it)
-                for (std::size_t j{ 0 }, j_max{ std::min(it->second.size(), duplicate_it->second.size()) }; j < j_max; ++j)
+                for (std::size_t j{ 0 }, j_end{ std::min(it->second.size(), duplicate_it->second.size()) }; j < j_end; ++j)
                     it->second[j] = it->second[j] or duplicate_it->second[j];
 
             if (duplicate_it != duplicate_begin)
@@ -846,7 +846,7 @@ namespace rx::detail
 
         partitioned_intervals part;
 
-        for (std::size_t i{ 0 }; i < input.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
 #if RX_USE_BOOST_DYNAMIC_BITSET
@@ -876,7 +876,7 @@ namespace rx::detail
 
         partitioned_intervals part;
 
-        for (std::size_t i{ 0 }; i < input.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
 #if RX_USE_BOOST_DYNAMIC_BITSET
@@ -897,7 +897,7 @@ namespace rx::detail
         for (auto it{ map.begin() }, end{ map.end() }; it != end; ++it)
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
-            for (std::size_t i{ 0 }; i < input.size(); ++i)
+            for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
 #if RX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
 #else
@@ -920,7 +920,7 @@ namespace rx::detail
 
         partitioned_intervals part;
 
-        for (std::size_t i{ 0 }; i < input.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
 #if RX_USE_BOOST_DYNAMIC_BITSET
@@ -941,7 +941,7 @@ namespace rx::detail
         for (auto it{ map.cbegin() }, end{ map.cend() }; it != end; ++it)
         {
             result.emplace_back();
-            for (std::size_t i{ 0 }; i < input.size(); ++i)
+            for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
 #if RX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
 #else

@@ -713,8 +713,8 @@ namespace rx::detail::parser
                     throw tree_error("Caseless flag on multibyte strings not implemented");
                 }
 
-                auto lit_it{ std::ranges::begin(lit.data) };
-                const auto lit_end{ std::ranges::end(lit.data) };
+                auto lit_it{ lit.data.begin() };
+                const auto lit_end{ lit.data.end() };
 
                 if (std::ranges::any_of(lit_it, lit_end, is_alphabetic))
                 {
@@ -956,7 +956,7 @@ namespace rx::detail::parser
                     auto& target{ get<char_str>(rhs).data };
                     auto& lhs_str{ get<char_str>(lhs).data };
                     lhs_str.append(target);
-                    std::swap(lhs_str, target);
+                    std::ranges::swap(lhs_str, target);
                     overwritable_.push_back(lhs_idx);
                     merged = true;
                 }
@@ -981,7 +981,7 @@ namespace rx::detail::parser
                 auto& target{ get<char_str>(rhs).data };
                 auto& lhs_str{ get<char_str>(lhs).data };
                 lhs_str.append(target);
-                std::swap(lhs_str, target);
+                std::ranges::swap(lhs_str, target);
                 overwritable_.push_back(lhs_idx);
                 return rhs_idx;
             }

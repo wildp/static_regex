@@ -17,7 +17,7 @@ namespace
         if (((mr.size() - init) * 2) != captures.size())
             return false;
 
-        for (std::size_t i{ init }; i < mr.size(); ++i)
+        for (std::size_t i{ init }, i_end{ mr.size() }; i < i_end; ++i)
         {
             const auto submatch{ mr.at(i) };
             auto lhs{ captures.at((i - init) * 2) };

@@ -187,7 +187,7 @@ namespace rx::testing
 
         std::vector<tnfa::state_t> final_nodes;
 
-        for (tnfa::state_t q{ 0 }; q < nfa.node_count(); ++q)
+        for (tnfa::state_t q{ 0 }, q_end{ nfa.node_count() }; q < q_end; ++q)
         {
             const auto& node{ nfa.get_node(q) };
 
@@ -204,7 +204,7 @@ namespace rx::testing
 
         std::println();
 
-        for (tnfa::tr_index i{ 0 }; i < nfa.transition_count(); ++i)
+        for (tnfa::tr_index i{ 0 }, i_end{ nfa.transition_count() }; i < i_end; ++i)
         {
             const auto& tr{ nfa.get_tr(i) };
 
@@ -297,7 +297,7 @@ namespace rx::testing
 
         std::println(target);
 
-        for (std::size_t i{ 0 }; i < dfa.node_count(); ++i)
+        for (std::size_t i{ 0 }, i_end{ dfa.node_count() }; i < i_end; ++i)
         {
             const auto& node{ dfa.get_node(i) };
 

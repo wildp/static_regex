@@ -436,15 +436,16 @@ namespace rx::detail
         for (const bitcharset& val : input)
         {
             std::vector<bitcharset> next_gen;
-            next_gen.reserve(partitions.size() * 2);
+            const auto partition_size{ partitions.size() };
+            next_gen.reserve(partition_size * 2);
 
-            for (std::size_t i{ 0 }; i < partitions.size(); ++i)
+            for (std::size_t i{ 0 }; i < partition_size; ++i)
                 if (auto cs{ partitions[i] & val }; not cs.empty())
                     next_gen.emplace_back(cs);
 
             const auto complement{ ~val };
 
-            for (std::size_t i{ 0 }; i + 1 < partitions.size(); ++i)
+            for (std::size_t i{ 0 }; i + 1 < partition_size; ++i)
                 if (auto cs{ partitions[i] & complement }; not cs.empty())
                     next_gen.emplace_back(cs);
 
@@ -513,7 +514,7 @@ namespace rx::detail
                 continue;
 
             result.emplace_back(v, std::vector<T>{});
-            for (std::size_t i{ 0 }; i < input.size(); ++i)
+            for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
                 if (from.at(i))
                     result.back().second.emplace_back(input[i].second);
         }
@@ -572,7 +573,7 @@ namespace rx::detail
                 continue;
 
             result.emplace_back();
-            for (std::size_t i{ 0 }; i < input.size(); ++i)
+            for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
                 if (from.at(i))
                     result.back().emplace_back(input[i].second);
         }

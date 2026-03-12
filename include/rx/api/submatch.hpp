@@ -125,22 +125,22 @@ namespace rx
 
         template<std::size_t N>
         requires (N < 2)
-        [[nodiscard]] constexpr const auto& get() const &
+        [[nodiscard]] friend constexpr const auto& get(const submatch& s)
         {
             if constexpr (N == 0)
-                return first_;
+                return s.first_;
             if constexpr (N == 1)
-                return last_;
+                return s.last_;
         }
 
         template<std::size_t N>
         requires (N < 2)
-        [[nodiscard]] constexpr auto&& get() &&
+        [[nodiscard]] friend constexpr auto&& get(submatch&& s)
         {
             if constexpr (N == 0)
-                return std::move(first_);
+                return std::move(s).first_;
             if constexpr (N == 1)
-                return std::move(last_);
+                return std::move(s).last_;
         }
 
         /* conversion */
@@ -222,10 +222,10 @@ namespace rx
 
         /* misc */
 
-        void swap(submatch& other) noexcept(std::is_nothrow_swappable_v<I>)
+        friend constexpr void swap(submatch& x, submatch& y) noexcept(std::is_nothrow_swappable_v<I>)
         {
-            std::swap(first_, other.first_);
-            std::swap(last_, other.last_);
+            std::ranges::swap(x.first_, y.first_);
+            std::ranges::swap(x.last_, y.last_);
         }
 
     private:

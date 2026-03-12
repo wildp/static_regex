@@ -228,7 +228,7 @@ namespace rx::detail
                     if (tag_vec.empty() or tag_vec.at(idx).empty())
                     {
                         /* generate naive tag-free nfa */
-                        for (std::size_t i{ 0 }; i < alt.idxs.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ alt.idxs.size() }; i < i_end; ++i)
                         {
                             const state_t qi{ node_create() };
                             make_epsilon(q0, qi, i);
@@ -238,9 +238,9 @@ namespace rx::detail
                     else
                     {
                         /* generate tag-aware nfa */
-                        for (std::size_t i{ 0 }; i < alt.idxs.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ alt.idxs.size() }; i < i_end; ++i)
                         {
-                            if (i + 1 == alt.idxs.size())
+                            if (i + 1 == i_end)
                             {
                                 stack.emplace_back(q0, qf, alt.idxs.at(i));
                             }
@@ -258,7 +258,7 @@ namespace rx::detail
                                 make_ntags(p1, q2, tag_vec.at(alt.idxs.at(i)));
 
                                 std::vector<int> remaining_ntags;
-                                for (std::size_t j{ i + 1 }; j < alt.idxs.size(); ++j)
+                                for (std::size_t j{ i + 1 }; j < i_end; ++j)
                                     std::ranges::copy(tag_vec.at(alt.idxs.at(j)), std::back_inserter(remaining_ntags));
 
                                 std::ranges::sort(remaining_ntags);
@@ -560,7 +560,7 @@ namespace rx::detail
 
         std::vector<state_t> final_nodes{};
 
-        for (state_t q{ 0 }; q < nodes_.size(); ++q)
+        for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
             if (nodes_[q].is_final)
                 final_nodes.emplace_back(q);
 
@@ -572,7 +572,7 @@ namespace rx::detail
 
         bitset_t removed_transitions(transitions_.size(), false);
 
-        for (tr_index i{ 0 }; i < transitions_.size(); ++i)
+        for (tr_index i{ 0 }, i_end{ transitions_.size() }; i < i_end; ++i)
         {
             auto& tr{ transitions_[i] };
 
@@ -590,7 +590,7 @@ namespace rx::detail
 
         const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i) { return rt.at(i); };
 
-        for (state_t q{ 0 }; q < nodes_.size(); ++q)
+        for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
         {
             tnfa::node& node{ nodes_[q] };
 
@@ -957,7 +957,7 @@ namespace rx::detail
             continue_state = cont_info_.front().value;
 
         std::vector<state_t> fallback_states;
-        for (state_t q{ 0 }; q < nodes_.size(); ++q)
+        for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
             if (const auto& node{ nodes_[q] }; node.is_final and node.is_fallback and not node.in_tr.empty())
                 fallback_states.emplace_back(q);
 
@@ -1015,7 +1015,7 @@ namespace rx::detail
         std::vector<tr_index> wraparounds; /* sorted; i.e. flat_set */
         charset_type wraparound_union;
 
-        for (tr_index i{ 0 }; i < transitions_.size(); ++i)
+        for (tr_index i{ 0 }, i_end{ transitions_.size() }; i < i_end; ++i)
         {
             const auto& tr{ transitions_[i] };
             const auto* ptr{ get_if<lookbehind_1_tr>(&tr.type) };
@@ -1158,7 +1158,7 @@ namespace rx::detail
             const auto fn = [&](const charset_type& edge) {
                 std::size_t cont_index{ std::numeric_limits<wraparound_index>::max() };
                 if (const auto it{ std::ranges::lower_bound(wrap_starts, edge) }; it != wrap_starts.end() and edge == *it)
-                    cont_index = static_cast<wraparound_index>(std::distance(wrap_starts.begin(), it));
+                    cont_index = static_cast<wraparound_index>(it - wrap_starts.begin());
                 return std::pair{ std::cref(edge), cont_index };
             };
 

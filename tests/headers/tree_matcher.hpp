@@ -183,7 +183,7 @@ namespace rx::testing
                         if (alt.idxs.empty())
                             return rc::match_failure;
 
-                        for (std::size_t i{ 0 }; i + 1 < alt.idxs.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ alt.idxs.size() }; i + 1 < i_end; ++i)
                         {
                             state_t s_copy{ s };
                             s_copy.cont.push_back(alt.idxs.at(i));
@@ -214,12 +214,12 @@ namespace rx::testing
 
                         auto t = [&](const detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
                             return {
-                                std::next((p.first.tag_number >= 0)
-                                          ? *s.tags.at(p.first.tag_number)
-                                          : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
-                                std::next((p.second.tag_number >= 0)
-                                          ? *s.tags.at(p.second.tag_number)
-                                          : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset)
+                                std::ranges::next((p.first.tag_number >= 0)
+                                                  ? *s.tags.at(p.first.tag_number)
+                                                  : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
+                                std::ranges::next((p.second.tag_number >= 0)
+                                                   ? *s.tags.at(p.second.tag_number)
+                                                   : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset)
                             };
                         };
 
@@ -383,12 +383,12 @@ namespace rx::testing
 
         auto t = [&](const detail::capture_info::tag_pair_t& p) -> std::pair<I, I> {
             return {
-                std::next((p.first.tag_number >= 0)
-                          ? *s.tags.at(p.first.tag_number)
-                          : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
-                std::next((p.second.tag_number >= 0)
-                          ? *s.tags.at(p.second.tag_number)
-                          : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset)
+                std::ranges::next((p.first.tag_number >= 0)
+                                  ? *s.tags.at(p.first.tag_number)
+                                  : ((p.first.tag_number == detail::start_of_input_tag) ? first : last), p.first.offset),
+                std::ranges::next((p.second.tag_number >= 0)
+                                  ? *s.tags.at(p.second.tag_number)
+                                  : ((p.second.tag_number == detail::start_of_input_tag) ? first : last), p.second.offset)
             };
         };
 
@@ -411,8 +411,8 @@ namespace rx::testing
             auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<I, I>::first) };
             auto [bit, blast]{ *max_elem };
 
-            res.push_back(std::distance(first, bit));
-            res.push_back(std::distance(first, blast));
+            res.push_back(std::ranges::distance(first, bit));
+            res.push_back(std::ranges::distance(first, blast));
         }
 
         return res;

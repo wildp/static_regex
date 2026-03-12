@@ -12,7 +12,7 @@ namespace
     consteval auto make_bs(std::string_view sv)
     {
         rx::detail::bitcharset<char> result;
-        for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
+        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
             result.insert(sv[i], sv[i + 1]);
         return result;
     }
@@ -21,7 +21,7 @@ namespace
     {
         rx::detail::bitcharset<char> result;
         char tmp{ std::numeric_limits<char>::min() };
-        for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
+        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
         {
             result.insert(tmp, sv[i]);
             tmp = sv[i + 1];
@@ -42,7 +42,7 @@ namespace
     consteval auto make_pairvec(std::string_view sv)
     {
         std::vector<rx::detail::bitcharset<char>::char_interval> result;
-        for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
+        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
             result.emplace_back(sv[i], sv[i + 1]);
         return result;
     }

@@ -52,7 +52,7 @@ namespace rx::detail
                 throw std::invalid_argument("capture_info::insert: cannot insert capture with number 0");
 
             const auto key_it{ std::ranges::upper_bound(keys_, cap) };
-            const auto value_it{ std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_it) };
+            const auto value_it{ values_.begin() + (key_it - keys_.begin()) };
 
             keys_.emplace(key_it, cap);
             values_.emplace(value_it, pair_entry{ .tag_number = lhs, .offset = 0 }, pair_entry{ .tag_number = rhs, .offset = 0 });
@@ -67,7 +67,7 @@ namespace rx::detail
         {
             auto key_copy{ keys_ };
             auto [last, _]{ std::ranges::unique(key_copy) };
-            return std::saturate_cast<capture_number_t>(std::ranges::distance(std::ranges::begin(key_copy), last));
+            return std::saturate_cast<capture_number_t>(last - key_copy.begin());
         }
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
@@ -90,8 +90,8 @@ namespace rx::detail
             auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
 
             return std::ranges::subrange{
-                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_beg),
-                std::ranges::begin(values_) + std::distance(std::ranges::begin(keys_), key_end)
+                values_.begin() + (key_beg - keys_.begin()),
+                values_.begin() + (key_end - keys_.begin())
             };
         }
 
@@ -147,11 +147,11 @@ namespace rx::detail
         {
             tag_remapper_t result;
 
-            for (std::size_t i{ 1 }, end{ keys_.size() }; i < end; ++i)
+            for (std::size_t i{ 1 }, i_end{ keys_.size() }; i < i_end; ++i)
             {
                 const auto capnum{ keys_.at(i - 1) };
 
-                if (capnum != keys_.at(i))
+                if (keys_.at(i) != capnum)
                     continue;
 
                 if (values_[i - 1].first.offset != 0 or values_[i - 1].first.offset != 0)
@@ -163,7 +163,7 @@ namespace rx::detail
                 result.emplace(values_[i].first.tag_number, first_target);
                 result.emplace(values_[i].second.tag_number, second_target);
 
-                for (; i < end and capnum == keys_.at(i); ++i)
+                while (i < i_end and keys_.at(i) == capnum)
                 {
                     result.emplace(values_[i].first.tag_number, first_target);
                     result.emplace(values_[i].second.tag_number, second_target);
@@ -173,6 +173,8 @@ namespace rx::detail
 
                     values_[i].first.tag_number = first_target;
                     values_[i].second.tag_number = second_target;
+
+                    ++i;
                 };
             }
 

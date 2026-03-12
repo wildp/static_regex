@@ -80,7 +80,7 @@ namespace rx::detail::tdfa
                 }
             }
 
-            if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
+            if (std::cmp_not_equal(end - beg, o_new.size()))
                 cycle_detected = true; /* unknown error */
 
             if (not cycle_detected)
@@ -140,7 +140,7 @@ namespace rx::detail::tdfa
                 }
             }
 
-            if (std::cmp_not_equal(std::ranges::distance(beg, end), o_new.size()))
+            if (std::cmp_not_equal(end - beg, o_new.size()))
                 cycle_detected = true; /* unknown error */
 
             if (not cycle_detected)
@@ -272,9 +272,9 @@ namespace rx::detail::tdfa
         std::vector<std::vector<std::size_t>> successor_blocks(dfa.nodes_.size());
         square_matrix reachable(dfa.nodes_.size());
 
-        for (std::size_t node_idx{ 0 }; node_idx < dfa.nodes_.size(); ++node_idx)
+        for (std::size_t node_idx{ 0 }, node_count{ dfa.nodes_.size() }; node_idx < node_count; ++node_idx)
         {
-            for (const auto& tr : dfa.nodes_.at(node_idx).tr)
+            for (const auto& tr : dfa.nodes_[node_idx].tr)
             {
                 if (tr.op_index == no_transition_regops)
                     reachable.at(node_idx, tr.next) = true;
@@ -305,7 +305,7 @@ namespace rx::detail::tdfa
 
         std::vector<std::vector<std::size_t>> nodes_to_edges(dfa.nodes_.size());
 
-        for (std::size_t node_idx{ 0 }; node_idx < dfa.nodes_.size(); ++node_idx)
+        for (std::size_t node_idx{ 0 }, node_count{ dfa.nodes_.size() }; node_idx < node_count; ++node_idx)
         {
             std::vector<std::size_t> tmp;
 
@@ -358,7 +358,7 @@ namespace rx::detail::tdfa
     {
         for (auto& block : dfa.regops_)
         {
-            for (auto it{ std::ranges::begin(block) }; it != std::ranges::end(block);)
+            for (auto it{ block.begin() }; it != block.end();)
             {
                 it->dst = remap.at(it->dst);
                 if (auto* cpy{ get_if<regop::copy>(&it->op) }; cpy != nullptr)
@@ -567,7 +567,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr void opt<CharT>::deadcode_elim(tdfa_t& dfa, const liveness_matrix& liveness)
     {
-        for (std::size_t block_idx{ 0 }; block_idx < dfa.regops_.size(); ++block_idx)
+        for (std::size_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
         {
             auto& block{ dfa.regops_.at(block_idx) };
             bitset_t current_row_copy{ liveness.row(block_idx) };

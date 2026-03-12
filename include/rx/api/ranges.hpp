@@ -20,9 +20,6 @@
 #include "rx/etc/string_literal.hpp"
 #include "rx/etc/util.hpp"
 #include "rx/fsm/flags.hpp"
-#include "rx/gen/naive.hpp"
-#include "rx/gen/p1306.hpp"
-#include "rx/gen/result.hpp"
 
 
 namespace rx
@@ -525,7 +522,7 @@ namespace rx
 
                 if (submatches[index_] == -1)
                 {
-                    result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
+                    result_ = sf::make_submatch(suffix_start_, get<0>(*current_).begin());
                     return;
                 }
             }
@@ -716,7 +713,7 @@ namespace rx
                 return;
 
             if (parent_->submatches_.at(index_) == -1)
-                result_ = sf::make_submatch(suffix_start_, current_->template get<0>().begin());
+                result_ = sf::make_submatch(suffix_start_, get<0>(*current_).begin());
             else
                 result_ = current_->operator[](parent_->submatches_.at(index_));
         }

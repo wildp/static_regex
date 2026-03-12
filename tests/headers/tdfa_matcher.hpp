@@ -78,9 +78,9 @@ namespace rx::testing
 
             while (ret.first.has_value())
             {
-                std::advance(it, ret.first->at(1));
+                std::ranges::advance(it, ret.first->at(1));
                 result.emplace_back(std::move(*ret.first));
-                std::ranges::for_each(result.back(), [x = std::distance(first, prev_it)](auto& v) { v += x; });
+                std::ranges::for_each(result.back(), [x = std::ranges::distance(first, prev_it)](auto& v) { v += x; });
                 if (ret.second == detail::tdfa::no_continue)
                     break;
                 ret = match_implementation(it, last, true, this->continue_nodes().at(ret.second));
@@ -214,16 +214,16 @@ namespace rx::testing
 
         auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<I, I> {
             return {
-                std::next((p.first.tag_number >= 0)
-                          ? registers.at(final_reg.at(p.first.tag_number))
-                          : ((p.first.tag_number == start_of_input_tag) ? first : it), p.first.offset),
-                std::next((p.second.tag_number >= 0)
-                          ? registers.at(final_reg.at(p.second.tag_number))
-                          : ((p.second.tag_number == start_of_input_tag) ? first : it), p.second.offset)
+                std::ranges::next((p.first.tag_number >= 0)
+                                  ? registers.at(final_reg.at(p.first.tag_number))
+                                  : ((p.first.tag_number == start_of_input_tag) ? first : it), p.first.offset),
+                std::ranges::next((p.second.tag_number >= 0)
+                                  ? registers.at(final_reg.at(p.second.tag_number))
+                                  : ((p.second.tag_number == start_of_input_tag) ? first : it), p.second.offset)
             };
         };
 
-        for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
+        for (std::size_t i{ 0 }, i_end{ ci.capture_count() }; i < i_end; ++i)
         {
             auto rng{
                 ci.lookup(i)
@@ -241,8 +241,8 @@ namespace rx::testing
             auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<I, I>::first) };
             auto [bit, blast]{ *max_elem };
 
-            res.push_back(std::distance(first, bit));
-            res.push_back(std::distance(first, blast));
+            res.push_back(std::ranges::distance(first, bit));
+            res.push_back(std::ranges::distance(first, blast));
         }
 
         return { res, continue_at };

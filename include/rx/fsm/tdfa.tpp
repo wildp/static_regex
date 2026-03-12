@@ -99,12 +99,9 @@ namespace rx::detail::tdfa
         {
             auto it{ std::ranges::lower_bound(data_, tag, std::less{}, &entry::tag) };
 
-            while (it != std::ranges::end(data_) and it->tag == tag)
-            {
+            for (const auto end{ data_.end() }; it != end and it->tag == tag; ++it)
                 if (it->op == op)
                     return { it->reg, true };
-                ++it;
-            }
 
             /* entry not found; insert new entry */
             it = data_.insert(it, entry{ .tag = tag, .op = op, .reg = 0 });
@@ -315,11 +312,11 @@ namespace rx::detail::tdfa
             result.nodes_.emplace_back();
             state_info_.emplace_back(std::move(current_info));
 
-            const auto sh_offset{ std::ranges::distance(sh_zv.begin(), sh_eq_range.end()) };
+            const auto sh_offset{ std::ranges::distance(std::ranges::begin(sh_zv), std::ranges::end(sh_eq_range)) };
             state_hashes_keys_.emplace(state_hashes_keys_.cbegin() + sh_offset, sh_key);
             state_hashes_values_.emplace(state_hashes_values_.cbegin() + sh_offset, new_state);
 
-            const auto mc_offset{ std::ranges::distance(mc_zv.begin(), mc_eq_range.end()) };
+            const auto mc_offset{ std::ranges::distance(std::ranges::begin(mc_zv), std::ranges::end(mc_eq_range)) };
             mappable_candidate_keys_.emplace(mappable_candidate_keys_.cbegin() + mc_offset, mc_key);
             mappable_candidate_values_.emplace(mappable_candidate_values_.cbegin() + mc_offset, new_state);
         }
@@ -329,7 +326,7 @@ namespace rx::detail::tdfa
         const auto is_final = [this](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_final; };
         const auto it{ std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state) };
         std::optional<continue_at_t> continue_at;
-        if (it != std::ranges::end(current_cfg))
+        if (it != current_cfg.end())
         {
             auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
             const auto& node{ tnfa_ptr_->get_node(it->tnfa_state) };
@@ -355,7 +352,7 @@ namespace rx::detail::tdfa
             /* set fallback state status for fallback_regops */
             const auto is_fallback = [&](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_fallback; };
             const auto it2{ std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state) };
-            if (it2 != std::ranges::end(current_cfg))
+            if (it2 != current_cfg.end())
             {
                 state_info_.back().is_fallback = true;
                 if (continue_at.has_value())

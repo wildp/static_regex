@@ -296,15 +296,16 @@ namespace rx::detail
             std::size_t digits{ 0 };
             ++it_;
 
-            for (bool loop{ true }; loop; ++digits)
+            while (true)
             {
                 if (it_ == end_)
                     throw pattern_error("EOF in escape sequence");;
 
                 const auto c{ *it_ };
+                ++it_;
 
                 if (c == '}')
-                    loop = false;
+                    break;
                 else if ('0' <= c and c <= '9')
                     result = (result * hexadecimal_base) + (c - '0');
                 else if ('A' <= c and c <= 'F')
@@ -314,7 +315,7 @@ namespace rx::detail
                 else
                     throw pattern_error("Invalid character in hexadecimal escape sequence");
 
-                ++it_;
+                ++digits;
             }
 
             if (digits == 0)
@@ -417,21 +418,22 @@ namespace rx::detail
         std::size_t digits{ 0 };
         ++it_;
 
-        for (bool loop{ true }; loop; ++digits)
+        while (true)
         {
             if (it_ == end_)
-                throw pattern_error("EOF in escape sequence");;
+                throw pattern_error("EOF in escape sequence");
 
             const auto c{ *it_ };
+            ++it_;
 
             if (c == '}')
-                loop = false;
+                break;
             else if ('0' <= c and c <= '7')
                 result = (result * octal_base) + (c - '0');
             else
                 throw pattern_error("Invalid character in octal escape sequence");
 
-            ++it_;
+            ++digits;
         }
 
         if (digits == 0)
@@ -630,7 +632,7 @@ namespace rx::detail
                 slash = false;
         }
 
-        return char_str<CharT>{ std::next(begin, 2), std::prev(it_, 2) };
+        return char_str<CharT>{ std::ranges::next(begin, 2), std::ranges::prev(it_, 2) };
     }
 
     template<typename CharT>

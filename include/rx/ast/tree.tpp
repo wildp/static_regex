@@ -264,7 +264,7 @@ namespace rx::detail
 
         std::flat_map<tag_number_t, capture_info::pair_entry> tag_remap;
 
-        for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ expressions_.size() }; i < i_end; ++i)
         {
             if (not holds_alternative<concat>(expressions_.at(i)))
                 continue;
@@ -386,7 +386,7 @@ namespace rx::detail
     template<typename CharT>
     constexpr void expr_tree<CharT>::simplify_counted_repeat()
     {
-        for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
+        for (std::size_t i{ 0 }, i_end{ expressions_.size() }; i < i_end; ++i)
         {
             if (not holds_alternative<repeat>(expressions_[i]))
                 continue;
@@ -452,7 +452,7 @@ namespace rx::detail
     template<typename CharT>
     constexpr void expr_tree<CharT>::optimise_exact_repeat()
     {
-        for (std::size_t i{ 0 }, end{ expressions_.size() }; i < end; ++i)
+        for (std::size_t i{ 0 }, i_end{ expressions_.size() }; i < i_end; ++i)
         {
             if (not holds_alternative<repeat>(expressions_[i]))
                 continue;
@@ -497,7 +497,7 @@ namespace rx::detail
 
         std::flat_map<tag_number_t, capture_info::pair_entry> tag_remap;
 
-        for (std::size_t i{ 0 }; i < expressions_.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ expressions_.size() }; i < i_end; ++i)
         {
             if (not holds_alternative<concat>(expressions_.at(i)))
                 continue;

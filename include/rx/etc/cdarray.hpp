@@ -108,10 +108,10 @@ namespace rx::detail
             new_counter();
         }
 
-        template<class InputIter>
-        constexpr cdarray(InputIter first, InputIter last, const Allocator& alloc = Allocator())
+        template<std::input_iterator I, std::sentinel_for<I> S>
+        constexpr cdarray(I first, S last, const Allocator& alloc = Allocator())
             : alloc_{ alloc },
-              data_{ std::allocator_traits<Allocator>::allocate(alloc_, std::distance(first, last)) },
+              data_{ std::allocator_traits<Allocator>::allocate(alloc_, std::ranges::distance(first, last)) },
               end_{ data_ }
         {
             for (; first != last; ++first)
@@ -208,12 +208,12 @@ namespace rx::detail
                 *p = value;
         }
 
-        constexpr void swap(cdarray& other) noexcept(std::is_nothrow_swappable_v<T>)
+        friend constexpr void swap(cdarray& x, cdarray& y) noexcept(std::is_nothrow_swappable_v<T>)
         {
-            std::swap(alloc_, other.alloc_);
-            std::swap(data_, other.data_);
-            std::swap(end_, other.end_);
-            std::swap(use_count_ptr_, other.use_count_ptr_);
+            std::ranges::swap(x.alloc_, y.alloc_);
+            std::ranges::swap(x.data_, y.data_);
+            std::ranges::swap(x.end_, y.end_);
+            std::ranges::swap(x.use_count_ptr_, y.use_count_ptr_);
         }
 
         /* iterators */
@@ -235,7 +235,7 @@ namespace rx::detail
         /* capacity */
 
         [[nodiscard]] constexpr bool empty() const noexcept { return (data_ == end_); }
-        [[nodiscard]] constexpr size_type size() const noexcept { return std::distance(data_, end_); }
+        [[nodiscard]] constexpr size_type size() const noexcept { return std::ranges::distance(data_, end_); }
         [[nodiscard]] constexpr size_type max_size() const noexcept { return this->size(); }
 
         /* element access */
@@ -247,8 +247,8 @@ namespace rx::detail
         [[nodiscard]] constexpr const_reference cat(size_type n) const { return this->at(n); }
         [[nodiscard]] constexpr reference front() { this->copy_if_needed(); return *data_; }
         [[nodiscard]] constexpr const_reference front() const { return *data_; }
-        [[nodiscard]] constexpr reference back() { this->copy_if_needed(); return *std::prev(end_); }
-        [[nodiscard]] constexpr const_reference back() const { return *std::prev(end_); }
+        [[nodiscard]] constexpr reference back() { this->copy_if_needed(); return *std::ranges::prev(end_); }
+        [[nodiscard]] constexpr const_reference back() const { return *std::ranges::prev(end_); }
 
         /* data access */
 

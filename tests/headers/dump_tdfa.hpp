@@ -28,7 +28,7 @@ namespace rx::testing
                 std::unreachable();
         };
 
-        for (std::size_t i{ 0 }; i < dfa.node_count(); ++i)
+        for (std::size_t i{ 0 }, i_end{ dfa.node_count() }; i < i_end; ++i)
         {
             if (dfa.final_nodes().contains(i))
                 std::println(target, "Node {}: (ACCEPTING)", i);

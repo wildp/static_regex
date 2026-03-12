@@ -88,7 +88,7 @@ namespace rx
             template for (constexpr size_type N : std::views::iota(0uz, submatch_count))
             {
                 if (n == N)
-                    return this->get<N>();
+                    return get<N>(*this);
             }
             std::unreachable();
         }
@@ -149,10 +149,10 @@ namespace rx
 
         template<size_type N>
         requires (N < submatch_count)
-        [[nodiscard]] constexpr submatch_type get() const noexcept
+        [[nodiscard]] friend constexpr submatch_type get(const static_regex_match_result& r) noexcept
         {
-            if (this->has_value())
-                return this->force_get<N>();
+            if (r.has_value())
+                return force_get<N>(r);
             return {};
         }
 
@@ -217,27 +217,27 @@ namespace rx
 
         template<size_type N>
         requires (N < submatch_count)
-        [[nodiscard]] constexpr submatch_type force_get() const noexcept
+        [[nodiscard]] friend constexpr submatch_type force_get(const static_regex_match_result& r) noexcept
         {
             static constexpr auto current{ Captures.fci.captures[N] };
 
             if constexpr (current.first.tag_number == current.second.tag_number)
             {
-                if (this->tag_enabled<current.first.tag_number>())
+                if (r.tag_enabled<current.first.tag_number>())
                 {
                     return factory::make_submatch(
-                        std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                        std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                        std::ranges::next(r.get_tag<current.first.tag_number>(), current.first.offset),
+                        std::ranges::next(r.get_tag<current.second.tag_number>(), current.second.offset)
                     );
                 }
             }
             else
             {
-                if (this->tag_enabled<current.first.tag_number>() and this->tag_enabled<current.second.tag_number>())
+                if (r.tag_enabled<current.first.tag_number>() and r.tag_enabled<current.second.tag_number>())
                 {
                     return factory::make_submatch(
-                        std::next(this->get_tag<current.first.tag_number>(), current.first.offset),
-                        std::next(this->get_tag<current.second.tag_number>(), current.second.offset)
+                        std::ranges::next(r.get_tag<current.first.tag_number>(), current.first.offset),
+                        std::ranges::next(r.get_tag<current.second.tag_number>(), current.second.offset)
                     );
                 }
             }

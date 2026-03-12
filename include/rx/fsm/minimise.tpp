@@ -100,7 +100,7 @@ namespace rx::detail::tdfa
             // std::vector<std::vector<partition_entry<char_type, std::size_t>>> symbol_pairs_map(tdfa.reg);
             std::flat_map<std::size_t, std::vector<std::pair<std::reference_wrapper<const charset_t<CharT>>, std::size_t>>> symbol_pairs_map;
 
-            for (std::size_t i{ 0 }; i < dfa.nodes_.size(); ++i)
+            for (std::size_t i{ 0 }, i_end{ dfa.nodes_.size() }; i < i_end; ++i)
                 for (const auto& tr : dfa.nodes_[i].tr)
                     if (transitions_to[tr.next])
                         symbol_pairs_map[tr.op_index].emplace_back(std::cref(tr.cs), i);
@@ -175,10 +175,10 @@ namespace rx::detail::tdfa
 
         std::vector<std::size_t> state_remap(dfa.node_count(), -1);
 
-        for (std::size_t i{ 0 }; i < partitions.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ partitions.size() }; i < i_end; ++i)
         {
             const auto& part{ partitions[i] };
-            for (std::size_t j{ 0 }; j < part.size(); ++j)
+            for (std::size_t j{ 0 }, j_end{ part.size() }; j < j_end; ++j)
                 if (part[j])
                     state_remap[j] = i;
         }
@@ -191,7 +191,7 @@ namespace rx::detail::tdfa
 
         bitset_t new_states_visited(partitions.size(), false);
 
-        for (std::size_t i{ 0 }; i < state_remap.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ state_remap.size() }; i < i_end; ++i)
         {
             std::size_t remapped_state{ state_remap[i] };
             if (not new_states_visited.at(remapped_state))
@@ -222,8 +222,8 @@ namespace rx::detail::tdfa
         /* perform a dry run of hopcroft, but don't make changes to the dfa */
         const partition_t partitions{ hopcroft(dfa) };
         std::vector<std::vector<std::size_t>> result(partitions.size());
-        for (std::size_t i{ 0 }; i < partitions.size(); ++i)
-            for (std::size_t j{ 0 }; j < partitions[i].size(); ++j)
+        for (std::size_t i{ 0 }, i_end{ partitions.size() }; i < i_end; ++i)
+            for (std::size_t j{ 0 }, j_end{ partitions[i].size() }; j < j_end; ++j)
                 if (partitions[i][j])
                     result[i].emplace_back(j);
         return result;
@@ -250,7 +250,7 @@ namespace rx::detail
         std::flat_map<tdfa::regops_t, std::size_t> regop_map;
         regop_data_t new_regops;
 
-        for (std::size_t i{ 0 }; i < regops_.size(); ++i)
+        for (std::size_t i{ 0 }, i_end{ regops_.size() }; i < i_end; ++i)
         {
             auto [it, inserted]{ regop_map.try_emplace(regops_[i], new_regops.size()) };
 
@@ -300,7 +300,7 @@ namespace rx::detail
                 continue;
 
             const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
-            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(std::ranges::begin(sizes), std::ranges::max_element(sizes))) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
 
             std::vector scored_pairs{
                 std::from_range, // TODO: switch to using views::enumerate when supported by clang
@@ -367,13 +367,13 @@ namespace rx::detail
                 continue;
 
             const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
-            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::distance(sizes.begin(), std::ranges::max_element(sizes))) };
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
 
             auto& largest{ node.tr[largest_index] };
             tdfa::charset_t<char_type> largest_cs{ largest.cs };
             std::vector<tr_type> new_tr;
 
-            for (std::size_t i{ 0 }; i < node.tr.size(); ++i)
+            for (std::size_t i{ 0 }, i_end{ node.tr.size() }; i < i_end; ++i)
             {
                 if (i == largest_index)
                     continue;
@@ -408,7 +408,7 @@ namespace rx::detail
         data_t new_nodes{};
         new_nodes.reserve(nodes_.size());
 
-        for (std::size_t current_index{ 0 }; current_index < nodes_.size(); ++current_index)
+        for (std::size_t current_index{ 0 }, node_count{ nodes_.size() }; current_index < node_count; ++current_index)
         {
             const auto& current{ nodes_[current_index] };
 

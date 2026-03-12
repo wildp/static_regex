@@ -331,7 +331,7 @@ namespace rx::detail
                             return false;
 
                         int mismatch{ false };  /* encourage vectorisation */
-                        for (std::size_t i{ 0 }; i < str.data.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ str.data.size() }; i < i_end; ++i)
                             mismatch |= (it[i] != str.data[i]);
 
                         if (mismatch)
@@ -360,7 +360,7 @@ namespace rx::detail
                         std::ranges::advance(it, -static_cast<std::ptrdiff_t>(str.data.size()));
 
                         int mismatch{ false };  /* encourage vectorisation */
-                        for (std::size_t i{ 0 }; i < str.data.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ str.data.size() }; i < i_end; ++i)
                             mismatch |= (it[i] != str.data[i]);
 
                         if (mismatch)
@@ -701,7 +701,7 @@ namespace rx::detail
             {
                 static_assert(bref.number < result<I>::submatch_count, "Backreference to non-existent submatch");
 
-                const auto submatch{ res.template force_get<bref.number>() };
+                const auto submatch{ force_get<bref.number>(res) };
 
                 if (not submatch.matched())
                     return false;
@@ -715,7 +715,7 @@ namespace rx::detail
 
                         auto submatch_it{ submatch.begin() };
                         int mismatch{ false };  /* encourage vectorisation */
-                        for (std::size_t i{ 0 }; i < submatch.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ submatch.size() }; i < i_end; ++i)
                             mismatch |= (it[i] != submatch_it[i]);
 
                         if (mismatch)
@@ -745,7 +745,7 @@ namespace rx::detail
 
                         auto submatch_it{ submatch.begin() };
                         int mismatch{ false };  /* encourage vectorisation */
-                        for (std::size_t i{ 0 }; i < submatch.size(); ++i)
+                        for (std::size_t i{ 0 }, i_end{ submatch.size() }; i < i_end; ++i)
                             mismatch |= (it[i] != submatch_it[i]);
 
                         if (mismatch)

@@ -28,7 +28,7 @@ namespace rx::detail
         {
             std::vector<capture_info::tag_pair_t> captures_tmp;
 
-            for (std::size_t i{ 0 }; i < ci.capture_count(); ++i)
+            for (std::size_t i{ 0 }, i_end{ ci.capture_count() }; i < i_end; ++i)
             {
                 const auto range{ ci.lookup(i) };
 

@@ -12,7 +12,7 @@ namespace
     consteval auto make_cs(std::string_view sv)
     {
         rx::detail::charset<char> result;
-        for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
+        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
             result.insert(sv[i], sv[i + 1]);
         return result;
     }
@@ -21,7 +21,7 @@ namespace
     {
         rx::detail::charset<char> result;
         char tmp{ std::numeric_limits<char>::min() };
-        for (std::size_t i{ 0 }; i + 1 < sv.size(); i += 2)
+        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
         {
             result.insert(tmp, sv[i]);
             tmp = sv[i + 1];

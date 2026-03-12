@@ -6,16 +6,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <ranges>
-#include <stdexcept>
-#include <type_traits>
-#include <utility>
 
-#include "rx/api/submatch.hpp"
 #include "rx/etc/string_literal.hpp"
 #include "rx/etc/util.hpp"
 #include "rx/fsm/flags.hpp"
@@ -54,7 +49,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto match(const I first, const S last)
+        [[nodiscard]] static constexpr auto match(I first, S last)
         {
             using namespace detail::default_fsm_flags;
             using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, full_match>;
@@ -77,7 +72,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto prefix_match(const I first, const S last)
+        [[nodiscard]] static constexpr auto prefix_match(I first, S last)
         {
             using namespace detail::default_fsm_flags;
             using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, partial_match>;
@@ -100,7 +95,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto search(const I first, const S last)
+        [[nodiscard]] static constexpr auto search(I first, S last)
         {
             using namespace detail::default_fsm_flags;
             using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, search_single>;
@@ -123,7 +118,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr bool is_match(const I first, const S last)
+        [[nodiscard]] static constexpr bool is_match(I first, S last)
         {
             using namespace detail::default_fsm_flags;
             using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(full_match)>;
@@ -146,7 +141,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr bool starts_with_match(const I first, const S last)
+        [[nodiscard]] static constexpr bool starts_with_match(I first, S last)
         {
             using namespace detail::default_fsm_flags;
             using matcher_t = [: detail::get_matcher_refl(Mode) :]<Pattern, detail::adapt_flags_return_bool(partial_match)>;
@@ -169,7 +164,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr bool contains_match(const I first, const S last)
+        [[nodiscard]] static constexpr bool contains_match(I first, S last)
         {
             using namespace detail::default_fsm_flags;
             using matcher_t = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::adapt_flags_return_bool(search_single)>;
@@ -192,7 +187,7 @@ namespace rx
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::same_as<std::iter_value_t<I>, char_type>
-        [[nodiscard]] static constexpr auto range(const I first, const S last)
+        [[nodiscard]] static constexpr auto range(I first, S last)
         {
             return range(std::ranges::subrange(first, last));
         }
@@ -217,6 +212,9 @@ namespace rx
 
         template<typename Regex>
         concept static_regex_like = template_instantiation_of<Regex, ^^static_regex>;
+
+        template<typename Regex>
+        concept regex_like = static_regex_like<Regex>;
     }
 
 

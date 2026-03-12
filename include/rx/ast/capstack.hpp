@@ -130,7 +130,7 @@ namespace rx::detail::parser
 
             if (auto& elem{ elems_.back() }; elem.mode == cse::modes::branch_reset)
             {
-                auto& target{ (elems_.size() < 2) ? base_ : *(std::next(elems_.rbegin())) };
+                auto& target{ (elems_.size() < 2) ? base_ : *(std::ranges::next(elems_.rbegin())) };
                 target.number_end = std::max(target.number_end, elem.number_end);
                 elem.number_end = elem.number;
             }
