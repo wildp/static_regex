@@ -237,7 +237,7 @@ namespace rx::testing
 
                         auto [bit, blast]{ std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first) };
 
-                        for (; bit != blast; std::ranges::advance(s.it, 1), std::ranges::advance(bit, 1))
+                        for (; bit != blast; ++s.it, ++bit)
                             if (s.it == last or *s.it != *bit)
                                 return rc::match_failure;
 
@@ -325,7 +325,7 @@ namespace rx::testing
                         {
                             if (s.it == last or *s.it != c)
                                 return rc::match_failure; /* unsuccessful match */
-                            std::ranges::advance(s.it, 1);
+                            ++s.it;
                         }
 
                         return rc::match_continue;

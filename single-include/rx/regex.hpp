@@ -1867,7 +1867,7 @@ namespace rx::detail
                     result.emplace_back(min_first_or_tmp, min_second);
 
                 tmp.reset();
-                std::ranges::advance(smaller_it, 1);
+                ++smaller_it;
             }
             else
             {
@@ -1884,13 +1884,13 @@ namespace rx::detail
                 if (min_second < max_second)
                 {
                     tmp = min_second + 1; /* tmp <= max_second on next iteration */
-                    std::ranges::advance(smaller_it, 1);
+                    ++smaller_it;
                 }
                 else /* (min_second == max_second) */
                 {
                     tmp.reset();
-                    std::ranges::advance(lit, 1);
-                    std::ranges::advance(rit, 1);
+                    ++lit;
+                    ++rit;
                 }
             }
         }
@@ -1906,12 +1906,12 @@ namespace rx::detail
             else
                 result.emplace_back(min_first_or_tmp, it->second);
 
-            std::ranges::advance(it, 1);
+            ++it;
 
             while (it != end)
             {
                 result.emplace_back(it->first, it->second);
-                std::ranges::advance(it, 1);
+                ++it;
             }
         }
 
