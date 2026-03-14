@@ -17,18 +17,18 @@ namespace rx {
   struct static_regex;
 
   template<std::bidirectional_iterator I, /* implementation details */>
-  requires std::default_initializable<I> and std::copyable<I>
+    requires std::default_initializable<I> and std::copyable<I>
   class static_regex_match_result;
 
   template<std::bidirectional_iterator I>
   class submatch;
 
-  template<std::ranges::bidirectional_range V, typename Regex>
-  requires std::ranges::view<V>
+  template<std::ranges::bidirectional_range V, /* regex-like */ Regex>
+    requires std::ranges::view<V>
   class regex_match_view;
 
   template<std::ranges::input_range V, int... Submatches>
-  requires std::ranges::view<V>
+    requires std::ranges::view<V>
   class submatches_view;
 
   namespace views {
@@ -51,7 +51,54 @@ namespace rx {
 
     template<string_literal Pattern>
     consteval static_regex<Pattern, mode::naive> operator ""_rx_naive();
-  }
+  } // namespace literals
+
+  template<string_literal Fmt> struct fmt_t;
+  template<string_literal Fmt> inline constexpr fmt_t<Fmt> fmt;
+
+  template<class I, class O>
+  using regex_replace_result = std::ranges::in_out_result<I, O>;
+
+  /* see documentation for regex_replace template constraints */
+  template<typename I, typename S, typename O, /* regex-like */ Regex, typename F, typename FmtS>
+  constexpr auto regex_replace(I first, S last, O result, Regex pattern, F fmt, FmtS fmt_last)
+    -> regex_replace_result<I, O>;
+
+  template<typename R, typename O, /* regex-like */ Regex, typename FmtR>
+  constexpr auto regex_replace(R&& r, O result, Regex pattern, FmtR&& fmt)
+    -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
+
+  template<typename I, typename S, typename> O,/* regex-like */ Regex, typename CharT>
+  constexpr auto regex_replace(I first, S last, O result, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> regex_replace_result<I, O>;
+
+  template<typename R, typename O, /* regex-like */ Regex, typename CharT>
+  constexpr auto regex_replace(R&& r, O result, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
+
+  template<typename CharT, typed_regex_like<CharT> Regex>
+  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> std::basic_string<CharT>;
+
+  template<typename CharT, typed_regex_like<CharT> Regex>
+  constexpr auto regex_replace(const CharT* cstr, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> std::basic_string<CharT>;
+
+  template<typename I, typename S, typename O, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(I first, S last, O result, Regex pattern, fmt_t<Fmt>)
+    -> regex_replace_result<I, O>;
+
+  template<typename R, typename O, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(R&& r, O result, Regex pattern, fmt_t<Fmt>)
+    -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
+
+  template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, fmt_t<Fmt>)
+    ->  std::basic_string<CharT>;
+
+  template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(const CharT* cstr, Regex pattern, fmt_t<Fmt>)
+    -> std::basic_string<CharT>;
 } // namespace rx
 ```
 
@@ -92,9 +139,9 @@ This mode should be avoided unless the additional features or improved compilati
 namespace rx {
   template<typename CharT, std::size_t N>
   struct string_literal {
-    using char_type = CharT;
-    consteval string_literal(const char_type (&str)[N]);
-    constexpr std::basic_string_view<char_type> view() const;
+    using value_type = CharT;
+    consteval string_literal(const value_type (&str)[N]);
+    constexpr std::basic_string_view<value_type> view() const;
   };
 } // namespace rx
 ```
@@ -108,7 +155,7 @@ namespace rx {
 namespace rx {
   template<string_literal Pattern, mode Mode = mode::standard>
   struct static_regex {
-    using char_type = decltype(Pattern)::char_type;
+    using char_type = decltype(Pattern)::value_type;
 
     /* see below for template constraints and return type*/
     template<typename I, typename S> static constexpr auto match(const I first, const S last);
@@ -166,6 +213,29 @@ Depending on the regex pattern, using these functions may allow for a smaller DF
 `range` returns a `regex_match_view` over all substrings of the input matched by `Pattern`.
 The template parameter requirements for `range` are the same as for `match`, `prefix_match`, and `search`.
 
+Additionally, the following helpers are defined for convenience:
+
+```cpp
+namespace rx {
+  namespace literals {
+    template<string_literal Pattern>
+    consteval static_regex<Pattern> operator ""_rx();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::fast> operator ""_rxf();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::fast> operator ""_rx_fast();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::naive> operator ""_rxn();
+
+    template<string_literal Pattern>
+    consteval static_regex<Pattern, mode::naive> operator ""_rx_naive();
+  } // namespace literals
+} // namespace rx;
+```
+
 
 ## Class template `rx::static_regex_match_result`
 
@@ -174,7 +244,7 @@ The template parameter requirements for `range` are the same as for `match`, `pr
 ```cpp
 namespace rx {
   template<std::bidirectional_iterator I, /* implementation details */>
-  requires std::default_initializable<I> and std::copyable<I>
+    requires std::default_initializable<I> and std::copyable<I>
   class static_regex_match_result {
   public:
     using size_type              = std::size_t;
@@ -214,8 +284,11 @@ namespace rx {
 } // namespace rx
 
 /* structured binding support for static_regex_match_result */
-template<std::bidirectional_iterator I, /* ... */> struct std::tuple_size<rx::static_regex_match_result<I, /* ... */>>;
-template<std::size_t N, std::bidirectional_iterator I, /* ... */> struct std::tuple_element<N, rx::static_regex_match_result<I, /* ... */>>;
+template<std::bidirectional_iterator I, /* ... */>
+struct std::tuple_size<rx::static_regex_match_result<I, /* ... */>>;
+
+template<std::size_t N, std::bidirectional_iterator I, /* ... */>
+struct std::tuple_element<N, rx::static_regex_match_result<I, /* ... */>>;
 ```
 
 The submatch with index `0` denotes the entire match, while any submatches after that correspond to the capturing groups in the matched regex pattern.
@@ -272,17 +345,22 @@ namespace rx {
     constexpr string_type str() const;
     constexpr view_type view() const requires std::contiguous_iterator<I>;
     constexpr explicit(false) operator string_type() const;
-    constexpr explicit(false) operator view_type() const requires std::contiguous_iterator<I>;;
-    constexpr explicit(false) operator submatch<const_iterator>() const & requires (not std::same_as<const_iterator, iterator>);
-    constexpr explicit(false) operator submatch<const_iterator>() && requires (not std::same_as<const_iterator, iterator>);
+    constexpr explicit(false) operator view_type() const
+      requires std::contiguous_iterator<I>;;
+    constexpr explicit(false) operator submatch<const_iterator>() const &
+      requires (not std::same_as<const_iterator, iterator>);
+    constexpr explicit(false) operator submatch<const_iterator>() &&
+      requires (not std::same_as<const_iterator, iterator>);
 
     /* operators */
     friend constexpr bool operator==(const submatch& lhs, const submatch& rhs);
     friend constexpr bool operator==(const submatch& sub, const view_type view);
     friend constexpr auto operator<=>(const submatch& lhs, const submatch& rhs);
     friend constexpr auto operator<=>(const submatch& sub, const view_type view);
+
     template<typename CharT, typename Traits>
-    friend std::basic_ostream<CharT, Traits> operator<<(std::basic_ostream<CharT, Traits>& os, const submatch& sub);
+    friend auto operator<<(std::basic_ostream<CharT, Traits>& os, const submatch& sub)
+      -> std::basic_ostream<CharT, Traits>;
 
     /* misc */
     void swap(submatch& other) noexcept(std::is_nothrow_swappable_v<I>);
@@ -290,8 +368,11 @@ namespace rx {
 } // namespace rx
 
 /* structured binding support for submatch */
-template<std::bidirectional_iterator I> struct std::tuple_size<rx::submatch<I>>;
-template<std::size_t N, std::bidirectional_iterator I> requires (N < 2)  struct std::tuple_element<N, rx::submatch<I>>;
+template<std::bidirectional_iterator I>
+struct std::tuple_size<rx::submatch<I>>;
+
+template<std::size_t N, std::bidirectional_iterator I> requires (N < 2)
+struct std::tuple_element<N, rx::submatch<I>>;
 
 /* formatting support for submatch */
 template<std::bidirectional_iterator I> inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
@@ -308,14 +389,15 @@ It should be noted that `submatch` objects can be empty (i.e. `begin() == end()`
 
 ```cpp
 namespace rx {
-  template<std::ranges::bidirectional_range V, typename Regex>
-  requires std::ranges::view<V>
+  template<std::ranges::bidirectional_range V, /* regex-like */ Regex>
+    requires std::ranges::view<V>
   class regex_match_view {};
 
   /* rx::static_regex support */
   template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
-  requires std::ranges::view<V>
-  class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>> {
+    requires std::ranges::view<V>
+  class regex_match_view<V, static_regex<Pattern, Mode>>
+    : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>> {
     template<bool> struct iterator;
     template<bool> struct sentinel;
 
@@ -333,7 +415,7 @@ namespace rx {
   };
 
   namespace views {
-    inline constexpr /* range adaptor */ regex_match;
+    inline constexpr /* range-adaptor */ regex_match;
   }
 } // namespace rx
 ```
@@ -350,12 +432,12 @@ Since positions of matches are not cached, these operations do not take place in
 ```cpp
 namespace rx {
   template<std::ranges::input_range V, int... Submatches>
-  requires std::ranges::view<V>
+    requires std::ranges::view<V>
   class submatches_view {};
 
   /* compile time index support */
   template<std::ranges::input_range V, int... Submatches>
-  requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
+    requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
   class submatches_view<V, Submatches...> : std::ranges::view_interface<submatches_view<V, Submatches...>> {
     template<bool> struct iterator;
     template<bool> struct sentinel;
@@ -375,7 +457,7 @@ namespace rx {
 
   /* run time index support */
   template<std::ranges::input_range V>
-  requires std::ranges::view<V> and /* detail::static_regex_match_view_like<V> */
+    requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
   class submatches_view<V> : std::ranges::view_interface<submatches_view<V>> {
     template<bool> struct iterator;
     template<bool> struct sentinel {};
@@ -384,7 +466,7 @@ namespace rx {
     submatches_view() requires std::default_initializable<V> = default;
 
     template<std::ranges::input_range R>
-    requires std::same_as<std::ranges::range_value_t<R>, int>
+      requires std::same_as<std::ranges::range_value_t<R>, int>
     constexpr explicit submatches_view(V base, R&& submatches);
 
     constexpr V base() const& requires std::copy_constructible<V>;
@@ -396,7 +478,7 @@ namespace rx {
   };
 
   namespace views {
-    inline constexpr /* range adaptor */ submatches;
+    inline constexpr /* range-adaptor */ submatches;
   }
 } // namespace rx
 ```
@@ -407,3 +489,92 @@ The index of `-1` denotes the substring that is not matched by the regex pattern
 
 Where a `submatches_view` contains the submatch index of `-1`, the iterator becomes a suffix iterator just before comparing equal to the sentinel.
 If dereferenced, the suffix iterator returns a submatch object for the substring between the end of the last match and the end of the input.
+
+
+## Algorithm function object `rx::regex_replace`
+
+`regex_replace` substitutes regular expression matches in a input for a replacement string.
+
+```cpp
+namespace rx {
+  template<string_literal Fmt> struct fmt_t;
+  template<string_literal Fmt> inline constexpr fmt_t<Fmt> fmt;
+
+  template<class I, class O>
+  using regex_replace_result = std::ranges::in_out_result<I, O>;
+
+  /* see below for template constraints */
+  template<typename I, typename S, typename O, /* regex-like */ Regex, typename F, typename FmtS>
+  constexpr auto regex_replace(I first, S last, O result, Regex pattern, F fmt, FmtS fmt_last)
+    -> regex_replace_result<I, O>;
+
+  template<typename R, typename O, /* regex-like */ Regex, typename FmtR>
+  constexpr auto regex_replace(R&& r, O result, Regex pattern, FmtR&& fmt)
+    -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
+
+  template<typename I, typename S, typename> O, /* regex-like */ Regex, typename CharT>
+  constexpr auto regex_replace(I first, S last, O result, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> regex_replace_result<I, O>;
+
+  template<typename R, typename O, /* regex-like */ Regex, typename CharT>
+  constexpr auto regex_replace(R&& r, O result, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
+
+  template<typename CharT, /* regex-like */ Regex>
+  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> std::basic_string<CharT>;
+
+  template<typename CharT, /* regex-like */ Regex>
+  constexpr auto regex_replace(const CharT* cstr, Regex pattern, std::basic_string_view<CharT> fmt)
+    -> std::basic_string<CharT>;
+
+  template<typename I, typename S, typename O, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(I first, S last, O result, Regex pattern, fmt_t<Fmt>)
+    -> regex_replace_result<I, O>;
+
+  template<typename R, typename O, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(R&& r, O result, Regex pattern, fmt_t<Fmt>)
+    -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
+
+  template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, fmt_t<Fmt>)
+    ->  std::basic_string<CharT>;
+
+  template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
+  constexpr auto regex_replace(const CharT* cstr, Regex pattern, fmt_t<Fmt>)
+    -> std::basic_string<CharT>;
+} // namespace rx
+```
+
+`regex_replace` is an algorithm function object.
+Invoking it copies the input range to either `output` or a `std::basic_string`, substituting all substrings matched by `pattern` with the replacement string `fmt`.
+
+In the replacement string `fmt`, all occurences of `$N` (where `N` is a non-negative integer) are replaced with the corresponding submatch.
+If `N` is greater than the number of submatches captured by `pattern`, an error is thrown.
+If `N` refers to a capturing group which was not matched, `$N` is replaced with an empty string.
+
+The template contraints for `regex_replace` are as follows:
++ All overloads:
+  - `std::same_as<typename Regex::char_type, CharT>` holds.
+  -  *(see note below)*
++ Iterator overloads (1, 3, 7):
+  - `I` satisfies `std::bidirectional_iterator`.
+  - `S` satisfies `std::sentinel_for<I>`.
+  - `std::same_as<std::iter_value_t<I>, CharT>` holds.
++ Range overloads (2, 4, 8):
+  - `R` satisfies `std::ranges::bidirectional_range`.
+  - `std::same_as<std::ranges::range_value_t<R>, CharT>` holds.
++ Replacement string iterator overload (1):
+  - `F` satisfies `std::bidirectional_iterator`.
+  - `FmtS` satisfies `std::sentinel_for<F>`.
++ Replacement string range overload (2):
+  - `FmtR` satisfies `std::ranges::bidirectional_range`.
+  - `std::same_as<std::ranges::range_value_t<R>, CharT>` holds.
+  - `std::convertible_to<FmtR, std::basic_string_view<CharT>>` **does not** hold.
++ Compile-time replacement string overloads (7, 8, 9, 10):
+  - `std::same_as<typename decltype(Fmt)::value_type, CharT>` holds.
+
+Note that for overloads (1, 2, 7, 8), there is an additional defaulted template parameter `typename CharT = Regex::char_type` which is not listed above.
+
+Overloads 7-10 correspond to overloads 3-6, but instead take a compile-time replacement string, supplied as `fmt<"replacement-string">`.
+For these, the existence of referenced capturing groups is checked at compile time, and if necessary a compile-time error is produced.
