@@ -5,6 +5,7 @@ target_sources(tests
     PRIVATE
         expo_test.cpp
         iter_test.cpp
+        repl_test.cpp
         setb_test.cpp
         setc_test.cpp
         srx1_test.cpp

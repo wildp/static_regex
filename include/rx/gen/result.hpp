@@ -31,6 +31,8 @@ namespace rx::detail
 
     template<rx::string_literal Pattern>
     struct p1306_naive_impl;
+
+    struct replace_impl;
 }
 
 namespace rx
@@ -168,6 +170,11 @@ namespace rx
         template<std::ranges::bidirectional_range V, typename Regex>
         requires std::ranges::view<V>
         friend class regex_match_view;
+
+        template<std::bidirectional_iterator J>
+        friend class replace_fmt;
+
+        friend struct detail::replace_impl;
 
     private:
         /* implementation helpers */

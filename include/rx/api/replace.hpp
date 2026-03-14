@@ -1,0 +1,421 @@
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+#pragma once
+
+#include <concepts>
+#include <iterator>
+#include <ranges>
+#include <string>
+#include <string_view>
+
+#include "rx/api/static_regex.hpp"
+#include "rx/etc/string_literal.hpp"
+#include "rx/etc/util.hpp"
+
+
+namespace rx
+{
+    namespace detail
+    {
+        struct replace_impl;
+
+        template<typename CharT>
+        consteval auto replace_fmt_pattern()
+        {
+            if constexpr (std::same_as<CharT, char>)
+                return string_literal{ R"(\$\d+)" };
+            else if constexpr (std::same_as<CharT, wchar_t>)
+                return string_literal{ LR"(\$\d+)" };
+            else if constexpr (std::same_as<CharT, char8_t>)
+                return string_literal{ u8R"(\$\d+)" };
+            else if constexpr (std::same_as<CharT, char16_t>)
+                return string_literal{ uR"(\$\d+)" };
+            else if constexpr (std::same_as<CharT, char32_t>)
+                return string_literal{ UR"(\$\d+)" };
+            else
+                return;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        constexpr std::size_t parse_unsigned(I first, const S last)
+        {
+            static constexpr std::size_t base{ 10 };
+            std::size_t result{ 0 };
+
+            while (first != last)
+            {
+                result = std::add_sat(std::mul_sat(result, base), static_cast<std::size_t>(*first - '0'));
+                ++first;
+            }
+
+            return result;
+        }
+
+        template<typename CharT>
+        class static_replace_fmt_impl;
+    }
+
+
+    template<std::bidirectional_iterator I>
+    class replace_fmt
+    {
+    public:
+        using char_type = std::iter_value_t<I>;
+        static_assert(detail::character<char_type>);
+
+    private:
+        using matcher_type = [: detail::get_matcher_refl(mode::standard, true) :]<detail::replace_fmt_pattern<char_type>(), detail::default_fsm_flags::search_all>;
+        using result_type = matcher_type::template result<I>;
+        using subrange_type = std::ranges::subrange<I>;
+
+    public:
+        constexpr replace_fmt() requires std::default_initializable<I>
+            : subranges_{ subrange_type{} }, captures_{} {}
+
+        template<std::sentinel_for<I> S>
+        constexpr replace_fmt(I first, S last)
+        {
+            matcher_type delim_matcher;
+            result_type match_result{ delim_matcher(first, last) };
+
+            while (match_result.has_value())
+            {
+                const auto& [mfirst, mlast]{ get<0>(match_result) };
+
+                subranges_.emplace_back(first, mfirst);
+                captures_.emplace_back(detail::parse_unsigned(std::ranges::next(mfirst), mlast));
+
+                first = mlast;
+                if (mfirst == mlast)
+                    ++first;
+
+                if constexpr (result_type::has_continue)
+                    match_result = delim_matcher(first, last, match_result.continue_at_);
+                else
+                    match_result = delim_matcher(first, last);
+            }
+
+            subranges_.emplace_back(first, last);
+        }
+
+        template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
+        constexpr replace_fmt(R&& r)
+            : replace_fmt(std::ranges::begin(r), std::ranges::end(r)) {}
+
+        constexpr replace_fmt(const char_type* str)
+            : replace_fmt(str, detail::cstr_sentinel) {}
+
+    private:
+        constexpr auto zipped() const
+        {
+            return std::views::zip(subranges_, captures_);
+        }
+
+        constexpr const auto& trailing() const
+        {
+            return subranges_.back();
+        }
+
+        constexpr void range_check(std::size_t n) const
+        {
+            if (std::ranges::any_of(captures_, [n](std::size_t x){ return x >= n; }))
+                throw regex_error("replace_fmt: invalid replacement");
+        }
+
+        template<typename CharT>
+        friend class detail::static_replace_fmt_impl;
+
+        friend struct detail::replace_impl;
+
+        std::vector<subrange_type> subranges_;
+        std::vector<std::size_t> captures_;
+    };
+
+    template<typename Range>
+    replace_fmt(Range&&) -> replace_fmt<std::ranges::iterator_t<Range>>;
+
+    template<typename CharT>
+    replace_fmt(const CharT*) -> replace_fmt<const CharT*>;
+
+
+    namespace detail
+    {
+        template<typename CharT>
+        class static_replace_fmt_impl
+        {
+        public:
+            using char_type = CharT;
+
+            explicit(false) consteval static_replace_fmt_impl(std::basic_string_view<CharT> sv)
+            {
+                replace_fmt tmp{ sv };
+                subranges_ = static_span(tmp.subranges_ | std::views::transform(make_subrange));
+                captures_ = static_span(tmp.captures_);
+            }
+
+        private:
+            using subrange_type = detail::static_span<char_type>;
+
+            constexpr auto zipped() const
+            {
+                return std::views::zip(subranges_, captures_);
+            }
+
+            constexpr const auto& trailing() const
+            {
+                return subranges_.back();
+            }
+
+            constexpr void range_check(std::size_t n) const
+            {
+                if (std::ranges::any_of(captures_, [n](std::size_t x){ return x >= n; }))
+                    throw regex_error("replace_fmt: invalid replacement");
+            }
+            static consteval subrange_type make_subrange(const std::ranges::subrange<const char_type*>& s)
+            {
+                const auto& [first, last]{ s };
+                return { detail::non_owning_tag, first, last };
+            }
+
+            friend struct replace_impl;
+
+        public:
+            detail::static_span<subrange_type> subranges_;
+            detail::static_span<std::size_t> captures_;
+        };
+    }
+
+
+    template<string_literal Fmt>
+    struct static_replace_fmt
+    {
+        using char_type = typename decltype(Fmt)::char_type;
+        inline static constexpr detail::static_replace_fmt_impl value{ Fmt.view() };
+    };
+
+    template<string_literal Fmt>
+    inline constexpr static_replace_fmt<Fmt> fmt;
+
+    template<class I, class O>
+    using regex_replace_result = std::ranges::in_out_result<I, O>;
+
+
+    namespace detail
+    {
+        struct replace_impl
+        {
+        private:
+            template<typename CharT, std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<CharT> O,
+                     /* std::sentinel_for<O> OutS, */ string_literal Pattern, mode Mode, std::bidirectional_iterator F>
+            static constexpr regex_replace_result<I, O>
+            impl(I first, const S last, O result, /* const OutS result_last, */ static_regex<Pattern, Mode> /* regex */, const replace_fmt<F>& fmt)
+            {
+                // TODO: revisit in future C++ version with output sentinel versions of algorithms?
+
+                using matcher_type = [: get_matcher_refl(Mode, true) :]<Pattern, default_fsm_flags::search_all>;
+                using result_type = matcher_type::template result<I>;
+
+                fmt.range_check(result_type::submatch_count);
+
+                [[maybe_unused]] const I first_copy{ first };
+
+                matcher_type matcher;
+                result_type match_result{ matcher(first, last) };
+
+                while (match_result.has_value())
+                {
+                    auto [mfirst, mlast]{ get<0>(match_result) };
+
+                    result = std::ranges::copy(first, mfirst, result).out;
+
+                    for (const auto& [substr, idx] : fmt.zipped())
+                    {
+                        result = std::ranges::copy(substr, result).out;
+                        result = std::ranges::copy(match_result.at(idx), result).out;
+                    }
+
+                    result = std::ranges::copy(fmt.trailing(), result).out;
+                    first = mlast;
+
+                    if (mfirst == mlast)
+                    {
+                        if (mlast == last)
+                            break;
+                        ++mlast;
+                    }
+
+                    if constexpr (Mode == mode::naive)
+                        match_result = matcher(first_copy, last, mlast);
+                    else if constexpr (result_type::has_continue)
+                        match_result = matcher(mlast, last, match_result.continue_at_);
+                    else
+                        match_result = matcher(mlast, last);
+                }
+
+                return std::ranges::copy(first, last, result);
+            }
+
+            template<typename CharT, std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<CharT> O,
+                     /* std::sentinel_for<O> OutS, */ string_literal Pattern, mode Mode, string_literal Fmt>
+            static constexpr regex_replace_result<I, O>
+            impl(I first, const S last, O result, /* const OutS result_last, */ static_regex<Pattern, Mode> /* regex */, static_replace_fmt<Fmt> /* fmt */)
+            {
+                // TODO: revisit in future C++ version with output sentinel versions of algorithms?
+
+                using matcher_type = [: get_matcher_refl(Mode, true) :]<Pattern, default_fsm_flags::search_all>;
+                using result_type = matcher_type::template result<I>;
+
+                consteval {
+                    static_replace_fmt<Fmt>::value.range_check(result_type::submatch_count);
+                }
+
+                [[maybe_unused]] const I first_copy{ first };
+
+                matcher_type matcher;
+                result_type match_result{ matcher(first, last) };
+
+                while (match_result.has_value())
+                {
+                    auto [mfirst, mlast]{ get<0>(match_result) };
+                    result = std::ranges::copy(first, mfirst, result).out;
+
+                    // TODO: change to use constexpr structured binding when supported
+                    template for (constexpr auto pair : static_replace_fmt<Fmt>::value.zipped())
+                    {
+                        constexpr std::size_t N{ get<1>(pair) };
+                        result = std::ranges::copy(get<0>(pair), result).out;
+                        result = std::ranges::copy(get<N>(match_result), result).out;
+                    }
+
+                    result = std::ranges::copy(static_replace_fmt<Fmt>::value.trailing(), result).out;
+                    first = mlast;
+
+                    if (mfirst == mlast)
+                    {
+                        if (mlast == last)
+                            break;
+                        ++mlast;
+                    }
+
+                    if constexpr (Mode == mode::naive)
+                        match_result = matcher(first_copy, last, mlast);
+                    else if constexpr (result_type::has_continue)
+                        match_result = matcher(mlast, last, match_result.continue_at_);
+                    else
+                        match_result = matcher(mlast, last);
+                }
+
+                return std::ranges::copy(first, last, result);
+            }
+
+        public:
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<std::iter_value_t<I>> O,
+                     regex_like Regex, std::bidirectional_iterator F>
+            requires std::same_as<std::iter_value_t<I>, typename Regex::char_type>
+                     and std::same_as<std::iter_value_t<F>, typename Regex::char_type>
+            static constexpr regex_replace_result<I, O>
+            operator()(I first, S last, O result, Regex pattern, const replace_fmt<F>& fmt)
+            {
+                return impl<std::iter_value_t<I>>(first, last, result, pattern, fmt);
+            }
+
+            template<std::ranges::bidirectional_range R, std::output_iterator<std::ranges::range_value_t<R>> O,
+                     regex_like Regex, std::bidirectional_iterator F>
+            requires std::same_as<std::ranges::range_value_t<R>, typename Regex::char_type>
+                     and std::same_as<std::iter_value_t<F>, typename Regex::char_type>
+            static constexpr regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>
+            operator()(R&& r, O result, Regex pattern, const replace_fmt<F>& fmt)
+            {
+                return impl<std::ranges::range_value_t<R>>(std::ranges::begin(r), std::ranges::end(r), result, pattern, fmt);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S, detail::static_regex_like Regex,
+                    std::bidirectional_iterator F>
+            requires std::same_as<std::iter_value_t<I>, typename Regex::char_type>
+                     and std::same_as<std::iter_value_t<F>, typename Regex::char_type>
+            static constexpr std::basic_string<std::iter_value_t<I>>
+            operator()(I first, S last, Regex pattern, const replace_fmt<F>& fmt)
+            {
+                using char_type = std::iter_value_t<I>;
+                std::basic_string<char_type> result;
+                impl<char_type>(first, last, std::back_inserter(result), pattern, fmt);
+                return result;
+            }
+
+            template<std::ranges::bidirectional_range R, static_regex_like Regex, std::bidirectional_iterator F>
+            requires std::same_as<std::ranges::range_value_t<R>, typename Regex::char_type>
+                     and std::same_as<std::iter_value_t<F>, typename Regex::char_type>
+            static constexpr std::basic_string<std::ranges::range_value_t<R>>
+            operator()(R&& r, Regex pattern, const replace_fmt<F>& fmt)
+            {
+                return operator()(std::ranges::begin(r), std::ranges::end(r), pattern, fmt);
+            }
+
+            template<typename CharT, static_regex_like Regex, std::bidirectional_iterator F>
+            requires std::same_as<CharT, typename Regex::char_type>
+                     and std::same_as<std::iter_value_t<F>, typename Regex::char_type>
+            static constexpr std::basic_string<CharT>
+            operator()(const CharT* cstr, Regex pattern, const replace_fmt<F>& fmt)
+            {
+                return operator()(cstr, cstr_sentinel, pattern, fmt);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<std::iter_value_t<I>> O,
+                     regex_like Regex, string_literal Fmt>
+            requires std::same_as<std::iter_value_t<I>, typename Regex::char_type>
+                     and std::same_as<typename decltype(Fmt)::char_type, typename Regex::char_type>
+            static constexpr regex_replace_result<I, O>
+            operator()(I first, S last, O result, Regex pattern, static_replace_fmt<Fmt> fmt)
+            {
+                return impl<std::iter_value_t<I>>(first, last, result, pattern, fmt);
+            }
+
+            template<std::ranges::bidirectional_range R, std::output_iterator<std::ranges::range_value_t<R>> O,
+                     regex_like Regex, string_literal Fmt>
+            requires std::same_as<std::ranges::range_value_t<R>, typename Regex::char_type>
+                     and std::same_as<typename decltype(Fmt)::char_type, typename Regex::char_type>
+            static constexpr regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>
+            operator()(R&& r, O result, Regex pattern, static_replace_fmt<Fmt> fmt)
+            {
+                return impl<std::ranges::range_value_t<R>>(std::ranges::begin(r), std::ranges::end(r), result, pattern, fmt);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S, static_regex_like Regex, string_literal Fmt>
+            requires std::same_as<std::iter_value_t<I>, typename Regex::char_type>
+                     and std::same_as<typename decltype(Fmt)::char_type, typename Regex::char_type>
+            static constexpr std::basic_string<std::iter_value_t<I>>
+            operator()(I first, S last, Regex pattern, static_replace_fmt<Fmt> fmt)
+            {
+                using char_type = std::iter_value_t<I>;
+                std::basic_string<char_type> result;
+                impl<char_type>(first, last, std::back_inserter(result), pattern, fmt);
+                return result;
+            }
+
+            template<std::ranges::bidirectional_range R, static_regex_like Regex, string_literal Fmt>
+            requires std::same_as<std::ranges::range_value_t<R>, typename Regex::char_type>
+                     and std::same_as<typename decltype(Fmt)::char_type, typename Regex::char_type>
+            static constexpr std::basic_string<std::ranges::range_value_t<R>>
+            operator()(R&& r, Regex pattern, static_replace_fmt<Fmt> fmt)
+            {
+                return operator()(std::ranges::begin(r), std::ranges::end(r), pattern, fmt);
+            }
+
+            template<typename CharT, static_regex_like Regex, string_literal Fmt>
+            requires std::same_as<CharT, typename Regex::char_type>
+                     and std::same_as<typename decltype(Fmt)::char_type, typename Regex::char_type>
+            static constexpr std::basic_string<CharT>
+            operator()(const CharT* cstr, Regex pattern, static_replace_fmt<Fmt> fmt)
+            {
+                return operator()(cstr, cstr_sentinel, pattern, fmt);
+            }
+        };
+    }
+
+    inline constexpr detail::replace_impl regex_replace;
+}

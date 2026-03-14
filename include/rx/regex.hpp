@@ -8,4 +8,5 @@
 
 #include "rx/api/static_regex.hpp"
 #include "rx/api/ranges.hpp"
+#include "rx/api/replace.hpp"
 
