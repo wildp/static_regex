@@ -1,5 +1,9 @@
 # News
 
+### Version 0.1.1
+
+Added `regex_replace`.
+
 ### Version 0.1.0
 
 Improved compilation times.
