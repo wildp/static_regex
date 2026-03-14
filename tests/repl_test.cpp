@@ -4,22 +4,21 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "rx/api/replace.hpp"
-#include "rx/etc/string_literal.hpp"
 #include <rx/regex.hpp>
+
 
 namespace
 {
     template<rx::string_literal Pattern, rx::mode Mode>
     consteval bool test(rx::static_regex<Pattern, Mode> pattern, std::string_view fmt, std::string_view input, std::string_view result)
     {
-        return rx::regex_replace(input.begin(), input.end(), pattern, rx::replace_fmt{ fmt }) == result;
+        return rx::regex_replace(input, pattern, fmt) == result;
     }
 
     template<rx::string_literal Pattern, rx::mode Mode, rx::string_literal Fmt>
-    consteval bool test(rx::static_regex<Pattern, Mode> pattern, rx::static_replace_fmt<Fmt> fmt, std::string_view input, std::string_view result)
+    consteval bool test(rx::static_regex<Pattern, Mode> pattern, rx::fmt_t<Fmt>, std::string_view input, std::string_view result)
     {
-        return rx::regex_replace(input, pattern, fmt) == result;
+        return rx::regex_replace(input, pattern, rx::fmt<Fmt>) == result;
     }
 }
 
@@ -27,7 +26,7 @@ namespace
 using namespace rx::literals;
 using rx::fmt;
 
-/* dynamic format tests */
+/* dynamic replace format tests */
 static_assert(test("a"_rx, "x", "abc", "xbc"));
 static_assert(test("b"_rx, "x", "abc", "axc"));
 static_assert(test("c"_rx, "x", "abc", "abx"));

@@ -44,7 +44,7 @@ namespace rx
     template<string_literal Pattern, mode Mode = mode::standard>
     struct static_regex
     {
-        using char_type = decltype(Pattern)::char_type;
+        using char_type = decltype(Pattern)::value_type;
         static_assert(std::same_as<char, char_type>); /* temporary: remove later */
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -215,6 +215,12 @@ namespace rx
 
         template<typename Regex>
         concept regex_like = static_regex_like<Regex>;
+
+        template<typename Regex, typename CharT>
+        concept typed_static_regex_like = static_regex_like<Regex> and std::same_as<CharT, typename Regex::char_type>;
+
+        template<typename Regex, typename CharT>
+        concept typed_regex_like = typed_static_regex_like<Regex, CharT> ; // or ...
     }
 
 

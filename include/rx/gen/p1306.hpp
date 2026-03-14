@@ -52,7 +52,7 @@ namespace rx::detail
     struct p1306_matcher
     {
         using dfa_t = compiled_dfa<Pattern, Flags>;
-        using char_type = decltype(Pattern)::char_type;
+        using char_type = decltype(Pattern)::value_type;
 
         template<typename I>
         using result = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
@@ -245,7 +245,7 @@ namespace rx::detail
         static_assert(Flags.is_search);
 
         using dfa_t = compiled_dfa<Pattern, adapt_searcher_flags_to_matcher(Flags)>;
-        using char_type = decltype(Pattern)::char_type;
+        using char_type = decltype(Pattern)::value_type;
 
         template<typename I>
         using result = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
@@ -506,7 +506,7 @@ namespace rx::detail
     struct p1306_matcher<Pattern, Flags>
     {
         using dfa_t = compiled_dfa<Pattern, Flags>;
-        using char_type = decltype(Pattern)::char_type;
+        using char_type = decltype(Pattern)::value_type;
 
     private:
         template<string_literal OtherPattern, fsm_flags OtherFlags>

@@ -236,7 +236,7 @@ namespace rx::detail
     template<string_literal Pattern>
     struct p1306_naive_impl
     {
-        using char_type = decltype(Pattern)::char_type;
+        using char_type = decltype(Pattern)::value_type;
 
     private:
         using ast_t = expr_tree<char_type>;

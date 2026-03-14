@@ -15,18 +15,18 @@ namespace rx
     struct string_literal
     {
         static_assert(N != 0);
-        using char_type = CharT;
+        using value_type = CharT;
 
-        consteval string_literal(const char_type (&str)[N])
+        consteval string_literal(const value_type (&str)[N])
         {
             std::ranges::copy_n(str, N, value_);
         }
 
-        [[nodiscard]] constexpr std::basic_string_view<char_type> view() const
+        [[nodiscard]] constexpr std::basic_string_view<value_type> view() const
         {
             return { value_, N - 1 };
         }
 
-        char_type value_[N]{};
+        value_type value_[N]{};
     };
 }
