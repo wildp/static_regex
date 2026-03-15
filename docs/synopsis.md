@@ -76,12 +76,14 @@ namespace rx {
   constexpr auto regex_replace(R&& r, O result, Regex pattern, std::basic_string_view<CharT> fmt)
     -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
 
-  template<typename CharT, typed_regex_like<CharT> Regex>
-  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<CharT> fmt)
+  template<typename CharT, /* regex-like */ Regex>
+  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern,
+                               std::basic_string_view<std::type_identity_t<CharT>> fmt)
     -> std::basic_string<CharT>;
 
-  template<typename CharT, typed_regex_like<CharT> Regex>
-  constexpr auto regex_replace(const CharT* cstr, Regex pattern, std::basic_string_view<CharT> fmt)
+  template<typename CharT, /* regex-like */ Regex>
+  constexpr auto regex_replace(const CharT* cstr, Regex pattern,
+                               std::basic_string_view<std::type_identity_t<CharT>> fmt)
     -> std::basic_string<CharT>;
 
   template<typename I, typename S, typename O, /* static-regex-like */ Regex, string_literal Fmt>
@@ -375,7 +377,8 @@ template<std::size_t N, std::bidirectional_iterator I> requires (N < 2)
 struct std::tuple_element<N, rx::submatch<I>>;
 
 /* formatting support for submatch */
-template<std::bidirectional_iterator I> inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
+template<std::bidirectional_iterator I>
+inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
 ```
 
 A `submatch` can be seen as an iterator pair that denotes a matched subrange of the input, combined with an additional bool to track whether the object contains a match, which can be checked through `matched()` or `operator bool()`.
@@ -521,12 +524,15 @@ namespace rx {
     -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
 
   template<typename CharT, /* regex-like */ Regex>
-  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<CharT> fmt)
+  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern,
+                               std::basic_string_view<std::type_identity_t<CharT>> fmt)
     -> std::basic_string<CharT>;
 
   template<typename CharT, /* regex-like */ Regex>
-  constexpr auto regex_replace(const CharT* cstr, Regex pattern, std::basic_string_view<CharT> fmt)
+  constexpr auto regex_replace(const CharT* cstr, Regex pattern,
+                               std::basic_string_view<std::type_identity_t<CharT>> fmt)
     -> std::basic_string<CharT>;
+
 
   template<typename I, typename S, typename O, /* static-regex-like */ Regex, string_literal Fmt>
   constexpr auto regex_replace(I first, S last, O result, Regex pattern, fmt_t<Fmt>)

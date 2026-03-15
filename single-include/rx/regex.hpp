@@ -13555,7 +13555,7 @@ namespace rx
 
             template<typename CharT, typed_regex_like<CharT> Regex>
             static constexpr std::basic_string<CharT>
-            operator()(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<CharT> fmt)
+            operator()(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<std::type_identity_t<CharT>> fmt)
             {
                 std::basic_string<CharT> result;
                 operator()(sv.begin(), sv.end(), std::back_inserter(result), pattern, fmt.begin(), fmt.end());
@@ -13564,7 +13564,7 @@ namespace rx
 
             template<typename CharT, typed_regex_like<CharT> Regex>
             static constexpr std::basic_string<CharT>
-            operator()(const CharT* cstr, Regex pattern, std::basic_string_view<CharT> fmt)
+            operator()(const CharT* cstr, Regex pattern, std::basic_string_view<std::type_identity_t<CharT>> fmt)
             {
                 std::basic_string<CharT> result;
                 operator()(cstr, cstr_sentinel, std::back_inserter(result), pattern, fmt.begin(), fmt.end());
