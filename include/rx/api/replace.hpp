@@ -294,7 +294,7 @@ namespace rx
 
             template<std::ranges::bidirectional_range R, std::output_iterator<std::ranges::range_value_t<R>> O,
                      regex_like Regex, std::ranges::bidirectional_range FmtR, std::same_as<std::ranges::range_value_t<R>> CharT = Regex::char_type>
-            requires std::same_as<std::ranges::range_value_t<Fmt>, CharT> and (not std::convertible_to<FmtR, std::basic_string_view<CharT>>)
+            requires std::same_as<std::ranges::range_value_t<FmtR>, CharT> and (not std::convertible_to<FmtR, std::basic_string_view<CharT>>)
             static constexpr regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>
             operator()(R&& r, O result, Regex pattern, FmtR&& fmt)
             {
