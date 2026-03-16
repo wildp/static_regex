@@ -278,5 +278,12 @@ namespace rx::detail
         {
             return { first, last };
         }
+
+        template<std::sentinel_for<I> S>
+        requires (not std::same_as<I, S>)
+        [[nodiscard]] static constexpr submatch<I> make_submatch(I first, S last)
+        {
+            return { first, std::ranges::next(first, last) };
+        }
     };
 }
