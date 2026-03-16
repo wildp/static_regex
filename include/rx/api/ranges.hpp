@@ -845,10 +845,10 @@ namespace rx
 
     template<string_literal Pattern, mode Mode>
     template<std::ranges::bidirectional_range R>
-    requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type> and std::ranges::borrowed_range<R>
+    requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type>
     constexpr auto static_regex<Pattern, Mode>::range(R&& r)
     {
-        return regex_match_view(r, static_regex<Pattern, Mode>{});
+        return views::regex_match(std::forward<R>(r), static_regex<Pattern, Mode>{});
     }
 }
 

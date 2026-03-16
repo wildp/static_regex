@@ -193,7 +193,7 @@ namespace rx
         }
 
         template<std::ranges::bidirectional_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, char_type> and std::ranges::borrowed_range<R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
         [[nodiscard]] static constexpr auto range(R&& r);
 
         template<typename CharT>
