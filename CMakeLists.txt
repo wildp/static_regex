@@ -16,7 +16,7 @@ target_sources(rx
     BASE_DIRS
         include/
     FILES
-        include/rx/regex.h
+        include/rx/regex.hpp
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
