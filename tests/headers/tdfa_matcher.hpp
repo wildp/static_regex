@@ -78,12 +78,25 @@ namespace rx::testing
 
             while (ret.first.has_value())
             {
-                std::ranges::advance(it, ret.first->at(1));
+                const auto mfirst{ ret.first->at(0) };
+                const auto mlast{ ret.first->at(1) };
+                std::ranges::advance(it, mlast);
+
                 result.emplace_back(std::move(*ret.first));
                 std::ranges::for_each(result.back(), [x = std::ranges::distance(first, prev_it)](auto& v) { v += x; });
+
                 if (ret.second == detail::tdfa::no_continue)
                     break;
-                ret = match_implementation(it, last, true, this->continue_nodes().at(ret.second));
+
+                if (mfirst != mlast)
+                    ret = match_implementation(it, last, true, this->continue_nodes().at(ret.second));
+                else if (this->additional_continue_nodes().empty())
+                    throw std::logic_error("additional_continue_nodes is empty");
+                else if (mlast == 0)
+                    ret = match_implementation(it, last, true, this->additional_continue_nodes().back());
+                else
+                    ret = match_implementation(it, last, true, this->additional_continue_nodes().at(ret.second));
+
                 prev_it = it;
             }
 
@@ -155,6 +168,8 @@ namespace rx::testing
                     const auto& fni{ this->final_nodes().at(next_state) };
                     regops_implementation(it, fni.op_index, registers, registers_enabled);
                     it -= fni.final_offset;
+                    if (this->fallback_nodes().contains(next_state))
+                        continue_at = this->fallback_nodes().at(next_state).continue_at;
                     break; /* outer */
                 }
             }

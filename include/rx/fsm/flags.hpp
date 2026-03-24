@@ -17,6 +17,7 @@ namespace rx::detail
         bool is_iterator     : 1;
         bool no_captures     : 1;
         bool return_bool     : 1;
+        bool maybe_no_empty  : 1;
     };
 
     namespace default_fsm_flags
@@ -28,6 +29,7 @@ namespace rx::detail
             .is_iterator     = false,
             .no_captures     = false,
             .return_bool     = false,
+            .maybe_no_empty  = false,
         };
 
         inline constexpr fsm_flags partial_match{
@@ -37,6 +39,7 @@ namespace rx::detail
             .is_iterator     = false,
             .no_captures     = false,
             .return_bool     = false,
+            .maybe_no_empty  = false,
         };
 
         inline constexpr fsm_flags search_single{
@@ -46,6 +49,7 @@ namespace rx::detail
             .is_iterator     = false,
             .no_captures     = false,
             .return_bool     = false,
+            .maybe_no_empty  = false,
         };
 
         inline constexpr fsm_flags search_all{
@@ -55,24 +59,7 @@ namespace rx::detail
             .is_iterator     = true,
             .no_captures     = false,
             .return_bool     = false,
-        };
-
-        inline constexpr fsm_flags return_bool_modifier{
-            .is_search       = false,
-            .longest_match   = false,
-            .enable_fallback = false,
-            .is_iterator     = false,
-            .no_captures     = true,
-            .return_bool     = true,
-        };
-
-        inline constexpr fsm_flags no_capture_modifier{
-            .is_search       = false,
-            .longest_match   = false,
-            .enable_fallback = false,
-            .is_iterator     = false,
-            .no_captures     = true,
-            .return_bool     = false,
+            .maybe_no_empty  = true,
         };
     }
 

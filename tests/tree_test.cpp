@@ -66,6 +66,14 @@ namespace
         const expr_tree ast{ str };
         return true;
     }
+
+    template<typename CharT>
+    consteval bool empty_match_possible(const CharT* str)
+    {
+        using namespace rx::detail;
+        const expr_tree ast{ str };
+        return ast.empty_match_possible();
+    }
 }
 
 /* single units */
@@ -283,3 +291,25 @@ static_assert(test("(\na$)+"));
 static_assert(test("(?m)(\na$)+"));
 static_assert(test("(?m)(^a\n)+"));
 static_assert(test("(?ms)a$.^a"));
+
+/* empty match possible */
+static_assert(empty_match_possible("()"));
+static_assert(empty_match_possible("(?:)"));
+static_assert(not empty_match_possible("a"));
+static_assert(empty_match_possible("()|b"));
+static_assert(empty_match_possible("a|()"));
+static_assert(not empty_match_possible("a|b"));
+static_assert(not empty_match_possible("a+b+"));
+static_assert(not empty_match_possible("()+b+"));
+static_assert(empty_match_possible("()+()+"));
+static_assert(empty_match_possible("()+"));
+static_assert(empty_match_possible("()*"));
+static_assert(empty_match_possible("()?"));
+static_assert(not empty_match_possible("a+"));
+static_assert(empty_match_possible("a*"));
+static_assert(empty_match_possible("a?"));
+static_assert(not empty_match_possible("[abc]"));
+static_assert(empty_match_possible("^"));
+static_assert(empty_match_possible("$"));
+static_assert(empty_match_possible("\\b"));
+static_assert(empty_match_possible("\\b|a"));

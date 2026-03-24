@@ -327,6 +327,17 @@ namespace rx::detail::tdfa
                     block_graph_.at(tr.op_index) = nodes_to_edges.at(tr.next);
 
         block_graph_start_ = std::move(nodes_to_edges.at(dfa.match_start));
+
+        /* add additional start nodes to block_graph_start */
+        std::vector to_visit(dfa.continue_nodes_);
+        to_visit.append_range(dfa.additional_continue_nodes_);
+        std::ranges::sort(to_visit);
+        auto [efirst, elast]{ std::ranges::unique(to_visit) };
+        to_visit.erase(efirst, elast);
+        std::erase(to_visit, dfa.match_start);
+
+        for (const std::size_t c : to_visit)
+            block_graph_start_.append_range(std::move(nodes_to_edges.at(c)));
     }
 
     template<typename CharT>

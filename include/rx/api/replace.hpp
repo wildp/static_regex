@@ -7,6 +7,7 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
 #include <iterator>
 #include <ranges>
 #include <string>
@@ -23,6 +24,124 @@ namespace rx
 {
     namespace detail
     {
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S, typename Regex>
+        class stashing_regex_iterator;
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal Pattern, mode Mode>
+        class stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>
+        {
+            using matcher_type  = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+            using result_type   = matcher_type::template result<I>;
+
+        public:
+            using iterator_concept  = std::input_iterator_tag;
+            using iterator_category = std::input_iterator_tag;
+            using value_type        = result_type;
+            using difference_type   = std::ptrdiff_t;
+
+            stashing_regex_iterator() requires std::default_initializable<I> and std::default_initializable<S> = default;
+
+            constexpr explicit stashing_regex_iterator(I first, S last)
+                : first_{ std::move(first) }, last_{ std::move(last) }
+            {
+                find_first(first_);
+            }
+
+            constexpr const value_type& operator*() const noexcept
+            {
+                return result_;
+            }
+
+            constexpr const value_type* operator->() const noexcept
+            {
+                return &result_;
+            }
+
+            constexpr stashing_regex_iterator& operator++()
+            {
+                if (not result_.has_value())
+                    return *this;
+
+                const auto& [prev_start, current]{ force_get<0>(result_) };
+
+                if constexpr (not matcher_type::never_empty)
+                {
+                    if (current == prev_start)
+                    {
+                        if (current == last_)
+                        {
+                            result_.clear_match();
+                            return *this;
+                        }
+
+                        if (current == first_)
+                            find_first<true>(current);
+                        else
+                            find_next<true>(current);
+
+                        return *this;
+                    }
+                }
+
+                find_next(current);
+                return *this;
+            }
+
+            constexpr void operator++(int)
+            {
+                ++*this;
+            }
+
+            friend constexpr bool operator==(const stashing_regex_iterator& x, std::default_sentinel_t)
+            {
+                return not x.result_.has_value();
+            }
+
+            template<std::ranges::input_range W, int...>
+            requires std::ranges::view<W>
+            friend class submatches_view;
+
+        private:
+            template<bool MatchNonEmpty = false>
+            constexpr void find_first(I current)
+            {
+                if constexpr (MatchNonEmpty)
+                    result_ = matcher_(current, last_, detail::match_non_empty);
+                else
+                    result_ = matcher_(current, last_);
+            }
+
+            template<bool MatchNonEmpty = false>
+            constexpr void find_next(I current)
+            {
+                if constexpr (MatchNonEmpty)
+                {
+                    if constexpr (Mode == mode::naive)
+                        result_ = matcher_(first_, last_, current, detail::match_non_empty);
+                    else if constexpr (result_type::has_continue)
+                        result_ = matcher_(current, last_, result_.continue_at_, detail::match_non_empty);
+                    else
+                        result_ = matcher_(current, last_, detail::match_non_empty);
+                }
+                else
+                {
+
+                    if constexpr (Mode == mode::naive)
+                        result_ = matcher_(first_, last_, current);
+                    else if constexpr (result_type::has_continue)
+                        result_ = matcher_(current, last_, result_.continue_at_);
+                    else
+                        result_ = matcher_(current, last_);
+                }
+            }
+
+
+            value_type result_;
+            I first_;
+            [[no_unique_address]] S last_;
+            [[no_unique_address]] matcher_type matcher_;
+        };
+
         template<typename CharT>
         consteval auto replace_fmt_pattern()
         {
@@ -185,45 +304,30 @@ namespace rx
             {
                 // TODO: revisit in future C++ version with output sentinel versions of algorithms?
 
-                using matcher_type = [: get_matcher_refl(Mode, true) :]<Pattern, default_fsm_flags::search_all>;
-                using result_type = matcher_type::template result<I>;
+                using iterator_type = stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>;
+                using sentinel_type = std::default_sentinel_t;
+                using result_type = iterator_type::value_type;
 
                 const replace_fmt fmt{ fmt_first, fmt_last };
                 fmt.range_check(result_type::submatch_count);
 
-                [[maybe_unused]] const I first_copy{ first };
+                iterator_type it{ first, last };
+                sentinel_type end{};
 
-                matcher_type matcher;
-                result_type match_result{ matcher(first, last) };
-
-                while (match_result.has_value())
+                for (; it != end; ++it)
                 {
-                    auto [mfirst, mlast]{ get<0>(match_result) };
+                    auto [mfirst, mlast]{ get<0>(*it) };
 
                     result = std::ranges::copy(first, mfirst, result).out;
 
                     for (const auto& [substr, idx] : fmt.zipped())
                     {
                         result = std::ranges::copy(substr, result).out;
-                        result = std::ranges::copy(match_result.at(idx), result).out;
+                        result = std::ranges::copy(it->at(idx), result).out;
                     }
 
                     result = std::ranges::copy(fmt.trailing(), result).out;
                     first = mlast;
-
-                    if (mfirst == mlast)
-                    {
-                        if (mlast == last)
-                            break;
-                        ++mlast;
-                    }
-
-                    if constexpr (Mode == mode::naive)
-                        match_result = matcher(first_copy, last, mlast);
-                    else if constexpr (result_type::has_continue)
-                        match_result = matcher(mlast, last, match_result.continue_at_);
-                    else
-                        match_result = matcher(mlast, last);
                 }
 
                 return std::ranges::copy(first, last, result);
@@ -236,22 +340,21 @@ namespace rx
             {
                 // TODO: revisit in future C++ version with output sentinel versions of algorithms?
 
-                using matcher_type = [: get_matcher_refl(Mode, true) :]<Pattern, default_fsm_flags::search_all>;
-                using result_type = matcher_type::template result<I>;
+                using iterator_type = stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>;
+                using sentinel_type = std::default_sentinel_t;
+                using result_type = iterator_type::value_type;
 
                 static constexpr static_replace_fmt fmt{ Fmt.view() };
                 consteval {
                     fmt.range_check(result_type::submatch_count);
                 }
 
-                [[maybe_unused]] const I first_copy{ first };
+                iterator_type it{ first, last };
+                sentinel_type end{};
 
-                matcher_type matcher;
-                result_type match_result{ matcher(first, last) };
-
-                while (match_result.has_value())
+                for(; it != end; ++it)
                 {
-                    auto [mfirst, mlast]{ get<0>(match_result) };
+                    auto [mfirst, mlast]{ get<0>(*it) };
                     result = std::ranges::copy(first, mfirst, result).out;
 
                     // TODO: change to use constexpr structured binding when supported
@@ -259,25 +362,11 @@ namespace rx
                     {
                         constexpr std::size_t N{ get<1>(pair) };
                         result = std::ranges::copy(get<0>(pair), result).out;
-                        result = std::ranges::copy(get<N>(match_result), result).out;
+                        result = std::ranges::copy(get<N>(*it), result).out;
                     }
 
                     result = std::ranges::copy(fmt.trailing(), result).out;
                     first = mlast;
-
-                    if (mfirst == mlast)
-                    {
-                        if (mlast == last)
-                            break;
-                        ++mlast;
-                    }
-
-                    if constexpr (Mode == mode::naive)
-                        match_result = matcher(first_copy, last, mlast);
-                    else if constexpr (result_type::has_continue)
-                        match_result = matcher(mlast, last, match_result.continue_at_);
-                    else
-                        match_result = matcher(mlast, last);
                 }
 
                 return std::ranges::copy(first, last, result);

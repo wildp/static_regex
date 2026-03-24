@@ -178,6 +178,7 @@ namespace rx::detail
 
         explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
         constexpr void rewrite_assertions();
+        constexpr void add_non_empty_match_pathway();
 
         /* observers */
 
@@ -190,6 +191,7 @@ namespace rx::detail
         [[nodiscard]] constexpr const capture_info& get_capture_info() const noexcept { return capture_info_; }
         [[nodiscard]] constexpr state_t start_node() const noexcept { return start_node_; }
         [[nodiscard]] constexpr const auto& get_cont_info() const { return cont_info_; }
+        [[nodiscard]] constexpr const auto& get_additional_cont() const { return additional_cont_; }
 
     private:
         using ast_t = expr_tree<char_type>;
@@ -259,6 +261,7 @@ namespace rx::detail
         std::size_t                                 tag_count_;
         state_t                                     start_node_{ default_start_node };
         std::vector<tnfa::continue_info<char_type>> cont_info_;
+        std::vector<tnfa::state_t>                  additional_cont_;
 
         fsm_flags flags_;
 

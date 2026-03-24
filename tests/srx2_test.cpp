@@ -79,3 +79,5 @@ static_assert(submatches("a(.)c"_rx, ints<0, 1>{}, "abcbadce", { "abc" , "b", "a
 static_assert(submatches("a(.)c"_rx, ints<-1, 1>{}, "abcbadce", { "" , "b", "b", "d", "e" }));
 static_assert(submatches("a(.)c"_rx, ints<-1, 1>{}, "abcbadc", { "" , "b", "b", "d" }));
 static_assert(submatches("(.)([cde])"_rx, ints<0, 2, -1>{}, "adabcae", { "ad" , "d", "", "bc", "c", "a", "ae", "e", "" }));
+static_assert(submatches("()|abc"_rx, ints<0>{}, "abc", { "" , "abc", "" }));
+static_assert(submatches("\\b|abc"_rx, ints<0>{}, "abc", { "", "abc", "" }));

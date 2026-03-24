@@ -37,7 +37,6 @@ namespace rx
     class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>>
     {
         class iterator;
-        using sentinel = std::default_sentinel_t;
 
     public:
         regex_match_view() requires std::default_initializable<V> = default;
@@ -48,20 +47,54 @@ namespace rx
 
         [[nodiscard]] constexpr iterator begin()
         {
-            auto it{ std::ranges::begin(base_) };
-            auto end{ std::ranges::end(base_) };;
-            cached_result_ = matcher_(it, end);
-            return iterator{ *this, std::move(it), std::move(end) };
+            /* since regex_match_view is an input range, there
+               is no need to cache future calls to begin() */
+            auto current{ std::ranges::begin(base_) };
+            find_first(current);
+            return iterator{ *this, std::move(current) };
         }
 
-        [[nodiscard]] constexpr sentinel end()
+        [[nodiscard]] constexpr std::default_sentinel_t end()
         {
-            return sentinel{};
+            return std::default_sentinel;
         }
 
     private:
         using matcher_type = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
         using result_type = matcher_type::template result<std::ranges::iterator_t<V>>;
+
+        template<bool MatchNonEmpty = false>
+        constexpr void find_first(std::ranges::iterator_t<V> current)
+        {
+            if constexpr (MatchNonEmpty)
+                cached_result_ = matcher_(current, std::ranges::end(base_), detail::match_non_empty);
+            else
+                cached_result_ = matcher_(current, std::ranges::end(base_));
+        }
+
+        template<bool MatchNonEmpty = false>
+        constexpr void find_next(std::ranges::iterator_t<V> current)
+        {
+            if constexpr (MatchNonEmpty)
+            {
+                if constexpr (Mode == mode::naive)
+                    cached_result_ = matcher_(std::ranges::begin(base_), std::ranges::end(base_), current, detail::match_non_empty);
+                else if constexpr (result_type::has_continue)
+                    cached_result_ = matcher_(current, std::ranges::end(base_), cached_result_.continue_at_, detail::match_non_empty);
+                else
+                    cached_result_ = matcher_(current, std::ranges::end(base_), detail::match_non_empty);
+            }
+            else
+            {
+
+                if constexpr (Mode == mode::naive)
+                    cached_result_ = matcher_(std::ranges::begin(base_), std::ranges::end(base_), current);
+                else if constexpr (result_type::has_continue)
+                    cached_result_ = matcher_(current, std::ranges::end(base_), cached_result_.continue_at_);
+                else
+                    cached_result_ = matcher_(current, std::ranges::end(base_));
+            }
+        }
 
         V base_{};
         result_type cached_result_;
@@ -73,27 +106,22 @@ namespace rx
     class regex_match_view<V, static_regex<Pattern, Mode>>::iterator
     {
     public:
-        using iterator_category = std::input_iterator_tag;
         using iterator_concept  = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
         using value_type        = result_type;
         using difference_type   = std::ranges::range_difference_t<V>;
 
         iterator() requires std::default_initializable<std::ranges::iterator_t<V>> = default;
 
-        constexpr explicit iterator(regex_match_view& parent, std::ranges::iterator_t<V> current, std::ranges::sentinel_t<V> end)
+        constexpr explicit iterator(regex_match_view& parent, std::ranges::iterator_t<V> current)
             : current_{ std::move(current) }, parent_{ std::addressof(parent) } {}
 
-        constexpr const std::ranges::iterator_t<V>& base() const& noexcept
+        constexpr std::ranges::iterator_t<V> base() const
         {
             return current_;
         }
 
-        constexpr std::ranges::iterator_t<V> base() &&
-        {
-            return std::move(current_);
-        }
-
-        constexpr const value_type& operator*() const
+        constexpr const value_type& operator*() const noexcept
         {
             return parent_->cached_result_;
         }
@@ -106,26 +134,26 @@ namespace rx
             const auto& [mfirst, mlast]{ force_get<0>(parent_->cached_result_) };
             current_ = mlast;
 
-            if (current_ == mfirst)
+            if constexpr (not matcher_type::never_empty)
             {
-                if (current_ == end())
+                if (mfirst == mlast)
                 {
-                    parent_->cached_result_.clear_match();
+                    if (current_ == end())
+                    {
+                        parent_->cached_result_.clear_match();
+                        return *this;
+                    }
+
+                    if (current_ == begin())
+                        parent_->template find_first<true>(current_);
+                    else
+                        parent_->template find_next<true>(current_);
+
                     return *this;
-                }
-                else
-                {
-                    ++current_;
                 }
             }
 
-            if constexpr (Mode == mode::naive)
-                parent_->cached_result_ = parent_->matcher_(begin(), end(), current_);
-            else if constexpr (result_type::has_continue)
-                parent_->cached_result_ = parent_->matcher_(current_, end(), parent_->cached_result_.continue_at_);
-            else
-                parent_->cached_result_ = parent_->matcher_(current_, end());
-
+            parent_->find_next(current_);
             return *this;
         }
 
@@ -134,7 +162,7 @@ namespace rx
             ++*this;
         }
 
-        friend constexpr bool operator==(const iterator& x, sentinel)
+        friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
             return not x.parent_->cached_result_.has_value();
         }
@@ -158,8 +186,8 @@ namespace rx
         regex_match_view* parent_{ nullptr };
     };
 
-    template<typename Range, string_literal Pattern, mode Mode>
-    regex_match_view(Range&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<Range>, static_regex<Pattern, Mode>>;
+    template<typename R, string_literal Pattern, mode Mode>
+    regex_match_view(R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>>;
 
 
     template<std::ranges::input_range V, int... Submatches>
@@ -182,7 +210,6 @@ namespace rx
         static_assert((submatch_is_valid<Submatches> and ... and true));
 
         struct iterator;
-        using sentinel = std::default_sentinel_t;
 
     public:
         submatches_view() requires std::default_initializable<V> = default;
@@ -212,9 +239,9 @@ namespace rx
             return iterator{ *this };
         }
 
-        [[nodiscard]] constexpr sentinel end()
+        [[nodiscard]] constexpr std::default_sentinel_t end()
         {
-            return sentinel{};
+            return std::default_sentinel;
         }
 
     private:
@@ -234,14 +261,13 @@ namespace rx
     struct submatches_view<V, Submatches...>::iterator
     {
     public:
-        using iterator_category = std::input_iterator_tag;
         using iterator_concept  = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
         using value_type        = submatch_type;
         using difference_type   = std::ranges::range_difference_t<V>;
 
-        iterator()
-        requires std::default_initializable<std::ranges::iterator_t<V>>
-                 and std::default_initializable<std::ranges::iterator_t<underlying_type>> = default;
+        iterator() requires std::default_initializable<std::ranges::iterator_t<V>>
+                            and std::default_initializable<std::ranges::iterator_t<underlying_type>> = default;
 
         constexpr iterator(submatches_view& parent)
             : current_{ std::ranges::begin(parent.base_) }, parent_{ std::addressof(parent) }
@@ -298,7 +324,7 @@ namespace rx
             ++*this;
         }
 
-        friend constexpr bool operator==(const iterator& x, sentinel)
+        friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
             if constexpr (maybe_has_suffix_iterator)
                 return x.current_ == x.end_ and x.index_ != suffix_index;
@@ -354,11 +380,11 @@ namespace rx
         submatches_view* parent_{ nullptr };
     };
 
-    template<typename Range, int... Submatches>
-    submatches_view(Range&&, std::integer_sequence<int, Submatches...>) -> submatches_view<std::views::all_t<Range>, Submatches...>;
+    template<typename R, int... Submatches>
+    submatches_view(R&&, std::integer_sequence<int, Submatches...>) -> submatches_view<std::views::all_t<R>, Submatches...>;
 
-    template<typename Range, typename Submatches>
-    submatches_view(Range&&, Submatches&&) -> submatches_view<std::views::all_t<Range>>;
+    template<typename R, typename Submatches>
+    submatches_view(R&&, Submatches&&) -> submatches_view<std::views::all_t<R>>;
 
 
     namespace views
@@ -378,7 +404,7 @@ namespace rx
             };
 
             template<typename Regex>
-            struct static_regex_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_adaptor_closure<Regex>>
+            struct static_regex_match_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_match_adaptor_closure<Regex>>
             {
                 template<std::ranges::viewable_range Range>
                 requires detail::can_regex_match_view<Range, Regex>
@@ -401,7 +427,7 @@ namespace rx
                 requires rx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
-                    return static_regex_adaptor_closure<Regex>();
+                    return static_regex_match_adaptor_closure<Regex>();
                 }
             };
 

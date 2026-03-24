@@ -483,14 +483,17 @@ namespace rx::detail::tdfa
                     const reg_t i{ ce1.registers.at(t - 1) };
                     const reg_t j{ ce2.registers.at(t - 1) };
 
-                    const auto it{ map.lower_bound(i) };
-                    const auto jt{ rmap.lower_bound(j) };
+                    auto it{ map.lower_bound(i) };
+                    auto jt{ rmap.lower_bound(j) };
 
-                    bool not_i_match{ it == map.end() or (*it).first != i };
-                    bool not_j_match{ jt == rmap.end() or (*jt).first != j };
+                    const bool not_i_match{ it == map.end() or (*it).first != i };
+                    const bool not_j_match{ jt == rmap.end() or (*jt).first != j };
 
                     if (not_i_match and not_j_match)
                     {
+                        if (it != map.end()) ++it;
+                        if (jt != rmap.end()) ++jt;
+
                         map.emplace_hint(it, i, j);
                         rmap.emplace_hint(jt, j, i);
                     }
@@ -708,6 +711,24 @@ namespace rx::detail::tdfa
                 result.continue_nodes_.emplace_back(initial);
             else
                 result.continue_nodes_.emplace_back(make_initial_state(result, cont.value));
+        }
+
+        if (const auto& ac{ tnfa_ptr_->get_additional_cont() }; not ac.empty())
+        {
+            const auto& ci{ tnfa_ptr_->get_cont_info() };
+
+            for (std::size_t i{ 0 }, i_max{ ci.size() }; i < i_max; ++i)
+            {
+                if (ac.at(i) == ci.at(i).value)
+                    result.additional_continue_nodes_.emplace_back(result.continue_nodes_.at(i));
+                else
+                    result.additional_continue_nodes_.emplace_back(make_initial_state(result, ac.at(i)));
+            }
+
+            if (const auto acb{ ac.back() }; acb == tnfa_ptr_->start_node())
+                result.additional_continue_nodes_.emplace_back(initial);
+            else
+                result.additional_continue_nodes_.emplace_back(make_initial_state(result, ac.back()));
         }
 
         for (std::size_t state{ initial }; state < result.nodes_.size(); ++state)

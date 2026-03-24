@@ -150,6 +150,7 @@ namespace rx::detail
         [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
         [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
         [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const { return continue_nodes_; }
+        [[nodiscard]] constexpr const tdfa::continue_nodes_t& additional_continue_nodes() const { return additional_continue_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
         [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
         [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
@@ -167,6 +168,7 @@ namespace rx::detail
 
         data_t                  nodes_;
         tdfa::continue_nodes_t  continue_nodes_;
+        tdfa::continue_nodes_t  additional_continue_nodes_;
         tdfa::final_nodes_t     final_nodes_;
         tdfa::fallback_nodes_t  fallback_nodes_;
         tdfa::final_regs_t      final_registers_;

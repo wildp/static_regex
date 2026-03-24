@@ -14,7 +14,6 @@
 #include <limits>
 #include <numeric>
 #include <utility>
-#include <variant>
 
 #include "rx/api/regex_error.hpp"
 #include "rx/etc/captures.hpp"
@@ -22,6 +21,107 @@
 
 namespace rx::detail
 {
+    /* observer for non empty match */
+
+    template<typename CharT>
+    constexpr bool expr_tree<CharT>::empty_match_possible() const
+    {
+        std::vector<bool> never_possible(expressions_.size(), false);
+
+        using stack_elem_t = std::pair<std::size_t, std::size_t>;
+
+        std::vector<stack_elem_t> stack;
+        stack.emplace_back(root_idx(), false);
+
+        while (not stack.empty())
+        {
+            auto& [idx, pos]{ stack.back() };
+            const auto& entry{ expressions_.at(idx) };
+
+            switch (entry.index())
+            {
+            case ast_index<assertion>:
+            case ast_index<tag>:
+                never_possible.at(idx) = false;
+                stack.pop_back();
+                break;
+
+            case ast_index<char_str>:
+                never_possible.at(idx) = (not get<char_str>(entry).data.empty());
+                stack.pop_back();
+                break;
+
+            case ast_index<char_class>:
+                never_possible.at(idx) = true;
+                stack.pop_back();
+                break;
+
+            case ast_index<backref>:
+                never_possible.at(idx) = false; /* syntactic approximation */
+                stack.pop_back();
+                break;
+
+            case ast_index<concat>:
+            {
+                const auto& cat{ get<concat>(entry) };
+
+                if (pos == cat.idxs.size())
+                {
+                    auto tmp{ cat.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); }) };
+                    never_possible.at(idx) = std::ranges::contains(tmp, true);
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(cat.idxs.at(pos - 1), 0);
+                }
+                break;
+            }
+
+            case ast_index<alt>:
+            {
+                const auto& atl{ get<alt>(entry) };
+
+                if (pos == atl.idxs.size())
+                {
+                    auto tmp{ atl.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); }) };
+                    never_possible.at(idx) = (not std::ranges::empty(tmp) and std::ranges::all_of(tmp, std::identity{}));
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(atl.idxs.at(pos - 1), 0);
+                }
+                break;
+            }
+
+            case ast_index<repeat>:
+            {
+                const auto& rep{ get<repeat>(entry) };
+
+                if (pos == 1)
+                {
+                    never_possible.at(idx) = (rep.min > 0) ? never_possible.at(rep.idx) : false;
+                    stack.pop_back();
+                }
+                else
+                {
+                    pos += 1;
+                    stack.emplace_back(rep.idx, 0);
+                }
+                break;
+            }
+
+            default:
+                throw tree_error("Invalid tree");
+            }
+        }
+
+        return (not never_possible.at(root_idx_));
+    }
+
     /* helper for tagged nfa conversion */
 
     template<typename CharT>

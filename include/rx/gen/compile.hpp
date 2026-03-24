@@ -192,6 +192,7 @@ namespace rx::detail
             : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
               regops{ dfa.regops_ | std::views::transform(make_register_operations) },
               continue_nodes{ dfa.continue_nodes() },
+              additional_continue_nodes{ dfa.additional_continue_nodes() },
               final_nodes{ dfa.final_nodes() },
               fallback_nodes{ dfa.fallback_nodes() },
               final_registers{ dfa.final_registers() },
@@ -212,6 +213,7 @@ namespace rx::detail
         static_span<static_span<static_transition<char_type>>> nodes;
         static_span<static_span<register_operation>> regops;
         static_span<std::size_t> continue_nodes;
+        static_span<std::size_t> additional_continue_nodes;
         static_map<std::size_t, tdfa::final_node_info> final_nodes;
         static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
         static_span<tdfa::reg_t> final_registers;
@@ -229,17 +231,22 @@ namespace rx::detail
     {
         /* set parser flags as appropriate */
         parser_flags p{};
-        if (f.no_captures) p.enable_captures = false;
-        if (f.return_bool) p.enable_start_tag = false;
+        if (f.no_captures)
+            p.enable_captures = false;
+        if (f.return_bool)
+            p.enable_start_tag = false;
 
         /* parse pattern string into tree */
         expr_tree ast{ pattern, p };
-        if (f.is_search) ast.insert_search_prefix();
+        if (f.is_search)
+            ast.insert_search_prefix();
         ast.optimise_tags();
 
         /* convert to tnfa */
         tagged_nfa nfa{ ast, f };
         nfa.rewrite_assertions();
+        if (f.maybe_no_empty and ast.empty_match_possible())
+            nfa.add_non_empty_match_pathway();
 
         /* convert to tdfa */
         tagged_dfa dfa{ nfa };
@@ -259,4 +266,8 @@ namespace rx::detail
     {
         static constexpr auto value{ compile_pattern(Pattern.view(), Flags) };
     };
+
+
+    struct match_non_empty_t {};
+    inline constexpr match_non_empty_t match_non_empty;
 }

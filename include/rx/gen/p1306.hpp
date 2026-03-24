@@ -53,6 +53,7 @@ namespace rx::detail
     {
         using dfa_t = compiled_dfa<Pattern, Flags>;
         using char_type = decltype(Pattern)::value_type;
+        static constexpr bool never_empty{ dfa_t::value.additional_continue_nodes.empty() };
 
         template<typename I>
         using result = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
@@ -160,7 +161,10 @@ namespace rx::detail
             {
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
                 {
-                    set_final_info<fn->op_index, fn->final_offset>(res, it);
+                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, it);
+                    else
+                        set_final_info<fn->op_index, fn->final_offset>(res, it);
                     return;
                 }
             }
@@ -236,6 +240,41 @@ namespace rx::detail
 
             return res;
         }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
+        requires (Flags.maybe_no_empty)
+        {
+            result<I> res{ first };
+            if constexpr (never_empty)
+                state<dfa_t::value.match_start>(res, first, last, first, fallback_disabled);
+            else
+                state<dfa_t::value.additional_continue_nodes.back()>(res, first, last, first, fallback_disabled);
+            return res;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
+        requires result<I>::has_continue and (Flags.maybe_no_empty)
+        {
+            result<I> res{ first };
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.continue_nodes.size()))
+            {
+                if (i == continue_at)
+                {
+                    if constexpr (never_empty)
+                        state<dfa_t::value.continue_nodes[i]>(res, first, last, first, fallback_disabled);
+                    else
+                        state<dfa_t::value.additional_continue_nodes[i]>(res, first, last, first, fallback_disabled);
+                    break;
+                }
+            }
+
+            return res;
+        }
     };
 
 
@@ -246,6 +285,7 @@ namespace rx::detail
 
         using dfa_t = compiled_dfa<Pattern, adapt_searcher_flags_to_matcher(Flags)>;
         using char_type = decltype(Pattern)::value_type;
+        static constexpr bool never_empty{ dfa_t::value.additional_continue_nodes.empty() };
 
         template<typename I>
         using result = static_regex_match_result<I, dfa_t::value.make_match_result_info(Flags.is_iterator)>;
@@ -381,7 +421,10 @@ namespace rx::detail
             {
                 if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
                 {
-                    set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
+                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                        set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
+                    else
+                        set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
                     return true;
                 }
             }
@@ -481,7 +524,7 @@ namespace rx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
-        requires (result<I>::has_continue)
+        requires result<I>::has_continue
         {
             result<I> res{ first };
             gen_info gen{};
@@ -491,6 +534,47 @@ namespace rx::detail
                 if (i == continue_at)
                 {
                     outer_state<dfa_t::value.continue_nodes[i]>(res, gen, first, last);
+                    break;
+                }
+            }
+
+            clean_generations(res, gen);
+            return res;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
+        requires (Flags.maybe_no_empty)
+        {
+            result<I> res{ first };
+            gen_info gen{};
+
+            if constexpr (never_empty)
+                outer_state<dfa_t::value.match_start>(res, gen, first, last);
+            else
+                outer_state<dfa_t::value.additional_continue_nodes.back()>(res, gen, first, last);
+
+            clean_generations(res, gen);
+            return res;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
+        requires result<I>::has_continue and (Flags.maybe_no_empty)
+        {
+            result<I> res{ first };
+            gen_info gen{};
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, dfa_t::value.continue_nodes.size()))
+            {
+                if (i == continue_at)
+                {
+                    if constexpr (never_empty)
+                        outer_state<dfa_t::value.continue_nodes[i]>(res, gen, first, last);
+                    else
+                        outer_state<dfa_t::value.additional_continue_nodes[i]>(res, gen, first, last);
                     break;
                 }
             }
@@ -606,6 +690,14 @@ namespace rx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        static constexpr bool operator()(const I first, const S last, match_non_empty_t) = delete;
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) = delete;
     };
 
     template<string_literal Pattern, fsm_flags Flags>
@@ -652,5 +744,13 @@ namespace rx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        static constexpr bool operator()(const I first, const S last, match_non_empty_t) = delete;
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) = delete;
     };
 }

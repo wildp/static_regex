@@ -46,6 +46,10 @@ static_assert(test("(a.?c|d.?c)"_rx, "-", "abcdcba", "--ba"));
 static_assert(test("(.*)ab(.*)(cd)"_rx, "$1-$2", "abcd", "-"));
 static_assert(test("(.*)ab(.*)(cd)"_rx, "$1-$2", "aabccd", "a-c"));
 static_assert(test("(.*)ab(.*)(cd)"_rx, "$1-$2", "ababcdcd", "ab-cd"));
+static_assert(test("(?:)|abc"_rx, "-", "abc", "---"));
+static_assert(test("\\b|abc"_rx, "-", "abc", "---"));
+static_assert(test("(?:)|abc"_rx, "-", "abcabc", "-----"));
+static_assert(test("\\b|abc"_rx, "-", "abcabc", "----"));
 
 /* static replace format test */
 static_assert(test("a"_rx, fmt<"x">, "abc", "xbc"));
@@ -67,3 +71,7 @@ static_assert(test("(a.?c|d.?c)"_rx, fmt<"-">, "abcdcba", "--ba"));
 static_assert(test("(.*)ab(.*)(cd)"_rx, fmt<"$1-$2">, "abcd", "-"));
 static_assert(test("(.*)ab(.*)(cd)"_rx, fmt<"$1-$2">, "aabccd", "a-c"));
 static_assert(test("(.*)ab(.*)(cd)"_rx, fmt<"$1-$2">, "ababcdcd", "ab-cd"));
+static_assert(test("(?:)|abc"_rx, fmt<"-">, "abc", "---"));
+static_assert(test("\\b|abc"_rx, fmt<"-">, "abc", "---"));
+static_assert(test("(?:)|abc"_rx, fmt<"-">, "abcabc", "-----"));
+static_assert(test("\\b|abc"_rx, fmt<"-">, "abcabc", "----"));

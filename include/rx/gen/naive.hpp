@@ -184,7 +184,8 @@ namespace rx::detail
               tag_count{ ast.tag_count() },
               exprs{ ast.get_all_exprs() | std::views::transform(to_static_expression) },
               staging{ tag_info },
-              fci{ ast.get_capture_info() } {}
+              fci{ ast.get_capture_info() },
+              empty_match_possible{ ast.empty_match_possible() } {}
 
         [[nodiscard]] consteval static_match_result_info make_match_result_info() const
         {
@@ -198,6 +199,8 @@ namespace rx::detail
         static_map<tag_number_t, tag_number_t> staging;
 
         final_capture_info fci;
+
+        bool empty_match_possible;
     };
 
 
@@ -248,6 +251,7 @@ namespace rx::detail
         static constexpr info_t ast{ parse_pattern(Pattern.view()) };
 
         static constexpr std::size_t require_full_match{ std::numeric_limits<std::size_t>::max() };
+        static constexpr std::size_t require_non_empty_match{ std::numeric_limits<std::size_t>::max() - 1 };
 
         template<typename I>
         using result = static_regex_match_result<I, ast.make_match_result_info()>;
@@ -313,6 +317,17 @@ namespace rx::detail
                 return (it == last);
             }
         };
+
+        template<bool Fwd>
+        struct state<Fwd, require_non_empty_match>
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr bool operator()(result<I>& res , staging_info<I>& /* si */, const I /* first */, const S /* last */, I& it)
+            {
+                return (it != res.match_start_);
+            }
+        };
+
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
         requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_str>)
@@ -953,6 +968,8 @@ namespace rx::detail
         template<bool Full>
         struct match
         {
+            static constexpr bool never_empty{ not ast.empty_match_possible };
+
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr auto operator()(const I first, const S last)
             requires (Full)
@@ -986,6 +1003,9 @@ namespace rx::detail
                 }
                 return res;
             }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
         };
 
         template<bool Single>
@@ -1019,7 +1039,34 @@ namespace rx::detail
                 }
             }
 
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
+            {
+                result<I> res{ continue_from };
+                staging_info<I> si{};
+
+                if (I it{ continue_from }; state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, it))
+                {
+                    apply_final_staging_info(res, si);
+                    res.match_end_ = it;
+
+                    if constexpr (not std::contiguous_iterator<I>)
+                        res.match_success_ = true;
+
+                    return res;
+                }
+
+                if (continue_from == last)
+                    return res;
+
+                ++continue_from;
+
+                [[clang::musttail]] return outer_state(first, last, continue_from);
+            }
+
         public:
+            static constexpr bool never_empty{ not ast.empty_match_possible };
+
             template<std::bidirectional_iterator I>
             using result = p1306_naive_impl::result<I>;
 
@@ -1034,6 +1081,25 @@ namespace rx::detail
             requires (not Single)
             {
                 return outer_state(first, last, continue_from);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last, match_non_empty_t)
+            {
+                if constexpr (ast.empty_match_possible)
+                    return non_empty_outer_state(first, last, first);
+                else
+                    return outer_state(first, last, first);
+            }
+
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(const I first, const S last, I continue_from, match_non_empty_t)
+            requires (not Single)
+            {
+                if constexpr (ast.empty_match_possible)
+                    return non_empty_outer_state(first, last, continue_from);
+                else
+                    return outer_state(first, last, continue_from);
             }
         };
 

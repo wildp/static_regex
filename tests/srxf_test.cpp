@@ -90,6 +90,8 @@ static_assert(search_all("a"_rxf, "a", { { 0, 1 } }));
 static_assert(search_all("a"_rxf, "aaa", { { 0, 1 }, { 1, 2 }, { 2, 3 } }));
 static_assert(search_all("ab"_rxf, "abab", { { 0, 2 }, { 2, 4 } }));
 static_assert(search_all("ab"_rxf, "abaab", { { 0, 2 }, { 3, 5 } }));
+static_assert(search_all("(?:)|abc"_rxf, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(search_all("(?:)|abc"_rxf, "abcabc", { { 0, 0 }, { 0, 3 }, { 3, 3 }, { 3, 6 }, { 6, 6 } }));
 
 /* sof+eof anchor tests */
 static_assert(not search("^$"_rxf, "a"));
@@ -125,3 +127,5 @@ static_assert(search(R"(\B)"_rxf, "a_", { 1, 1 }));
 static_assert(search(R"(a\b)"_rxf, "a+", { 0, 1 }));
 static_assert(search(R"(a\b)"_rxf, "a.", { 0, 1 }));
 static_assert(not search(R"(a\b)"_rxf, "a_"));
+static_assert(search_all(R"(\b|abc)"_rxf, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(search_all(R"(\b|^abc)"_rxf, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));

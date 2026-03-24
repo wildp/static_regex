@@ -131,6 +131,10 @@ static_assert(match_count<"">("abcdefg") == 8);
 static_assert(match_count<".">("abcdefg") == 7);
 static_assert(match_count<"">("abcdefg"sv) == 8);
 static_assert(match_count<".">("abcdefg"sv) == 7);
+static_assert(match_count<"()|abc">("abc"sv) == 3);
+static_assert(match_count<"()|abc">("abcabc"sv) == 5);
+static_assert(match_count<"\\b|abc">("abc"sv) == 3);
+static_assert(match_count<"\\b|abc">("abcabc"sv) == 4);
 
 /* submatch result count tests */
 static_assert(submatch_count<"", ints<0>>("abcdefg") == 8);

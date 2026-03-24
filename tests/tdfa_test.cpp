@@ -75,6 +75,8 @@ namespace
         ast.insert_search_prefix();
         tagged_nfa nfa{ ast, default_fsm_flags::search_all };
         nfa.rewrite_assertions();
+        if (ast.empty_match_possible())
+            nfa.add_non_empty_match_pathway();
 
         const rx::testing::tdfa_matcher dfa{ nfa };
         const auto match_result{ dfa.match_all(str) };
@@ -233,6 +235,8 @@ static_assert(search_all("a", "a", { { 0, 1 } }));
 static_assert(search_all("a", "aaa", { { 0, 1 }, { 1, 2 }, { 2, 3 } }));
 static_assert(search_all("ab", "abab", { { 0, 2 }, { 2, 4 } }));
 static_assert(search_all("ab", "abaab", { { 0, 2 }, { 3, 5 } }));
+static_assert(search_all("(?:)|abc", "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(search_all("(?:)|abc", "abcabc", { { 0, 0 }, { 0, 3 }, { 3, 3 }, { 3, 6 }, { 6, 6 } }));
 // TODO: add more tests
 
 /* sof+eof anchor tests */
@@ -292,6 +296,8 @@ static_assert(search(R"(\B)", "a_", { 1, 1 }));
 static_assert(search(R"(a\b)", "a+", { 0, 1 }));
 static_assert(search(R"(a\b)", "a.", { 0, 1 }));
 static_assert(not search(R"(a\b)", "a_"));
+static_assert(search_all(R"(\b|abc)", "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(search_all(R"(\b|^abc)", "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
 
 
 /* other tests */

@@ -549,10 +549,8 @@ namespace rx::detail
         /* determine reachable states */
 
         std::vector<state_t> initial_nodes{ start_node_ };
-
-        for (const auto& ci : cont_info_)
-            if (ci.value != start_node_)
-                initial_nodes.emplace_back(ci.value);
+        initial_nodes.append_range(cont_info_ | std::views::transform(&tnfa::continue_info<CharT>::value));
+        initial_nodes.append_range(additional_cont_);
 
         const auto reachable_nodes{ epsilon_closure<false>(std::move(initial_nodes), tnfa::reachable_predicate{}) };
 
@@ -634,6 +632,8 @@ namespace rx::detail
 
         for (const auto [q, p] : mapped_states)
         {
+            bool normal_tr_flag{ false };
+
             /* q == p is only possible when there are no transitions from q */
             for (const tr_index i : nodes_.at(q).out_tr)
             {
@@ -642,8 +642,15 @@ namespace rx::detail
 
                 if (holds_alternative<normal_tr>(tr.type))
                 {
-                    /* transition from copied e-closure to main graph */
-                    make_copy(p, tr.dst, tr.type);
+                    /* this should be valid since in our tnfa, nodes by construction either only have outgoing
+                     * normal transitions, or have outgoing e-transitions (or assertions), but never both */
+
+                    if (not normal_tr_flag)
+                    {
+                        /* transition from copied e-closure to main graph (at most once) */
+                        make_epsilon(p, q);
+                        normal_tr_flag = true;
+                    }
                 }
                 else if (holds_alternative<sof_anchor_tr>(tr.type))
                 {
@@ -1157,8 +1164,16 @@ namespace rx::detail
 
             const auto fn = [&](const charset_type& edge) {
                 std::size_t cont_index{ std::numeric_limits<wraparound_index>::max() };
-                if (const auto it{ std::ranges::lower_bound(wrap_starts, edge) }; it != wrap_starts.end() and edge == *it)
-                    cont_index = static_cast<wraparound_index>(it - wrap_starts.begin());
+
+                for (std::size_t i{ 0 }, i_max{ wrap_starts.size() }; i < i_max; ++i)
+                {
+                    if (const auto& ws{ wrap_starts[i] }; (edge | ws) == ws)
+                    {
+                        cont_index = i;
+                        break;
+                    }
+                }
+
                 return std::pair{ std::cref(edge), cont_index };
             };
 
@@ -1270,6 +1285,8 @@ namespace rx::detail
                 if (nodes_.at(q).is_final and not nodes_.at(p).is_final)
                     make_epsilon(p, q); /* a quick hack to make (^\n) work? */
 
+                bool normal_tr_flag{ false };
+
                 for (const tr_index i : nodes_.at(q).out_tr)
                 {
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
@@ -1279,7 +1296,13 @@ namespace rx::detail
                     {
                         /* this should be valid since in our tnfa, nodes by construction either only have outgoing
                          * normal transitions, or have outgoing e-transitions (or assertions), but never both */
-                        make_epsilon(p, q);
+
+                        if (not normal_tr_flag)
+                        {
+                            /* transition from copied e-closure to main graph (at most once) */
+                            make_epsilon(p, q);
+                            normal_tr_flag = true;
+                        }
                     }
                     else if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
                     {
@@ -1364,6 +1387,117 @@ namespace rx::detail
         if (has_sof_anchor_ or has_eof_anchor_ or has_lookbehind_1_ or has_lookahead_1_) remove_dead_and_unreachable_states();
     }
 
+
+    /* introduce additional set of start states to avoid matching empty states */
+
+    template<typename CharT>
+    constexpr void tagged_nfa<CharT>::add_non_empty_match_pathway()
+    {
+        /* NOTE: this function must be called before after assertions have been rewritten */
+
+        std::vector<state_t> final_nodes{};
+        std::vector<bool> is_trailing_state(nodes_.size(), false);
+
+        for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
+        {
+            if (nodes_[q].is_final)
+            {
+                if (nodes_[q].final_offset == 0)
+                {
+                    final_nodes.emplace_back(q);
+                }
+                else
+                {
+                    std::vector<state_t> to_insert{ q };
+
+                    for (std::size_t o{ 0 }, o_max{ nodes_[q].final_offset }; o < o_max; ++o)
+                    {
+                        const auto ec{ epsilon_closure(std::move(to_insert), tnfa::e_closure_predicate{}) };
+                        to_insert.clear();
+
+                        for (const state_t q : ec)
+                        {
+                            is_trailing_state.at(q) = true;
+                            for (const tr_index i : nodes_.at(q).in_tr)
+                                if (const auto& tr{ get_tr(i) }; holds_alternative<normal_tr>(tr.type))
+                                    to_insert.emplace_back(tr.src);
+                        }
+                    }
+
+                    final_nodes.append_range(to_insert);
+                }
+            }
+        }
+
+        const auto bec{ backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::e_closure_predicate{}) };
+
+
+        /* determine start and continue nodes that can result in an empty match */
+
+        std::vector<state_t> to_remap;
+
+        if (bec.at(start_node_))
+            to_remap.emplace_back(start_node_);
+
+        for (const auto& cont : cont_info_)
+            if (bec.at(cont.value))
+                to_remap.emplace_back(cont.value);
+
+        if (to_remap.empty())
+            return;
+
+        /* create a copy of the start and continue nodes' e-closures */
+
+        std::flat_map<std::size_t, std::size_t> mapped_states;
+
+        std::vector ec{ epsilon_closure(std::move(to_remap), tnfa::e_closure_predicate{}) };
+        std::ranges::sort(ec);
+
+        for (const state_t q : ec)
+            mapped_states.emplace_hint(mapped_states.end(), q, node_create());
+
+
+        /* duplicate transitions */
+
+        for (const auto [q, p] : mapped_states)
+        {
+            for (const tr_index i : nodes_.at(q).out_tr)
+            {
+                /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
+                const auto& tr{ get_tr(i) };
+
+                if (holds_alternative<normal_tr>(tr.type))
+                {
+                    /* conditionally transition from copied e-closure to main graph */
+                    if (not is_trailing_state.at(tr.dst))
+                        make_copy(p, tr.dst, tr.type);
+                }
+                else
+                {
+                    /* transition within copied subgraph */
+                    make_copy(p, mapped_states.at(tr.dst), tr.type);
+                }
+            }
+        }
+
+
+        /* copy continue states to additional continue states */
+
+        for (const auto& cont : cont_info_)
+        {
+            if (const auto it{ mapped_states.find(cont.value) }; it != mapped_states.end())
+                additional_cont_.emplace_back((*it).second);
+            else
+                additional_cont_.emplace_back(cont.value);
+        }
+
+        if (const auto it{ mapped_states.find(start_node_) }; it != mapped_states.end())
+            additional_cont_.emplace_back((*it).second);
+        else
+            additional_cont_.emplace_back(start_node_);
+
+        remove_dead_and_unreachable_states();
+    }
 
     /* constructor */
 
