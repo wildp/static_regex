@@ -120,7 +120,7 @@ namespace rx {
 
 `mode::standard` is the default implementation for `static_regex`.
 It uses a deterministic finite automaton to match patterns in linear time.
-When performing a search, it attempts to match the pattern beginning at each character in the input.
+When performing a search, it attempts to match the pattern beginning at each character in the input, leading to a quadratic worst case complexity.
 
 `mode::fast` uses the same implementation as `mode::standard` but instead performs searches in linear time using a single deterministic finite automaton.
 This mode is known to increase compile times (in some cases to an unacceptable duration), but depending on the pattern can result in performance improvements.
@@ -401,8 +401,7 @@ namespace rx {
     requires std::ranges::view<V>
   class regex_match_view<V, static_regex<Pattern, Mode>>
     : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>> {
-    template<bool> struct iterator;
-    template<bool> struct sentinel;
+    struct iterator;
 
   public:
     regex_match_view() requires std::default_initializable<V> = default;
@@ -411,11 +410,13 @@ namespace rx {
 
     constexpr V base() const& requires std::copy_constructible<V>;
     constexpr V base() &&;
-    constexpr iterator<false> begin();
-    constexpr iterator<true> begin() const requires std::ranges::bidirectional_range<const V>;
-    constexpr sentinel<false> end();
-    constexpr sentinel<true> end() const requires std::ranges::bidirectional_range<const V>;
+    constexpr iterator begin();
+    constexpr std::default_sentinel end();
   };
+
+  template<typename R, string_literal Pattern, mode Mode>
+  regex_match_view(R&&, static_regex<Pattern, Mode>)
+    -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>>;
 
   namespace views {
     inline constexpr /* range-adaptor */ regex_match;
@@ -423,9 +424,8 @@ namespace rx {
 } // namespace rx
 ```
 
-`iterator` meets the syntactic requirements for `std::input_iterator` and *Cpp17InputIterator*, but not the complexity requirements.
-This is because matching is performed lazily: the first match is found at construction and subsequent matches are found whenever the iterator is incremented.
-Since positions of matches are not cached, these operations do not take place in constant time (amortized).
+`regex_match_view` is always an input range.
+Its range value is an instantiation of `static_regex_match_result`.
 
 
 ## Class template `rx::submatches_view`
@@ -438,47 +438,36 @@ namespace rx {
     requires std::ranges::view<V>
   class submatches_view {};
 
-  /* compile time index support */
   template<std::ranges::input_range V, int... Submatches>
     requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
-  class submatches_view<V, Submatches...> : std::ranges::view_interface<submatches_view<V, Submatches...>> {
-    template<bool> struct iterator;
-    template<bool> struct sentinel;
+  class submatches_view<V, Submatches...>
+    : std::ranges::view_interface<submatches_view<V, Submatches...>> {
+    struct iterator;
 
   public:
     submatches_view() requires std::default_initializable<V> = default;
 
-    constexpr explicit submatches_view(V base, std::integer_sequence<int, Submatches...> submatches);
-
-    constexpr V base() const& requires std::copy_constructible<V>;
-    constexpr V base() &&;
-    constexpr iterator<false> begin();
-    constexpr iterator<true> begin() const requires std::ranges::bidirectional_range<const V>;
-    constexpr sentinel<false> end();
-    constexpr sentinel<true> end() const requires std::ranges::bidirectional_range<const V>;
-  };
-
-  /* run time index support */
-  template<std::ranges::input_range V>
-    requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
-  class submatches_view<V> : std::ranges::view_interface<submatches_view<V>> {
-    template<bool> struct iterator;
-    template<bool> struct sentinel {};
-
-  public:
-    submatches_view() requires std::default_initializable<V> = default;
+    constexpr explicit submatches_view(V base, std::integer_sequence<int, Submatches...>)
+      requires (sizeof...(Submatches) > 0);
 
     template<std::ranges::input_range R>
       requires std::same_as<std::ranges::range_value_t<R>, int>
-    constexpr explicit submatches_view(V base, R&& submatches);
+    constexpr explicit submatches_view(V base, R&& submatches)
+      requires (sizeof...(Submatches) == 0);
 
     constexpr V base() const& requires std::copy_constructible<V>;
     constexpr V base() &&;
-    constexpr iterator<false> begin();
-    constexpr iterator<true> begin() const requires std::ranges::bidirectional_range<const V>;
-    constexpr sentinel<false> end()
-    constexpr sentinel<true> end() const requires std::ranges::bidirectional_range<const V>;
-  };
+    constexpr iterator begin();
+    constexpr std::default_sentinel_t end();
+  }
+
+  template<typename R, int... Submatches>
+  submatches_view(R&&, std::integer_sequence<int, Submatches...>)
+    -> submatches_view<std::views::all_t<R>, Submatches...>;
+
+  template<typename R, typename Submatches>
+  submatches_view(R&&, Submatches&&)
+    -> submatches_view<std::views::all_t<R>>;
 
   namespace views {
     inline constexpr /* range-adaptor */ submatches;
@@ -492,6 +481,9 @@ The index of `-1` denotes the substring that is not matched by the regex pattern
 
 Where a `submatches_view` contains the submatch index of `-1`, the iterator becomes a suffix iterator just before comparing equal to the sentinel.
 If dereferenced, the suffix iterator returns a submatch object for the substring between the end of the last match and the end of the input.
+
+`submatches_view` is always an input range.
+It should be noted that `submatches_view::iterator` is a proxy iterator.
 
 
 ## Algorithm function object `rx::regex_replace`

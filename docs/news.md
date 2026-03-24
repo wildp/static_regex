@@ -1,5 +1,10 @@
 # News
 
+### Version 0.1.2
+
+Fixed the implementation of `regex_match_view` so that patterns which sometimes match an empty substring (e.g. `"()|abc"`) produce the correct sequence of matches.
+Additionally, `regex_match_view` and `submatches_view` no longer have stashing iterators: `regex_match_view` now stores the corresponding `static_regex_match_result` in the view object, and `submatches_view::iterator` is now a proxy iterator.
+
 ### Version 0.1.1
 
 Added `regex_replace`.
