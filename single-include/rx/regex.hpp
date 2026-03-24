@@ -2735,7 +2735,7 @@ namespace rx::detail
         using underlying_type = std::conditional_t<IsNarrow, bitcharset<char_type>, charset<char_type>>;
 
         constexpr explicit char_class_impl(named_character_class ncc, bool negate = false) noexcept :
-            negated_{ negate }, orig_negated_{ negate } { insert(ncc); }
+            negated_{ negate }, orig_negated_{ negate } { insert(ncc); normalise(); }
 
         constexpr explicit char_class_impl(bool negate = false) noexcept :
             negated_{ negate }, orig_negated_{ negate } {}
