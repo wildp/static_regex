@@ -65,6 +65,21 @@ namespace
         return submatch_count<Pattern>(std::ranges::subrange(input, rx::detail::cstr_sentinel), vec);
     }
 
+    template<rx::string_literal Pattern, std::ranges::bidirectional_range T>
+    constexpr int split_count(T input)
+    {
+        int count{ 0 };
+        for (const auto& _ : input | rx::views::regex_split(rx::static_regex<Pattern>{}))
+            ++count;
+        return count;
+    }
+
+    template<rx::string_literal Pattern, typename CharT>
+    constexpr int split_count(const CharT* input)
+    {
+        return split_count<Pattern>(std::ranges::subrange(input, rx::detail::cstr_sentinel));
+    }
+
     template<std::size_t I, std::ranges::bidirectional_range R>
     constexpr bool test(R&& r)
     {
@@ -104,6 +119,25 @@ static_assert(std::ranges::input_range<range_category_test_3>);
 static_assert(std::ranges::input_range<range_category_test_4>);
 static_assert(std::ranges::input_range<range_category_test_5>);
 static_assert(std::ranges::input_range<range_category_test_6>);
+
+using range_category_test_7 = decltype(std::declval<std::string>() | rx::views::regex_split(" "_rx));
+using range_category_test_8 = decltype(std::ranges::subrange(std::declval<const char*>(), rx::detail::cstr_sentinel) | rx::views::regex_split(" "_rx));
+using range_category_test_9 = decltype(std::declval<std::list<char>>() | rx::views::regex_split(" "_rx));
+using range_category_test_7_inner = std::ranges::range_value_t<range_category_test_7>;
+using range_category_test_8_inner = std::ranges::range_value_t<range_category_test_8>;
+using range_category_test_9_inner = std::ranges::range_value_t<range_category_test_9>;
+static_assert(std::ranges::forward_range<range_category_test_7>);
+static_assert(std::ranges::common_range<range_category_test_7>);
+static_assert(std::ranges::contiguous_range<range_category_test_7_inner>);
+static_assert(std::ranges::common_range<range_category_test_7_inner>);
+static_assert(std::ranges::forward_range<range_category_test_8>);
+static_assert(not std::ranges::common_range<range_category_test_8>);;
+static_assert(std::ranges::contiguous_range<range_category_test_8_inner>);
+static_assert(std::ranges::common_range<range_category_test_8_inner>);;
+static_assert(std::ranges::forward_range<range_category_test_9>);
+static_assert(std::ranges::common_range<range_category_test_9>);
+static_assert(std::ranges::bidirectional_range<range_category_test_9_inner>);
+static_assert(std::ranges::common_range<range_category_test_9_inner>);
 
 /* static_regex_match_result iterator type tests */ // TODO: fix transform view iterators
 static_assert(test<1>("Hello"));
@@ -162,3 +196,16 @@ static_assert(submatch_count<"a">("abd", { -1, -1 }) == 3);
 static_assert(submatch_count<"a(b)|(c)d">("abcd", { 0, 1, 2 }) == 6);
 static_assert(submatch_count<"b(c)|(e)f">("abcdefg", { -1, 0, 1, 2 }) == 9);
 
+/* split result count tests */
+static_assert(split_count<" ">("hello world") == 2);
+static_assert(split_count<" ">(" hello world ") == 4);
+static_assert(split_count<"\\W">("hello, world") == 3);
+static_assert(split_count<"\\W+">("hello, world") == 2);
+static_assert(split_count<"">("hello world") == 11);
+static_assert(split_count<"">(" hello world ") == 13);
+static_assert(split_count<" ">("hello world"sv) == 2);
+static_assert(split_count<" ">(" hello world "sv) == 4);
+static_assert(split_count<"\\W">("hello, world"sv) == 3);
+static_assert(split_count<"\\W+">("hello, world"sv) == 2);
+static_assert(split_count<"">("hello world"sv) == 11);
+static_assert(split_count<"">(" hello world "sv) == 13);

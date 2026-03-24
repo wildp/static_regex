@@ -13249,6 +13249,236 @@ namespace rx
     template<typename R, typename Submatches>
     submatches_view(R&&, Submatches&&) -> submatches_view<std::views::all_t<R>>;
 
+    template<std::ranges::bidirectional_range V, typename Regex>
+    requires std::ranges::view<V>
+    class regex_split_view
+    {
+        static_assert("regex_split_view: invalid regex");
+    };
+
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+    requires std::ranges::view<V>
+    class regex_split_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_split_view<V, static_regex<Pattern, Mode>>>
+    {
+        class iterator;
+        class sentinel;
+
+    public:
+        regex_split_view() requires std::default_initializable<V> = default;
+        constexpr explicit regex_split_view(V base, static_regex<Pattern, Mode> /* regex */) : base_{ std::move(base) } {}
+
+        [[nodiscard]] V base() const& requires std::copy_constructible<V> { return base_; }
+        [[nodiscard]] V base() && requires std::copy_constructible<V> { return std::move(base_); }
+
+        [[nodiscard]] constexpr iterator begin()
+        {
+            if (not cache_engaged_)
+            {
+                const auto beg{ std::ranges::begin(base_) };
+                const auto end{ std::ranges::end(base_) };
+                auto result{ matcher_(beg, end, detail::match_non_empty) };
+
+                if (result.has_value())
+                {
+                    if constexpr (result_type::has_continue)
+                        cached_begin_continue_at_ = result.continue_at_;
+                    auto [mfirst, mlast]{ force_get<0>(result) };
+                    cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
+                }
+                else
+                {
+                    if constexpr (std::ranges::common_range<V>)
+                    {
+                        cached_begin_next_ = { end, end };
+                    }
+                    else
+                    {
+                        const auto it{ std::ranges::next(beg, end) };
+                        cached_begin_next_ = { it, it };
+                    }
+                }
+
+                cache_engaged_ = true;
+            }
+
+            if constexpr (result_type::has_continue)
+                return iterator{ *this, std::ranges::begin(base_), cached_begin_next_, cached_begin_continue_at_ };
+            else
+                return iterator{ *this, std::ranges::begin(base_), cached_begin_next_ };
+        }
+
+        [[nodiscard]] constexpr sentinel end()
+        {
+            return sentinel{ std::ranges::end(base_) };
+        }
+
+        [[nodiscard]] constexpr iterator end()
+        requires std::ranges::common_range<V>
+        {
+            return iterator{ *this, std::ranges::end(base_), {} };
+        }
+
+        /* workaround to avoid implementing non-propagating-cache<T> */
+        constexpr regex_split_view(const regex_split_view& other) : base_{ other.base_ } {}
+        constexpr regex_split_view(regex_split_view&& other) noexcept : base_{ std::move(other).base_ } {}
+        constexpr regex_split_view& operator=(const regex_split_view& other) { base_ = other; }
+        constexpr regex_split_view& operator=(regex_split_view&& other) noexcept { base_ = std::move(other).base_; cache_engaged_ = false; }
+        constexpr ~regex_split_view() = default;
+
+    private:
+        using matcher_type   = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+        using result_type    = matcher_type::template result<std::ranges::iterator_t<V>>;
+        using next_type      = std::ranges::subrange<std::ranges::iterator_t<V>>;
+        using continue_type  = detail::tdfa::continue_at_t;
+        using maybe_continue = detail::maybe_type_t<result_type::has_continue, continue_type>;
+
+        V base_{};
+        [[no_unique_address]] matcher_type matcher_;
+        next_type cached_begin_next_;
+        [[no_unique_address]] maybe_continue cached_begin_continue_at_{ 0 };
+        bool cache_engaged_{ false };
+    };
+
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+    requires std::ranges::view<V>
+    class regex_split_view<V, static_regex<Pattern, Mode>>::iterator
+    {
+    public:
+        using iterator_concept  = std::forward_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = std::ranges::subrange<std::ranges::iterator_t<V>>;
+        using difference_type   = std::ranges::range_difference_t<V>;
+
+        iterator() requires std::default_initializable<std::ranges::iterator_t<V>> = default;
+
+        explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
+            : current_{ std::move(current) }, parent_{ std::addressof(parent) }, next_{ std::move(next) } {}
+
+        explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
+        requires result_type::has_continue
+            : current_{ std::move(current) }, parent_{ std::addressof(parent) }, next_{ std::move(next) }, continue_at_{ cont } {}
+
+        constexpr std::ranges::iterator_t<V>& base() const
+        {
+            return current_;
+        }
+
+        constexpr value_type operator*() const
+        {
+            return { current_, next_.begin() };
+        }
+
+        constexpr iterator& operator++()
+        {
+            current_ = next_.begin();
+
+            if (const auto end{ std::ranges::end(parent_->base_) }; current_ != end)
+            {
+                current_ = next_.end();
+
+                if (current_ == end)
+                {
+                    trailing_empty_ = true;
+                    next_ = { current_, current_ };
+                }
+                else
+                {
+                    const auto result = [&]() {
+                        if constexpr (not matcher_type::never_empty)
+                        {
+                            if (next_.begin() == next_.end())
+                            {
+                                if constexpr (Mode == mode::naive)
+                                    return parent_->matcher_(std::ranges::begin(parent_->base_), end, current_, detail::match_non_empty);
+                                else if constexpr (result_type::has_continue)
+                                    return parent_->matcher_(current_, end, continue_at_, detail::match_non_empty);
+                                else
+                                    return parent_->matcher_(current_, end, detail::match_non_empty);
+                            }
+                        }
+
+                        if constexpr (Mode == mode::naive)
+                            return parent_->matcher_(std::ranges::begin(parent_->base_), end, current_);
+                        else if constexpr (result_type::has_continue)
+                            return parent_->matcher_(current_, end, continue_at_);
+                        else
+                            return parent_->matcher_(current_, end);
+                    }();
+
+                    if (result.has_value())
+                    {
+                        if constexpr (result_type::has_continue)
+                            continue_at_ = result.continue_at_;
+                        auto [mfirst, mlast]{ force_get<0>(result) };
+                        next_ = { std::move(mfirst), std::move(mlast) };
+                    }
+                    else
+                    {
+                        if constexpr (std::ranges::common_range<V>)
+                        {
+                            next_ = { end, end };
+                        }
+                        else
+                        {
+                            const auto it{ std::ranges::next(current_, end) };
+                            next_ = { it, it };
+                        }
+                    }
+                }
+            }
+            else
+            {
+                trailing_empty_ = false;
+            }
+
+            return *this;
+        }
+
+        constexpr iterator operator++(int)
+        {
+            auto tmp{ *this };
+            ++*this;
+            return tmp;
+        }
+
+        friend constexpr bool operator==(const iterator& x, const iterator& y)
+        requires std::equality_comparable<std::ranges::iterator_t<V>>
+        {
+            return x.current_ == y.current_ and x.trailing_empty_ == y.trailing_empty_;
+        }
+
+        friend class sentinel;
+
+    private:
+        std::ranges::iterator_t<V> current_{};
+        regex_split_view* parent_{ nullptr };
+        next_type next_{};
+        [[no_unique_address]] maybe_continue continue_at_{ 0 };
+        bool trailing_empty_{ false };
+    };
+
+    template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+    requires std::ranges::view<V>
+    class regex_split_view<V, static_regex<Pattern, Mode>>::sentinel
+    {
+    public:
+        sentinel() = default;
+
+        constexpr explicit sentinel(std::ranges::sentinel_t<V> end)
+            : end_{ end } {}
+
+        friend constexpr bool operator==(const iterator& x, const sentinel& y)
+        {
+            return x.current_ == y.end_ and not x.trailing_empty_;
+        }
+
+    private:
+        [[no_unique_address]] std::ranges::sentinel_t<V> end_{};
+    };
+
+    template<typename R, string_literal Pattern, mode Mode>
+    regex_split_view(R&&, static_regex<Pattern, Mode>) -> regex_split_view<std::views::all_t<R>, static_regex<Pattern, Mode>>;
+
     namespace views
     {
         namespace detail
@@ -13263,6 +13493,12 @@ namespace rx
             concept can_submatches_view = requires
             {
                 submatches_view(std::declval<Range>(), std::declval<T>());
+            };
+
+            template<typename Range, typename T>
+            concept can_regex_split_view = requires
+            {
+                regex_split_view(std::declval<Range>(), std::declval<T>());
             };
 
             template<typename Regex>
@@ -13349,10 +13585,39 @@ namespace rx
                     return static_submatches_adaptor_closure<Submatches...>();
                 }
             };
+
+            template<typename Regex>
+            struct static_regex_split_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_split_adaptor_closure<Regex>>
+            {
+                template<std::ranges::viewable_range Range>
+                requires detail::can_regex_split_view<Range, Regex>
+                [[nodiscard]] constexpr auto operator()(Range&& r) const
+                {
+                    return regex_split_view(std::forward<Range>(r), Regex{});
+                }
+            };
+
+            struct regex_split_adaptor
+            {
+                template<std::ranges::viewable_range Range, typename Regex>
+                requires detail::can_regex_split_view<Range, Regex>
+                [[nodiscard]] constexpr auto operator()(Range&& r, Regex&& x) const
+                {
+                    return regex_split_view(std::forward<Range>(r), std::forward<Regex>(x));
+                }
+
+                template<typename Regex>
+                requires rx::detail::static_regex_like<Regex>
+                [[nodiscard]] consteval auto operator()(Regex /* x */) const
+                {
+                    return static_regex_split_adaptor_closure<Regex>();
+                }
+            };
         }
 
         inline constexpr detail::regex_match_adaptor regex_match;
         inline constexpr detail::submatches_adaptor submatches;
+        inline constexpr detail::regex_split_adaptor regex_split;
 
         template<int... Submatches> requires (sizeof...(Submatches) > 0)
         inline constexpr detail::static_submatches_adaptor_closure<Submatches...> static_submatches;
