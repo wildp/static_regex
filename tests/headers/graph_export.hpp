@@ -34,15 +34,15 @@ namespace rx::testing
         static constexpr std::size_t max_count{ 0b1uz << (sizeof(char_type) * byte_bits) };
 
         const bool is_negated{ cs.count() > max_count / 2 };
-        const auto negated_cs{ ~cs };
+        const auto negated_cs = ~cs;
 
-        const auto intervals{ ((is_negated) ? negated_cs : cs).get_intervals() };
+        const auto intervals = ((is_negated) ? negated_cs : cs).get_intervals();
 
         if (is_negated and intervals.empty())
             return ".";
 
         if (not is_negated and intervals.size() == 1)
-            if (const auto& [lower, upper]{ intervals.back() }; lower == upper)
+            if (const auto& [lower, upper] = intervals.back(); lower == upper)
                 if (('0' <= lower and lower <= '9') or ('A' <= lower and lower <= 'Z') or ('a' <= lower and lower <= 'z'))
                     return std::string{ lower };
 
@@ -88,7 +88,7 @@ namespace rx::testing
         std::println(target);
 
         std::deque<std::size_t> to_visit{ ast.root_idx() };
-        const auto& ci{ ast.get_capture_info() };
+        const auto& ci = ast.get_capture_info();
         std::vector<std::pair<std::size_t, std::size_t>> edges;
 
         while (not to_visit.empty())
@@ -121,7 +121,7 @@ namespace rx::testing
                     return "|";
                 },
                 [&](const ast_t::tag& tag) -> std::string {
-                    const auto [is_lhs, is_rhs]{ ci.capture_side(tag.number) };
+                    const auto [is_lhs, is_rhs] = ci.capture_side(tag.number);
                     if (is_lhs) return "(";
                     if (is_rhs) return ")";
                     return "()";
@@ -189,7 +189,7 @@ namespace rx::testing
 
         for (tnfa::state_t q{ 0 }, q_end{ nfa.node_count() }; q < q_end; ++q)
         {
-            const auto& node{ nfa.get_node(q) };
+            const auto& node = nfa.get_node(q);
 
             if (node.in_tr.empty() and node.out_tr.empty())
                 continue;
@@ -206,7 +206,7 @@ namespace rx::testing
 
         for (tnfa::tr_index i{ 0 }, i_end{ nfa.transition_count() }; i < i_end; ++i)
         {
-            const auto& tr{ nfa.get_tr(i) };
+            const auto& tr = nfa.get_tr(i);
 
             if (holds_alternative<std::monostate>(tr.type))
                 continue;
@@ -285,7 +285,7 @@ namespace rx::testing
             if (info.op_index != tdfa::no_transition_regops)
                 xlabel += std::format("/{}", info.op_index);
 
-            if (const auto it{ dfa.fallback_nodes().find(i) }; it != dfa.fallback_nodes().end())
+            if (const auto it = dfa.fallback_nodes().find(i); it != dfa.fallback_nodes().end())
             {
                 label += 'f';
                 if (it->second.op_index != tdfa::no_transition_regops)
@@ -299,7 +299,7 @@ namespace rx::testing
 
         for (std::size_t i{ 0 }, i_end{ dfa.node_count() }; i < i_end; ++i)
         {
-            const auto& node{ dfa.get_node(i) };
+            const auto& node = dfa.get_node(i);
 
             for (const auto& tr : node.tr)
             {
@@ -312,7 +312,7 @@ namespace rx::testing
 
             if (node.default_tr.has_value())
             {
-                if (const auto op_index{ node.default_tr->op_index }; op_index == detail::tdfa::default_transition_is_not_state)
+                if (const auto op_index = node.default_tr->op_index; op_index == detail::tdfa::default_transition_is_not_state)
                 {
                     std::println(target, "     q{} -> q{} [style=\"dotted\"];", i, node.default_tr->next);
                 }

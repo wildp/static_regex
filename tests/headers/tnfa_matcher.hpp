@@ -65,16 +65,14 @@ namespace rx::testing
         {
             new_closure.push_back(std::move(stack.back()));
             stack.pop_back();
-            const auto& [q, m]{ new_closure.back() };
+            const auto& [q, m] = new_closure.back();
 
             using epsilon_t = std::pair<state_t, epsilon_tr>;
-            std::vector et{
-                std::from_range,
-                this->get_node(q).out_tr
-                | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
-                | std::views::filter([](const auto& t) { return holds_alternative<epsilon_tr>(t.type); })
-                | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, get<epsilon_tr>(t.type) }; })
-            };
+            auto et = this->get_node(q).out_tr
+                      | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
+                      | std::views::filter([](const auto& t) { return holds_alternative<epsilon_tr>(t.type); })
+                      | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, get<epsilon_tr>(t.type) }; })
+                      | std::ranges::to<std::vector>();
 
             std::ranges::sort(et, std::ranges::greater{}, compose(&epsilon_tr::priority, &epsilon_t::second));
 
@@ -82,7 +80,7 @@ namespace rx::testing
             {
                 if (not std::ranges::contains(new_closure, next, &closure_entry::first))
                 {
-                    auto new_m{ m };
+                    auto new_m = m;
                     if (e.tag > 0)
                         new_m.at(e.tag - 1) = k;
                     else if (e.tag < 0)
@@ -114,7 +112,7 @@ namespace rx::testing
         {
             for (std::size_t i{ 0 }; i < this->get_node(q).out_tr.size(); ++i)
             {
-                const auto& tr{ this->get_tr(this->get_node(q).out_tr[i]) };
+                const auto& tr = this->get_tr(this->get_node(q).out_tr[i]);
 
                 if (const auto* const ptr{ get_if<normal_tr<CharT>>(&tr.type) }; ptr != nullptr)
                 {
@@ -150,7 +148,7 @@ namespace rx::testing
         }
 
         c = e_closure(std::move(c), input.size());
-        auto result{ std::ranges::find_if(c, [&](std::size_t arg) { return this->get_node(arg).is_final; }, &closure_entry::first) };
+        auto result = std::ranges::find_if(c, [&](std::size_t arg) { return this->get_node(arg).is_final; }, &closure_entry::first);
 
         if (result == c.end())
             return {};
@@ -167,7 +165,7 @@ namespace rx::testing
 
         std::vector<std::size_t> result;
         const capture_info& ci{ this->get_capture_info() };
-        const auto capture_count{ ci.capture_count() };
+        const auto capture_count = ci.capture_count();
 
         auto f = [&](const capture_info::tag_pair_t& p) -> bool {
             return not ((p.first.tag_number >= 0 and v.at(p.first.tag_number) == no_tag)
@@ -187,11 +185,10 @@ namespace rx::testing
 
         for (std::size_t i{ 0 }; i < capture_count; ++i)
         {
-            auto rng{
-                ci.lookup(i) | std::views::filter(f)
-                | std::views::transform(t)
-                | std::ranges::to<std::vector>()
-            };
+            auto rng = ci.lookup(i)
+                       | std::views::filter(f)
+                       | std::views::transform(t)
+                       | std::ranges::to<std::vector>();
 
             if (std::ranges::size(rng) == 0)
             {
@@ -199,7 +196,7 @@ namespace rx::testing
                 continue;
             }
 
-            auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<std::size_t, std::size_t>::first) };
+            auto max_elem = std::ranges::max_element(rng, std::ranges::less{}, &std::pair<std::size_t, std::size_t>::first);
 
             result.push_back(max_elem->first);
             result.push_back(max_elem->second);

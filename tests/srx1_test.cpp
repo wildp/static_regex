@@ -19,9 +19,9 @@ namespace
 
         for (std::size_t i{ init }, i_end{ mr.size() }; i < i_end; ++i)
         {
-            const auto submatch{ mr.at(i) };
-            auto lhs{ captures.at((i - init) * 2) };
-            auto rhs{ captures.at(((i - init) * 2) + 1) };
+            const auto submatch = mr.at(i);
+            auto lhs = captures.at((i - init) * 2);
+            auto rhs = captures.at(((i - init) * 2) + 1);
 
             if (lhs == no_tag and rhs == no_tag)
             {

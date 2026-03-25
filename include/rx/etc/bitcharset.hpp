@@ -31,7 +31,7 @@ namespace rx::detail
         static constexpr std::size_t total_size{ (0b1uz << (sizeof(CharT) * byte_bits)) };
         static constexpr std::size_t array_size{ total_size / integer_bits };
         static constexpr std::size_t min_offset{ (std::is_signed_v<CharT>) ? (array_size / 2) : 0z };
-        static constexpr auto offset_max{ static_cast<int>(integer_bits) };
+        static constexpr auto offset_max = static_cast<int>(integer_bits);
 
         static constexpr std::size_t acceptable_numbers_of_bits_in_a_byte{ 8 };
         static_assert(byte_bits == acceptable_numbers_of_bits_in_a_byte);
@@ -44,7 +44,7 @@ namespace rx::detail
         consteval bitcharset() noexcept = default;
 
         template<typename... Args>
-        requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
+            requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
         constexpr explicit bitcharset(Args... args)
         {
             template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
@@ -217,7 +217,7 @@ namespace rx::detail
                     tmp >>= zeros;
 
                     const int ones{ std::countr_one(tmp) }; /* note: ones >= 1 is always true */
-                    const auto prev_pos{ position };
+                    const auto prev_pos = position;
 
                     position += ones;
                     offset += ones;
@@ -373,7 +373,7 @@ namespace rx::detail
             static constexpr int lowercase_end{ static_cast<int>(static_cast<std::make_unsigned_t<char_type>>('Z')) + 1 };
 
             /* ensure that A-Za-z lies in the same integer_t in bitcharset<char> */
-            static constexpr auto index{ uppercase_beg / integer_bits };
+            static constexpr auto index = uppercase_beg / integer_bits;
             static_assert(uppercase_beg / integer_bits == index);
             static_assert(uppercase_end / integer_bits == index);
             static_assert(lowercase_beg / integer_bits == index);
@@ -436,17 +436,17 @@ namespace rx::detail
         for (const bitcharset& val : input)
         {
             std::vector<bitcharset> next_gen;
-            const auto partition_size{ partitions.size() };
+            const auto partition_size = partitions.size();
             next_gen.reserve(partition_size * 2);
 
             for (std::size_t i{ 0 }; i < partition_size; ++i)
-                if (auto cs{ partitions[i] & val }; not cs.empty())
+                if (auto cs = partitions[i] & val; not cs.empty())
                     next_gen.emplace_back(cs);
 
-            const auto complement{ ~val };
+            const auto complement = ~val;
 
             for (std::size_t i{ 0 }; i + 1 < partition_size; ++i)
-                if (auto cs{ partitions[i] & complement }; not cs.empty())
+                if (auto cs = partitions[i] & complement; not cs.empty())
                     next_gen.emplace_back(cs);
 
             /* always insert intersection of all complements as last element */
@@ -482,11 +482,11 @@ namespace rx::detail
             std::vector<part_pair> next_gen;
             next_gen.reserve(partitions.size() * 2);
 
-            const auto complement{ ~val.get() };
+            const auto complement = ~val.get();
 
             for (const auto& [v, from] : partitions)
             {
-                if (auto cs{ v & complement }; not cs.empty())
+                if (auto cs = v & complement; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
                     next_gen.back().second.push_back(false);
@@ -495,7 +495,7 @@ namespace rx::detail
 
             for (const auto& [v, from] : partitions)
             {
-                if (auto cs{ v & val.get() }; not cs.empty())
+                if (auto cs = v & val.get(); not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
                     next_gen.back().second.push_back(true);
@@ -541,11 +541,11 @@ namespace rx::detail
             std::vector<part_pair> next_gen;
             next_gen.reserve(partitions.size() * 2);
 
-            const auto complement{ ~val.get() };
+            const auto complement = ~val.get();
 
             for (const auto& [v, from] : partitions)
             {
-                if (auto cs{ v & complement }; not cs.empty())
+                if (auto cs = v & complement; not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
                     next_gen.back().second.push_back(false);
@@ -554,7 +554,7 @@ namespace rx::detail
 
             for (const auto& [v, from] : partitions)
             {
-                if (auto cs{ v & val.get() }; not cs.empty())
+                if (auto cs = v & val.get(); not cs.empty())
                 {
                     next_gen.emplace_back(cs, from);
                     next_gen.back().second.push_back(true);

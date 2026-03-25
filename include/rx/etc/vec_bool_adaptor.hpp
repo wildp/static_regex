@@ -68,7 +68,7 @@ namespace rx::detail
 
         constexpr vec_bool_adaptor& operator&=(const vec_bool_adaptor& other)
         {
-            auto zv{ std::views::zip(data_, other.data_) };
+            auto zv = std::views::zip(data_, other.data_);
             for (auto [a, b] : zv)
                 a = (a and b);
             return *this;
@@ -76,7 +76,7 @@ namespace rx::detail
 
         constexpr vec_bool_adaptor& operator|=(const vec_bool_adaptor& other)
         {
-            auto zv{ std::views::zip(data_, other.data_) };
+            auto zv = std::views::zip(data_, other.data_);
             for (auto [a, b] : zv)
                 a = (a or b);
             return *this;
@@ -84,7 +84,7 @@ namespace rx::detail
 
         constexpr vec_bool_adaptor& operator^=(const vec_bool_adaptor& other)
         {
-            auto zv{ std::views::zip(data_, other.data_) };
+            auto zv = std::views::zip(data_, other.data_);
             for (auto [a, b] : zv)
                 a = (a != b);
             return *this;
@@ -92,7 +92,7 @@ namespace rx::detail
 
         constexpr vec_bool_adaptor& operator-=(const vec_bool_adaptor& other)
         {
-            auto zv{ std::views::zip(data_, other.data_) };
+            auto zv = std::views::zip(data_, other.data_);
             for (auto [a, b] : zv)
                 a = (a and not b);
             return *this;
@@ -109,7 +109,7 @@ namespace rx::detail
 
         [[nodiscard]] friend constexpr vec_bool_adaptor operator&(const vec_bool_adaptor& x, const vec_bool_adaptor& y)
         {
-            auto zv{ std::views::zip(x.data_, y.data_) };
+            auto zv = std::views::zip(x.data_, y.data_);
             vec_bool_adaptor result;
             result.data_.reserve(zv.size());
             for (auto [a, b] : zv)
@@ -119,7 +119,7 @@ namespace rx::detail
 
         [[nodiscard]] friend constexpr vec_bool_adaptor operator|(const vec_bool_adaptor& x, const vec_bool_adaptor& y)
         {
-            auto zv{ std::views::zip(x.data_, y.data_) };
+            auto zv = std::views::zip(x.data_, y.data_);
             vec_bool_adaptor result;
             result.data_.reserve(zv.size());
             for (auto [a, b] : zv)
@@ -129,7 +129,7 @@ namespace rx::detail
 
         [[nodiscard]] friend constexpr vec_bool_adaptor operator^(const vec_bool_adaptor& x, const vec_bool_adaptor& y)
         {
-            auto zv{ std::views::zip(x.data_, y.data_) };
+            auto zv = std::views::zip(x.data_, y.data_);
             vec_bool_adaptor result;
             result.data_.reserve(zv.size());
             for (auto [a, b] : zv)
@@ -139,7 +139,7 @@ namespace rx::detail
 
         [[nodiscard]] friend constexpr vec_bool_adaptor operator-(const vec_bool_adaptor& x, const vec_bool_adaptor& y)
         {
-            auto zv{ std::views::zip(x.data_, y.data_) };
+            auto zv = std::views::zip(x.data_, y.data_);
             vec_bool_adaptor result;
             result.data_.reserve(zv.size());
             for (auto [a, b] : zv)

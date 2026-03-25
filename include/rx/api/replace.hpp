@@ -62,7 +62,7 @@ namespace rx
                 if (not result_.has_value())
                     return *this;
 
-                const auto& [prev_start, current]{ force_get<0>(result_) };
+                const auto& [prev_start, current] = force_get<0>(result_);
 
                 if constexpr (not matcher_type::never_empty)
                 {
@@ -98,7 +98,7 @@ namespace rx
             }
 
             template<std::ranges::input_range W, int...>
-            requires std::ranges::view<W>
+                requires std::ranges::view<W>
             friend class submatches_view;
 
         private:
@@ -196,7 +196,7 @@ namespace rx
 
                 while (match_result.has_value())
                 {
-                    const auto& [mfirst, mlast]{ get<0>(match_result) };
+                    const auto& [mfirst, mlast] = get<0>(match_result);
 
                     subranges_.emplace_back(first, mfirst);
                     captures_.emplace_back(detail::parse_unsigned(std::ranges::next(mfirst), mlast));
@@ -295,7 +295,7 @@ namespace rx
         private:
             static consteval subrange_type make_subrange(const std::ranges::subrange<const char_type*>& s)
             {
-                const auto& [first, last]{ s };
+                const auto& [first, last] = s;
                 return { detail::non_owning_tag, first, last };
             }
 
@@ -340,7 +340,7 @@ namespace rx
 
                 for (; it != end; ++it)
                 {
-                    auto [mfirst, mlast]{ get<0>(*it) };
+                    auto [mfirst, mlast] = get<0>(*it);
 
                     result = std::ranges::copy(first, mfirst, result).out;
 
@@ -378,7 +378,7 @@ namespace rx
 
                 for(; it != end; ++it)
                 {
-                    auto [mfirst, mlast]{ get<0>(*it) };
+                    auto [mfirst, mlast] = get<0>(*it);
                     result = std::ranges::copy(first, mfirst, result).out;
 
                     // TODO: change to use constexpr structured binding when supported
@@ -399,7 +399,7 @@ namespace rx
         public:
             template<std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<std::iter_value_t<I>> O,
                      regex_like Regex, std::bidirectional_iterator F, std::sentinel_for<F> FmtS, std::same_as<std::iter_value_t<I>> CharT = Regex::char_type>
-            requires std::same_as<std::iter_value_t<F>, CharT>
+                requires std::same_as<std::iter_value_t<F>, CharT>
             static constexpr regex_replace_result<I, O>
             operator()(I first, S last, O result, Regex pattern, F fmt, FmtS fmt_last)
             {
@@ -408,7 +408,7 @@ namespace rx
 
             template<std::ranges::bidirectional_range R, std::output_iterator<std::ranges::range_value_t<R>> O,
                      regex_like Regex, std::ranges::bidirectional_range FmtR, std::same_as<std::ranges::range_value_t<R>> CharT = Regex::char_type>
-            requires std::same_as<std::ranges::range_value_t<FmtR>, CharT> and (not std::convertible_to<FmtR, std::basic_string_view<CharT>>)
+                requires std::same_as<std::ranges::range_value_t<FmtR>, CharT> and (not std::convertible_to<FmtR, std::basic_string_view<CharT>>)
             static constexpr regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>
             operator()(R&& r, O result, Regex pattern, FmtR&& fmt)
             {
@@ -451,7 +451,7 @@ namespace rx
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<std::iter_value_t<I>> O,
                      static_regex_like Regex, string_literal Fmt, std::same_as<std::iter_value_t<I>> CharT = Regex::char_type>
-            requires std::same_as<typename decltype(Fmt)::value_type, CharT>
+                requires std::same_as<typename decltype(Fmt)::value_type, CharT>
             static constexpr regex_replace_result<I, O>
             operator()(I first, S last, O result, Regex pattern, fmt_t<Fmt>)
             {
@@ -460,7 +460,7 @@ namespace rx
 
             template<std::ranges::bidirectional_range R, std::output_iterator<std::ranges::range_value_t<R>> O,
                      static_regex_like Regex, string_literal Fmt, std::same_as<std::ranges::range_value_t<R>> CharT = Regex::char_type>
-            requires std::same_as<typename decltype(Fmt)::value_type, CharT>
+                requires std::same_as<typename decltype(Fmt)::value_type, CharT>
             static constexpr regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>
             operator()(R&& r, O result, Regex pattern, fmt_t<Fmt>)
             {
@@ -468,7 +468,7 @@ namespace rx
             }
 
             template<typename CharT, typed_static_regex_like<CharT> Regex, string_literal Fmt>
-            requires std::same_as<typename decltype(Fmt)::value_type, CharT>
+                requires std::same_as<typename decltype(Fmt)::value_type, CharT>
             static constexpr std::basic_string<CharT>
             operator()(std::basic_string_view<CharT> sv, Regex pattern, fmt_t<Fmt>)
             {
@@ -478,7 +478,7 @@ namespace rx
             }
 
             template<typename CharT, typed_static_regex_like<CharT> Regex, string_literal Fmt>
-            requires std::same_as<typename decltype(Fmt)::value_type, CharT>
+                requires std::same_as<typename decltype(Fmt)::value_type, CharT>
             static constexpr std::basic_string<CharT>
             operator()(const CharT* cstr, Regex pattern, fmt_t<Fmt>)
             {

@@ -24,21 +24,21 @@ namespace
     template<rx::string_literal Pattern, rx::mode Mode>
     consteval bool lazy_test(rx::static_regex<Pattern, Mode> pattern, std::string_view fmt, std::string_view input, std::string_view result)
     {
-        std::string tmp{ std::from_range, input | rx::views::regex_match(pattern) | rx::views::replace(fmt) };
+        auto tmp = input | rx::views::regex_match(pattern) | rx::views::replace(fmt) | std::ranges::to<std::basic_string>();
         return tmp == result;
     }
 
     template<rx::string_literal Pattern, rx::mode Mode, rx::string_literal Fmt>
     consteval bool lazy_test(rx::static_regex<Pattern, Mode> pattern, rx::fmt_t<Fmt>, std::string_view input, std::string_view result)
     {
-        std::string tmp{ std::from_range, input | rx::views::regex_match(pattern) | rx::views::replace(rx::fmt<Fmt>) };
+        auto tmp = input | rx::views::regex_match(pattern) | rx::views::replace(rx::fmt<Fmt>) | std::ranges::to<std::basic_string>();
         return tmp == result;
     }
 
     template<rx::string_literal Pattern, rx::mode Mode>
     consteval bool lazy_test_cstr(rx::static_regex<Pattern, Mode> pattern, const char* fmt, std::string_view input, std::string_view result)
     {
-        std::string tmp{ std::from_range, input | rx::views::regex_match(pattern) | rx::views::replace(fmt) };
+        auto tmp = input | rx::views::regex_match(pattern) | rx::views::replace(fmt) | std::ranges::to<std::basic_string>();
         return tmp == result;
     }
 }

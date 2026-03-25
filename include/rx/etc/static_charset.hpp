@@ -39,7 +39,7 @@ namespace rx::detail
             : data_{ cs.data_ } {}
 
         template<typename... Args>
-        requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
+            requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
         constexpr explicit static_charset(Args... args)
         {
             charset_type tmp;
@@ -97,9 +97,9 @@ namespace rx::detail
 
             if (not data_.empty())
             {
-                if (const auto [beg, end]{ data_.front() }; beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                if (const auto [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
                     --score;
-                if (const auto [beg, end]{ data_.back() }; end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                if (const auto [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
                     --score;
             }
 
@@ -108,7 +108,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr bool contains(char_type c) const
         {
-            const auto it{ std::ranges::lower_bound(data_, c, {}, &char_interval::second) };
+            const auto it = std::ranges::lower_bound(data_, c, {}, &char_interval::second);
             if (it == data_.end())
                 return false;
             return c >= it->first;
@@ -124,7 +124,7 @@ namespace rx::detail
 
         constexpr explicit operator charset_type() const
         {
-            return charset_type{ typename charset_type::underlying_t{ std::from_range, data_ } };
+            return charset_type{ typename charset_type::underlying_t(std::from_range, data_) };
         }
 
         constexpr charset_type operator~()

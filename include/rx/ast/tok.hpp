@@ -89,7 +89,7 @@ namespace rx::detail
             constexpr explicit char_str(CharT c) : data{ c } {}
 
             template<std::input_iterator I, std::sentinel_for<I> S>
-            requires std::convertible_to<std::iter_value_t<I>, CharT>
+                requires std::convertible_to<std::iter_value_t<I>, CharT>
             constexpr explicit char_str(I first, S last) : data(first, last) {}
 
             constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
@@ -176,7 +176,7 @@ namespace rx::detail
         if (it_ == end_)
             return end_of_input{};
 
-        const auto current{ it_ };
+        const auto current = it_;
 
         switch (*it_++)
         {
@@ -197,7 +197,7 @@ namespace rx::detail
             if (it_ == end_)
                 throw pattern_error("Pattern cannot end with '\\'");
 
-            const auto escaped{ *it_++ };
+            const auto escaped = *it_++;
 
             switch (escaped)
             {
@@ -287,7 +287,7 @@ namespace rx::detail
         if (it_ == end_)
             throw pattern_error("EOF in escape sequence");
 
-        const auto lookahead{ *it_ };
+        const auto lookahead = *it_;
 
         if (lookahead == '{')
         {
@@ -301,7 +301,7 @@ namespace rx::detail
                 if (it_ == end_)
                     throw pattern_error("EOF in escape sequence");;
 
-                const auto c{ *it_ };
+                const auto c = *it_;
                 ++it_;
 
                 if (c == '}')
@@ -328,7 +328,7 @@ namespace rx::detail
                 if (it_ == end_)
                     throw pattern_error("EOF in escape sequence");
 
-                const auto c{ *it_ };
+                const auto c = *it_;
 
                 if ('0' <= c and c <= '9')
                     result = (result * hexadecimal_base) + (c - '0');
@@ -351,7 +351,7 @@ namespace rx::detail
                 if (it_ == end_)
                     break;
 
-                const auto c{ *it_ };
+                const auto c = *it_;
 
                 if ('0' <= c and c <= '9')
                     result = (result * hexadecimal_base) + (c - '0');
@@ -385,7 +385,7 @@ namespace rx::detail
             if (it_ == end_)
                 break;
 
-            const auto c{ *it_ };
+            const auto c = *it_;
 
             if ('0' <= c and c <= '7')
                 result = (result * octal_base) + (c - '0');
@@ -408,7 +408,7 @@ namespace rx::detail
         if (it_ == end_)
             throw pattern_error("EOF in escape sequence");
 
-        const auto lookahead{ *it_ };
+        const auto lookahead = *it_;
 
         if (lookahead != '{')
             throw pattern_error("Invalid escape sequence");
@@ -423,7 +423,7 @@ namespace rx::detail
             if (it_ == end_)
                 throw pattern_error("EOF in escape sequence");
 
-            const auto c{ *it_ };
+            const auto c = *it_;
             ++it_;
 
             if (c == '}')
@@ -455,7 +455,7 @@ namespace rx::detail
         if (it_ == end_)
             throw pattern_error("Incomplete escape sequence");
 
-        auto next{ *it_++ };
+        auto next = *it_++;
 
         if (next == '{')
         {
@@ -511,7 +511,7 @@ namespace rx::detail
             if (it_ == end_)
                 throw pattern_error("Repeater is incomplete");
 
-            auto c{ *it_++ };
+            auto c = *it_++;
 
             if ('0' <= c and c <= '9')
             {
@@ -543,7 +543,7 @@ namespace rx::detail
             if (it_ == end_)
                 throw pattern_error("Repeater is incomplete");
 
-            auto c{ *it_++ };
+            auto c = *it_++;
 
             if ('0' <= c and c <= '9')
             {
@@ -594,7 +594,7 @@ namespace rx::detail
             if (it_ == end_)
                 break;
 
-            const auto lookahead{ *it_ };
+            const auto lookahead = *it_;
 
             if (not ('0' <= lookahead and lookahead <= '7'))
                 break;
@@ -622,7 +622,7 @@ namespace rx::detail
             if (it_ == end_)
                 throw pattern_error("Reached end of input in literal text");
 
-            const auto cur{ *it_++ };
+            const auto cur = *it_++;
 
             if (not slash and cur == '\\')
                 slash = true;
@@ -661,7 +661,7 @@ namespace rx::detail
             if (it_ == end_)
                 throw pattern_error("EOF in character class");
 
-            const auto current{ it_ };
+            const auto current = it_;
 
             std::optional<std::pair<ncc, bool>> selected_cc;
             std::optional<underlying_char_t> nc;
@@ -687,7 +687,7 @@ namespace rx::detail
                 if (it_ == end_)
                     throw pattern_error("Pattern cannot end with '\\'");
 
-                const auto escaped{ *it_++ };
+                const auto escaped = *it_++;
 
                 switch (escaped)
                 {

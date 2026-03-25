@@ -96,13 +96,13 @@ namespace
 
     consteval bool test_interval_count(const char* arg)
     {
-        auto bs{ make_bs(arg) };
+        auto bs = make_bs(arg);
         return bs.interval_count() == bs.get_intervals().size();
     }
 
     consteval bool test_caseless(const char* arg, const char* result)
     {
-        auto bs{ make_bs(arg) };
+        auto bs = make_bs(arg);
         bs.make_ascii_case_insensitive();
         return (bs == make_bs(result));
     }
@@ -114,8 +114,8 @@ namespace
 
     consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
     {
-        const auto input{ make_bs_vec(arg) };
-        const std::vector refs{ std::from_range, input | std::views::transform([](const auto& b) { return std::cref(b); }) };
+        const auto input = make_bs_vec(arg);
+        const auto refs = input | std::views::transform([](const auto& b) { return std::cref(b); }) | std::ranges::to<std::vector>();
         return rx::detail::bitcharset<char>::partition(refs) == make_bs_vec(result);
     }
 }

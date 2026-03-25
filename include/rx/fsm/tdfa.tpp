@@ -97,9 +97,9 @@ namespace rx::detail::tdfa
     public:
         constexpr std::pair<reg_t&, bool> lookup(tag_t tag, const regop::op_t& op)
         {
-            auto it{ std::ranges::lower_bound(data_, tag, std::less{}, &entry::tag) };
+            auto it = std::ranges::lower_bound(data_, tag, std::less{}, &entry::tag);
 
-            for (const auto end{ data_.end() }; it != end and it->tag == tag; ++it)
+            for (const auto end = data_.end(); it != end and it->tag == tag; ++it)
                 if (it->op == op)
                     return { it->reg, true };
 
@@ -209,7 +209,7 @@ namespace rx::detail::tdfa
                 if (visited.at(next))
                     continue;
 
-                auto newer_tag_seq{ ce.new_tag_seq };
+                auto newer_tag_seq = ce.new_tag_seq;
                 if (e.tag != 0)
                     newer_tag_seq.push_back(e.tag);
                 stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
@@ -220,7 +220,7 @@ namespace rx::detail::tdfa
         {
             /* this version is needed for full matches, but below is needed for laziness in prefix matches */
             std::erase_if(new_closure, [this](const closure_entry& ce) -> bool {
-                const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
+                const auto& node = tnfa_ptr_->get_node(ce.tnfa_state);
                 if (node.is_final or node.is_fallback)
                     return false;
                 return normal_transitions_.at(ce.tnfa_state).empty();
@@ -232,7 +232,7 @@ namespace rx::detail::tdfa
             bool end_found{ false };
             std::erase_if(new_closure, [this, &end_found](const closure_entry& ce) -> bool {
                 if (end_found) return true;
-                const auto& node{ tnfa_ptr_->get_node(ce.tnfa_state) };
+                const auto& node = tnfa_ptr_->get_node(ce.tnfa_state);
                 if (node.is_fallback)
                 {
                     end_found = true;
@@ -252,7 +252,7 @@ namespace rx::detail::tdfa
         static constexpr std::size_t map_usage_threshold{ 128 };
         static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; // TODO: remove later
 
-        node_info current_info{ .config{ std::from_range, c | std::views::transform(closure_entry::next_config) } };
+        node_info current_info{ .config{ c | std::views::transform(closure_entry::next_config) | std::ranges::to<std::vector>() } };
         std::size_t new_state{ state_info_.size() };
 
         if (new_state < map_usage_threshold) [[likely]]
@@ -293,7 +293,7 @@ namespace rx::detail::tdfa
             /* check if state already exists */
             auto sh_zv = std::views::zip(state_hashes_keys_, state_hashes_values_);
             const std::size_t sh_key{ hash_state(current_info) };
-            const auto sh_eq_range{ std::ranges::equal_range(sh_zv, sh_key, {}, key_proj) };
+            const auto sh_eq_range = std::ranges::equal_range(sh_zv, sh_key, {}, key_proj);
 
             for (const auto& [_, state] : sh_eq_range)
                 if (current_info == state_info_.at(state))
@@ -302,7 +302,7 @@ namespace rx::detail::tdfa
             /* check if state can be mapped to an existing state */
             auto mc_zv = std::views::zip(mappable_candidate_keys_, mappable_candidate_values_);
             const std::size_t mc_key{ hash_mappability(current_info) };
-            const auto mc_eq_range{ std::ranges::equal_range(mc_zv, mc_key, {}, key_proj) };
+            const auto mc_eq_range = std::ranges::equal_range(mc_zv, mc_key, {}, key_proj);
 
             for (const auto& [_, mapped_state] : mc_eq_range)
                 if (mappable(current_info, mapped_state, o, result.register_count_))
@@ -312,11 +312,11 @@ namespace rx::detail::tdfa
             result.nodes_.emplace_back();
             state_info_.emplace_back(std::move(current_info));
 
-            const auto sh_offset{ std::ranges::distance(std::ranges::begin(sh_zv), std::ranges::end(sh_eq_range)) };
+            const auto sh_offset = std::ranges::distance(std::ranges::begin(sh_zv), std::ranges::end(sh_eq_range));
             state_hashes_keys_.emplace(state_hashes_keys_.cbegin() + sh_offset, sh_key);
             state_hashes_values_.emplace(state_hashes_values_.cbegin() + sh_offset, new_state);
 
-            const auto mc_offset{ std::ranges::distance(std::ranges::begin(mc_zv), std::ranges::end(mc_eq_range)) };
+            const auto mc_offset = std::ranges::distance(std::ranges::begin(mc_zv), std::ranges::end(mc_eq_range));
             mappable_candidate_keys_.emplace(mappable_candidate_keys_.cbegin() + mc_offset, mc_key);
             mappable_candidate_values_.emplace(mappable_candidate_values_.cbegin() + mc_offset, new_state);
         }
@@ -324,13 +324,13 @@ namespace rx::detail::tdfa
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
         const auto is_final = [this](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_final; };
-        const auto it{ std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state) };
+        const auto it = std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state);
         std::optional<continue_at_t> continue_at;
         if (it != current_cfg.end())
         {
-            auto final_ops{ final_regops(result.final_registers_, it->registers, it->tag_seq) };
-            const auto& node{ tnfa_ptr_->get_node(it->tnfa_state) };
-            const auto final_offset{ node.final_offset };
+            auto final_ops = final_regops(result.final_registers_, it->registers, it->tag_seq);
+            const auto& node = tnfa_ptr_->get_node(it->tnfa_state);
+            const auto final_offset = node.final_offset;
 
             if (node.continue_at < tnfa_ptr_->get_cont_info().size())
                 continue_at = node.continue_at;
@@ -351,7 +351,7 @@ namespace rx::detail::tdfa
         {
             /* set fallback state status for fallback_regops */
             const auto is_fallback = [&](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_fallback; };
-            const auto it2{ std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state) };
+            const auto it2 = std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state);
             if (it2 != current_cfg.end())
             {
                 state_info_.back().is_fallback = true;
@@ -386,17 +386,17 @@ namespace rx::detail::tdfa
         {
             for (tag_t t{ 1 }; std::cmp_less_equal(t, tag_count_); ++t)
             {
-                auto h{ history(ce.tag_seq, t) };
+                auto h = history(ce.tag_seq, t);
 
                 if (not h.empty())
                 {
                     regop::op_t op_rhs{ regop_rhs(h) };
 
-                    auto [value_ref, existing]{ map.lookup(t, op_rhs) };
+                    auto [value_ref, existing] = map.lookup(t, op_rhs);
 
                     if (not existing)
                     {
-                        auto i{ regcount++ };
+                        auto i = regcount++;
                         value_ref = i;
                         regops.emplace_back(i, op_rhs);
                     }
@@ -420,7 +420,7 @@ namespace rx::detail::tdfa
 
         for (tag_t t{ 1 }; std::cmp_less_equal(t, tag_count_); ++t)
         {
-            auto h{ history(tag_seq, t) };
+            auto h = history(tag_seq, t);
 
             if (not h.empty()) /* assign final registers */
                 regops.emplace_back(final_registers.at(t - 1), regop_rhs(h));
@@ -456,7 +456,7 @@ namespace rx::detail::tdfa
     template<typename CharT>
     constexpr bool factory<CharT>::mappable(const node_info& state, std::size_t mapped_state, regops_t& o, const reg_t regcount) const
     {
-        const auto& mapped_state_info{ state_info_.at(mapped_state) };
+        const auto& mapped_state_info = state_info_.at(mapped_state);
 
         /* different precedences also imply differing sets of states (for now at least);
          * we ensure tnfa states have the same tag sequences later                       */
@@ -483,8 +483,8 @@ namespace rx::detail::tdfa
                     const reg_t i{ ce1.registers.at(t - 1) };
                     const reg_t j{ ce2.registers.at(t - 1) };
 
-                    auto it{ map.lower_bound(i) };
-                    auto jt{ rmap.lower_bound(j) };
+                    auto it = map.lower_bound(i);
+                    auto jt = rmap.lower_bound(j);
 
                     const bool not_i_match{ it == map.end() or (*it).first != i };
                     const bool not_j_match{ jt == rmap.end() or (*jt).first != j };
@@ -507,12 +507,12 @@ namespace rx::detail::tdfa
 
         regops_t o_copy{ o };
 
-        for (auto it{ o_copy.begin() }; it != o_copy.end();)
+        for (auto it = o_copy.begin(); it != o_copy.end();)
         {
-            const auto i{ it->dst };
+            const auto i = it->dst;
 
-            const auto map_it{ map.find(i) };
-            const auto map_end{ map.end() };
+            const auto map_it = map.find(i);
+            const auto map_end = map.end();
 
             if (map_it == map_end)
             {
@@ -554,7 +554,7 @@ namespace rx::detail::tdfa
             if (not state_info_.at(state).is_fallback)
                 continue;
 
-            const auto& final_ops{ result.get_regops(fni.op_index) };
+            const auto& final_ops = result.get_regops(fni.op_index);
 
             /* determine clobbered registers */
 
@@ -568,7 +568,7 @@ namespace rx::detail::tdfa
 
             while (not stack.empty())
             {
-                auto& [s, i]{ stack.back() };
+                auto& [s, i] = stack.back();
 
                 if (result.final_nodes_.contains(s) or i >= result.nodes_.at(s).tr.size())
                 {
@@ -576,7 +576,7 @@ namespace rx::detail::tdfa
                 }
                 else
                 {
-                    const auto& tr{ result.nodes_.at(s).tr.at(i) };
+                    const auto& tr = result.nodes_.at(s).tr.at(i);
 
                     for (const auto& op : result.get_regops(tr.op_index))
                         clobbered.at(op.dst) = true;
@@ -592,8 +592,8 @@ namespace rx::detail::tdfa
 
             /* determine state to restart from in repeated searches */
 
-            auto continuation_index{ tdfa::no_continue };
-            if (auto it{ cont_info_.find(state) }; it != cont_info_.end())
+            auto continuation_index = tdfa::no_continue;
+            if (auto it = cont_info_.find(state); it != cont_info_.end())
                 continuation_index = it->second;
 
             /* insert fallback regops */
@@ -602,7 +602,7 @@ namespace rx::detail::tdfa
 
             for (const auto& f : final_ops)
             {
-                if (auto* cpy{ get_if<regop::copy>(&f.op) }; cpy != nullptr and clobbered.at(cpy->src))
+                if (auto* cpy = get_if<regop::copy>(&f.op); cpy != nullptr and clobbered.at(cpy->src))
                     backup_regops(result, state, f.dst, cpy->src);
                 else
                     o.emplace_back(f);
@@ -668,12 +668,12 @@ namespace rx::detail::tdfa
 
         for (std::size_t q{ 0 }; q < node_count; ++q)
         {
-            auto& current_etr{ epsilon_transitions_.at(q) };
-            auto& current_tr{ normal_transitions_.at(q) };
+            auto& current_etr = epsilon_transitions_.at(q);
+            auto& current_tr = normal_transitions_.at(q);
 
             for (const auto tr_idx : tnfa_ptr_->get_node(q).out_tr)
             {
-                const auto& tr{ tnfa_ptr_->get_tr(tr_idx) };
+                const auto& tr = tnfa_ptr_->get_tr(tr_idx);
 
                 if (const auto* const ptr{ get_if<tnfa::normal_tr<char_type>>(&tr.type) }; ptr != nullptr)
                 {
@@ -713,9 +713,9 @@ namespace rx::detail::tdfa
                 result.continue_nodes_.emplace_back(make_initial_state(result, cont.value));
         }
 
-        if (const auto& ac{ tnfa_ptr_->get_additional_cont() }; not ac.empty())
+        if (const auto& ac = tnfa_ptr_->get_additional_cont(); not ac.empty())
         {
-            const auto& ci{ tnfa_ptr_->get_cont_info() };
+            const auto& ci = tnfa_ptr_->get_cont_info();
 
             for (std::size_t i{ 0 }, i_max{ ci.size() }; i < i_max; ++i)
             {
@@ -725,7 +725,7 @@ namespace rx::detail::tdfa
                     result.additional_continue_nodes_.emplace_back(make_initial_state(result, ac.at(i)));
             }
 
-            if (const auto acb{ ac.back() }; acb == tnfa_ptr_->start_node())
+            if (const auto acb = ac.back(); acb == tnfa_ptr_->start_node())
                 result.additional_continue_nodes_.emplace_back(initial);
             else
                 result.additional_continue_nodes_.emplace_back(make_initial_state(result, ac.back()));
@@ -738,8 +738,8 @@ namespace rx::detail::tdfa
             for (auto& [cs, cfg] : multistep(state))
             {
                 cfg = e_closure(std::move(cfg));
-                auto o{ transition_regops(cfg, result.register_count_, map) };
-                const auto s{ add_state(result, cfg, o) };
+                auto o = transition_regops(cfg, result.register_count_, map);
+                const auto s = add_state(result, cfg, o);
 
                 /* Add transition to tdfa */
                 if (o.empty())

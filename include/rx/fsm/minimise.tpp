@@ -62,10 +62,10 @@ namespace rx::detail::tdfa
             key_type key{ fni, std::nullopt };
 
             /* assume fallback states are a subset of final states */
-            if (const auto it{ dfa.fallback_nodes_.find(state) }; it != dfa.fallback_nodes_.end())
+            if (const auto it = dfa.fallback_nodes_.find(state); it != dfa.fallback_nodes_.end())
                 key.second = it->second;
 
-            auto [it, _]{ final_node_map.try_emplace(std::move(key), bitset_size, false) };
+            auto [it, _] = final_node_map.try_emplace(std::move(key), bitset_size, false);
             it->second[state] = true;
         }
 
@@ -105,7 +105,7 @@ namespace rx::detail::tdfa
                     if (transitions_to[tr.next])
                         symbol_pairs_map[tr.op_index].emplace_back(std::cref(tr.cs), i);
 
-            for (auto smit{ symbol_pairs_map.begin() }, end{ symbol_pairs_map.end() }; smit != end; ++smit)
+            for (auto smit = symbol_pairs_map.begin(), end{ symbol_pairs_map.end() }; smit != end; ++smit)
             {
                 for (const auto& states : charset_t<CharT>::partition_contents(smit->second))
                 {
@@ -119,8 +119,8 @@ namespace rx::detail::tdfa
                         bitset_t intersection{ partitions[p] & transitions_from };
                         bitset_t rel_complement{ partitions[p] - transitions_from };
 
-                        const auto i_count{ intersection.count() };
-                        const auto c_count{ rel_complement.count() };
+                        const auto i_count = intersection.count();
+                        const auto c_count = rel_complement.count();
 
                         using gt = std::ranges::greater;
 
@@ -128,29 +128,29 @@ namespace rx::detail::tdfa
                         {
                             if (std::ranges::contains(work, partitions[p]))
                             {
-                                if (const auto it{ std::ranges::lower_bound(work, intersection, gt{}) }; it == work.end() or *it != intersection)
+                                if (const auto it = std::ranges::lower_bound(work, intersection, gt{}); it == work.end() or *it != intersection)
                                     work.emplace(it, intersection);
 
-                                if (const auto it{ std::ranges::lower_bound(work, rel_complement, gt{}) }; it == work.end() or *it != rel_complement)
+                                if (const auto it = std::ranges::lower_bound(work, rel_complement, gt{}); it == work.end() or *it != rel_complement)
                                     work.emplace(it, rel_complement);
                             }
                             else if (i_count <= c_count)
                             {
-                                if (const auto it{ std::ranges::lower_bound(work, intersection, gt{}) }; it == work.end() or *it != intersection)
+                                if (const auto it = std::ranges::lower_bound(work, intersection, gt{}); it == work.end() or *it != intersection)
                                     work.emplace(it, intersection);
                             }
                             else
                             {
-                                if (const auto it{ std::ranges::lower_bound(work, rel_complement, gt{}) }; it == work.end() or *it != rel_complement)
+                                if (const auto it = std::ranges::lower_bound(work, rel_complement, gt{}); it == work.end() or *it != rel_complement)
                                     work.emplace(it, rel_complement);
                             }
 
                             partitions.erase(partitions.begin() + static_cast<std::ptrdiff_t>(p));
 
-                            if (const auto it{ std::ranges::lower_bound(partitions, intersection, gt{}) }; it == partitions.end() or *it != intersection)
+                            if (const auto it = std::ranges::lower_bound(partitions, intersection, gt{}); it == partitions.end() or *it != intersection)
                                 partitions.emplace(it, std::move(intersection));
 
-                            if (const auto it{ std::ranges::lower_bound(partitions, rel_complement, gt{}) }; it == partitions.end() or *it != rel_complement)
+                            if (const auto it = std::ranges::lower_bound(partitions, rel_complement, gt{}); it == partitions.end() or *it != rel_complement)
                                 partitions.emplace(it, std::move(rel_complement));
                         }
                     }
@@ -177,7 +177,7 @@ namespace rx::detail::tdfa
 
         for (std::size_t i{ 0 }, i_end{ partitions.size() }; i < i_end; ++i)
         {
-            const auto& part{ partitions[i] };
+            const auto& part = partitions[i];
             for (std::size_t j{ 0 }, j_end{ part.size() }; j < j_end; ++j)
                 if (part[j])
                     state_remap[j] = i;
@@ -203,10 +203,10 @@ namespace rx::detail::tdfa
                 for (auto& tr : new_nodes[remapped_state].tr)
                     tr.next = state_remap.at(tr.next);
 
-                if (const auto it{ dfa.final_nodes_.find(i) }; it != dfa.final_nodes_.end())
+                if (const auto it = dfa.final_nodes_.find(i); it != dfa.final_nodes_.end())
                     new_final_nodes.try_emplace(remapped_state, it->second);
 
-                if (const auto it{ dfa.fallback_nodes_.find(i) }; it != dfa.fallback_nodes_.end())
+                if (const auto it = dfa.fallback_nodes_.find(i); it != dfa.fallback_nodes_.end())
                     new_fallback_nodes.try_emplace(remapped_state, it->second);
             }
         }
@@ -252,7 +252,7 @@ namespace rx::detail
 
         for (std::size_t i{ 0 }, i_end{ regops_.size() }; i < i_end; ++i)
         {
-            auto [it, inserted]{ regop_map.try_emplace(regops_[i], new_regops.size()) };
+            auto [it, inserted] = regop_map.try_emplace(regops_[i], new_regops.size());
 
             if (inserted)
                 new_regops.emplace_back(regops_[i]);
@@ -266,10 +266,10 @@ namespace rx::detail
             for (auto& tr : node.tr)
                 tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : tdfa::no_transition_regops;
 
-        for (auto it{ final_nodes_.begin() }, last{ final_nodes_.end() }; it != last; ++it)
+        for (auto it = final_nodes_.begin(), last{ final_nodes_.end() }; it != last; ++it)
             it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
 
-        for (auto it{ fallback_nodes_.begin() }, last{ fallback_nodes_.end() }; it != last; ++it)
+        for (auto it = fallback_nodes_.begin(), last{ fallback_nodes_.end() }; it != last; ++it)
             it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
 
         regops_ = std::move(new_regops);
@@ -299,14 +299,15 @@ namespace rx::detail
             if (node.tr.empty())
                 continue;
 
-            const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
+            const auto sizes = node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) | std::ranges::to<std::vector>();
             const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
 
-            std::vector scored_pairs{
-                std::from_range, // TODO: switch to using views::enumerate when supported by clang
-                std::views::zip(std::views::iota(0uz), node.tr | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
-                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
-            };
+            // TODO: switch to using views::enumerate when supported by clang
+            auto scored_pairs = std::views::zip(std::views::iota(0uz),
+                                                node.tr
+                                                | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
+                                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
+                                | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
             scored_pairs.emplace_back(largest_index, 0 /* unimportant */);
@@ -317,7 +318,7 @@ namespace rx::detail
 
             for (const auto& [i, _] : scored_pairs)
             {
-                auto& tr{ node.tr.at(i) };
+                auto& tr = node.tr.at(i);
                 dont_cares.emplace_back(acc);
                 acc |= tr.cs;
                 new_tr.emplace_back(std::move(tr));
@@ -325,12 +326,16 @@ namespace rx::detail
 
             if (acc.full())
             {
-                const auto& largest{ new_tr.back() };
+                const auto& largest = new_tr.back();
                 node.default_tr = { .next = largest.next, .op_index = largest.op_index };
                 new_tr.pop_back();
             }
 
             /* fill gaps where possible */
+
+            // TODO: improve optimisations to be bit-aware
+            // e.g. [A-Zc-z] with don't cares of [ab] should become [A-Za-z],
+            //      which can be optimised to perform half the number of comparions
 
             for (const auto& [tr_ref, dont_cares] : std::views::zip(std::ranges::ref_view(new_tr), dont_cares))
             {
@@ -366,10 +371,10 @@ namespace rx::detail
             if (node.tr.empty())
                 continue;
 
-            const std::vector sizes{ std::from_range, node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) };
-            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
+            const auto sizes = node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) | std::ranges::to<std::vector>();
+            const auto largest_index = static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin());
 
-            auto& largest{ node.tr[largest_index] };
+            auto& largest = node.tr[largest_index];
             tdfa::charset_t<char_type> largest_cs{ largest.cs };
             std::vector<tr_type> new_tr;
 
@@ -396,8 +401,14 @@ namespace rx::detail
     {
         using node_type = tdfa::node<char_type>;
 
-        std::vector keys{ std::from_range, nodes_ | std::views::transform([](const node_type& n) { return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr); }) };
-        std::vector values{ std::from_range, std::views::iota(0uz, nodes_.size()) };
+        auto keys = nodes_
+                    | std::views::transform([](const node_type& n) {
+                        return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr);
+                    })
+                    | std::ranges::to<std::vector>();
+
+        auto values = std::views::iota(0uz, nodes_.size())
+                    | std::ranges::to<std::vector>();
 
         // TODO: switch to using std::flat_multimap instead when constexpr is supported
         //       (but an unordered flat set would be much better)
@@ -410,29 +421,29 @@ namespace rx::detail
 
         for (std::size_t current_index{ 0 }, node_count{ nodes_.size() }; current_index < node_count; ++current_index)
         {
-            const auto& current{ nodes_[current_index] };
+            const auto& current = nodes_[current_index];
 
-            const auto beg{ current.tr.begin() };
-            const auto end{ current.tr.end() };
+            const auto beg = current.tr.begin();
+            const auto end = current.tr.end();
 
             bool inserted{ false };
 
-            const auto zv{ std::views::zip(keys, values) }; // TODO: remove
+            const auto zv = std::views::zip(keys, values); // TODO: remove
 
-            for (auto it{ beg }; it != end; ++it)
+            for (auto it = beg; it != end; ++it)
             {
                 const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
 
-                // for (auto [fst, snd]{ map.equal_range(keys) }; fst != snd; ++fst)
-                for (auto [fst, snd]{ std::ranges::equal_range(zv, hash, {}, key_proj) }; fst != snd; ++fst)  // TODO: remove
+                // for (auto [fst, snd] = map.equal_range(keys); fst != snd; ++fst)
+                for (auto [fst, snd] = std::ranges::equal_range(zv, hash, {}, key_proj); fst != snd; ++fst)  // TODO: remove
                 {
-                    auto [_, index]{ *fst };
+                    auto [_, index] = *fst;
 
                     if (index == current_index)
                         break; /* prevent replacement with self */
 
 
-                    if (const auto& other{ nodes_.at(index) };
+                    if (const auto& other = nodes_.at(index);
                         not (std::ranges::equal(it, end, other.tr.begin(), other.tr.end())
                         and current.default_tr == other.default_tr))
                     {

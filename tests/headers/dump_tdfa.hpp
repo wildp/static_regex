@@ -14,15 +14,15 @@
 namespace rx::testing
 {
     template<typename T, typename CharT>
-    requires requires (T t) { std::println(t); }
+        requires requires (T t) { std::println(t); }
     void dump_tdfa(T target, const detail::tagged_dfa<CharT>& dfa)
     {
         using namespace detail::tdfa;
 
         auto print_regop = [](T target, const regop& op, std::string_view indent = "") {
-            if (auto* set{ get_if<regop::set>(&op.op) }; set != nullptr)
+            if (auto* set = get_if<regop::set>(&op.op); set != nullptr)
                 std::println(target, "{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
-            else if (auto* copy{ get_if<regop::copy>(&op.op) }; copy != nullptr)
+            else if (auto* copy = get_if<regop::copy>(&op.op); copy != nullptr)
                 std::println(target, "{}r{} <- r{}", indent, op.dst, copy->src);
             else
                 std::unreachable();
@@ -50,7 +50,7 @@ namespace rx::testing
 
             if (dfa.final_nodes().contains(i))
             {
-                const auto& fni{ dfa.final_nodes().at(i) };
+                const auto& fni = dfa.final_nodes().at(i);
 
                 std::print(target, "\t'' -> ACCEPT:");
                 if (fni.final_offset != 0)
@@ -65,8 +65,8 @@ namespace rx::testing
 
             if (dfa.fallback_nodes().contains(i))
             {
-                const auto& fni{ dfa.final_nodes().at(i) };
-                const auto& fbni{ dfa.fallback_nodes().at(i) };
+                const auto& fni = dfa.final_nodes().at(i);
+                const auto& fbni = dfa.fallback_nodes().at(i);
 
                 std::print(target, "\tFALLBACK -> ACCEPT:");
                 if (fni.final_offset != 0)

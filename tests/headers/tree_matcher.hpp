@@ -29,11 +29,11 @@ namespace rx::testing
         using tag_result = std::vector<std::size_t>;
 
         template<std::random_access_iterator I>
-        requires std::convertible_to<std::iter_value_t<I>, CharT>
+            requires std::convertible_to<std::iter_value_t<I>, CharT>
         [[nodiscard]] constexpr std::optional<tag_result> match(I first, I last) const;
 
         template<std::ranges::random_access_range R>
-        requires std::convertible_to<std::ranges::range_value_t<R>, CharT>
+            requires std::convertible_to<std::ranges::range_value_t<R>, CharT>
         [[nodiscard]] constexpr std::optional<tag_result> match(R&& r) const
         {
             return match(std::ranges::begin(r), std::ranges::end(r));
@@ -104,18 +104,18 @@ namespace rx::testing
 
     template<typename CharT>
     template<std::random_access_iterator I>
-    requires std::convertible_to<std::iter_value_t<I>, CharT>
+        requires std::convertible_to<std::iter_value_t<I>, CharT>
     [[nodiscard]] constexpr auto tree_matcher<CharT>::match(const I first, const I last) const -> std::optional<tag_result>
     {
         using state_t = matcher_state<I>;
 
-        const auto& ci{ this->get_capture_info() };
+        const auto& ci = this->get_capture_info();
         const std::size_t capture_count{ ci.capture_count() };
 
         auto visitor = [&, this](this const auto& rec, state_t& s) -> bool {
             while (not s.cont.empty())
             {
-                const auto raw_data{ s.cont.back() };
+                const auto raw_data = s.cont.back();
                 s.cont.pop_back();
 
                 const std::size_t pos{ raw_data.pos() };
@@ -153,7 +153,7 @@ namespace rx::testing
                             }
                             else /* if (s.it != first and is_ascii_word_character(*std::ranges::prev(s.it))) */
                             {
-                                  if (s.it == last or not is_ascii_word_character(*s.it))
+                                if (s.it == last or not is_ascii_word_character(*s.it))
                                     return rc::match_continue;
                             }
                             break;
@@ -223,19 +223,17 @@ namespace rx::testing
                             };
                         };
 
-                        const auto [beg, end]{ ci.lookup(bref.number) };
+                        const auto [beg, end] = ci.lookup(bref.number);
 
-                        auto rng{
-                            std::ranges::subrange(beg, end) | std::views::filter(f)
-                            | std::views::transform(t)
-                            | std::ranges::to<std::vector>()
-                        };
-
+                        auto rng = std::ranges::subrange(beg, end)
+                                   | std::views::filter(f)
+                                   | std::views::transform(t)
+                                   | std::ranges::to<std::vector>();
 
                         if (std::ranges::size(rng) == 0)
                             return rc::match_failure; /* capture doesn't exist */
 
-                        auto [bit, blast]{ std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first) };
+                        auto [bit, blast] = std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first);
 
                         for (; bit != blast; ++s.it, ++bit)
                             if (s.it == last or *s.it != *bit)
@@ -253,7 +251,7 @@ namespace rx::testing
                             return rc::match_continue;
                         }
 
-                        const auto rep_count{ raw_data.reps() };
+                        const auto rep_count = raw_data.reps();
 
                         if (std::cmp_less(rep_count, rep.min))
                         {
@@ -367,7 +365,7 @@ namespace rx::testing
         };
 
         state_t s(first, this->tag_count(), this->root_idx());
-        auto rv{ visitor(s) };
+        auto rv = visitor(s);
 
         if (not rv)
             return {};
@@ -394,13 +392,11 @@ namespace rx::testing
 
         for (std::size_t i{ 0 }; i < capture_count; ++i)
         {
-            const auto [beg, end]{ ci.lookup(i) };
+            const auto [beg, end] = ci.lookup(i);
 
-            auto rng{
-                std::ranges::subrange(beg, end) | std::views::filter(f)
-                | std::views::transform(t)
-                | std::ranges::to<std::vector>()
-            };
+            auto rng = std::ranges::subrange(beg, end) | std::views::filter(f)
+                       | std::views::transform(t)
+                       | std::ranges::to<std::vector>();
 
             if (std::ranges::size(rng) == 0)
             {
@@ -408,8 +404,8 @@ namespace rx::testing
                 continue;
             }
 
-            auto max_elem{ std::ranges::max_element(rng, std::ranges::less{}, &std::pair<I, I>::first) };
-            auto [bit, blast]{ *max_elem };
+            auto max_elem = std::ranges::max_element(rng, std::ranges::less{}, &std::pair<I, I>::first);
+            auto [bit, blast] = *max_elem;
 
             res.push_back(std::ranges::distance(first, bit));
             res.push_back(std::ranges::distance(first, blast));

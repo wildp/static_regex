@@ -35,8 +35,8 @@ namespace rx::detail
 
         while (not stack.empty())
         {
-            auto& [idx, pos]{ stack.back() };
-            const auto& entry{ expressions_.at(idx) };
+            auto& [idx, pos] = stack.back();
+            const auto& entry = expressions_.at(idx);
 
             switch (entry.index())
             {
@@ -63,11 +63,11 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ get<concat>(entry) };
+                const auto& cat = get<concat>(entry);
 
                 if (pos == cat.idxs.size())
                 {
-                    auto tmp{ cat.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); }) };
+                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); });
                     never_possible.at(idx) = std::ranges::contains(tmp, true);
                     stack.pop_back();
                 }
@@ -81,11 +81,11 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ get<alt>(entry) };
+                const auto& atl = get<alt>(entry);
 
                 if (pos == atl.idxs.size())
                 {
-                    auto tmp{ atl.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); }) };
+                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); });
                     never_possible.at(idx) = (not std::ranges::empty(tmp) and std::ranges::all_of(tmp, std::identity{}));
                     stack.pop_back();
                 }
@@ -99,7 +99,7 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ get<repeat>(entry) };
+                const auto& rep = get<repeat>(entry);
 
                 if (pos == 1)
                 {
@@ -137,8 +137,8 @@ namespace rx::detail
 
         while (not stack.empty())
         {
-            auto& [idx, pos]{ stack.back() };
-            const auto& entry{ expressions_.at(idx) };
+            auto& [idx, pos] = stack.back();
+            const auto& entry = expressions_.at(idx);
 
             switch (entry.index())
             {
@@ -151,7 +151,7 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ get<concat>(entry) };
+                const auto& cat = get<concat>(entry);
 
                 if (cat.idxs.empty())
                 {
@@ -159,13 +159,13 @@ namespace rx::detail
                 }
                 else if (pos == cat.idxs.size())
                 {
-                    auto& vec{ tag_vec.at(idx) };
+                    auto& vec = tag_vec.at(idx);
 
                     for (const std::size_t i : cat.idxs)
                         std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
 
                     std::ranges::sort(vec);
-                    auto [_, last]{ std::ranges::unique(vec) };
+                    auto [_, last] = std::ranges::unique(vec);
                     vec.erase(last, vec.end());
 
                     stack.pop_back();
@@ -180,17 +180,17 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ get<alt>(entry) };
+                const auto& atl = get<alt>(entry);
 
                 if (pos == atl.idxs.size())
                 {
-                    auto& vec{ tag_vec.at(idx) };
+                    auto& vec = tag_vec.at(idx);
 
                     for (const std::size_t i : atl.idxs)
                         std::ranges::copy(tag_vec.at(i), std::back_inserter(vec));
 
                     std::ranges::sort(vec);
-                    auto [_, last]{ std::ranges::unique(vec) };
+                    auto [_, last] = std::ranges::unique(vec);
                     vec.erase(last, vec.end());
 
                     stack.pop_back();
@@ -205,11 +205,11 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ get<repeat>(entry) };
+                const auto& rep = get<repeat>(entry);
 
                 if (pos == 1)
                 {
-                    auto& vec{ tag_vec.at(idx) };
+                    auto& vec = tag_vec.at(idx);
                     std::ranges::copy(tag_vec.at(rep.idx), std::back_inserter(vec));
 
                     stack.pop_back();
@@ -224,9 +224,9 @@ namespace rx::detail
 
             case ast_index<tag>:
             {
-                const auto& tag_entry{ get<tag>(entry) };
+                const auto& tag_entry = get<tag>(entry);
 
-                auto& vec{ tag_vec.at(idx) };
+                auto& vec = tag_vec.at(idx);
                 vec.emplace_back(tag_entry.number);
                 stack.pop_back();
                 break;
@@ -254,8 +254,8 @@ namespace rx::detail
 
         while (not stack.empty())
         {
-            auto& [idx, pos]{ stack.back() };
-            const auto& entry{ expressions_.at(idx) };
+            auto& [idx, pos] = stack.back();
+            const auto& entry = expressions_.at(idx);
 
             switch (entry.index())
             {
@@ -281,14 +281,13 @@ namespace rx::detail
 
             case ast_index<concat>:
             {
-                const auto& cat{ get<concat>(entry) };
+                const auto& cat = get<concat>(entry);
 
                 if (pos == cat.idxs.size())
                 {
-                    auto tmp{
-                        cat.idxs | std::views::transform([&](std::size_t i) { return const_len.at(i); })
-                        | std::ranges::to<std::vector>()
-                    };
+                    auto tmp = cat.idxs
+                               | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                               | std::ranges::to<std::vector>();
 
                     if (std::ranges::all_of(tmp, [](const opt_t& o) { return o.has_value(); }))
                         const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o) { return *o; }),
@@ -306,16 +305,15 @@ namespace rx::detail
 
             case ast_index<alt>:
             {
-                const auto& atl{ get<alt>(entry) };
+                const auto& atl = get<alt>(entry);
 
                 if (pos == atl.idxs.size())
                 {
-                    auto tmp{
-                        atl.idxs | std::views::transform([&](std::size_t i) { return const_len.at(i); })
-                        | std::ranges::to<std::vector>()
-                    };
+                    auto tmp = atl.idxs
+                               | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                               | std::ranges::to<std::vector>();
 
-                    auto first{ *std::ranges::begin(tmp) };
+                    auto first = *std::ranges::begin(tmp);
 
                     if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o) { return o == first; }))
                         const_len.at(idx) = first;
@@ -332,7 +330,7 @@ namespace rx::detail
 
             case ast_index<repeat>:
             {
-                const auto& rep{ get<repeat>(entry) };
+                const auto& rep = get<repeat>(entry);
 
                 if (pos == 1)
                 {
@@ -360,7 +358,7 @@ namespace rx::detail
     template<typename CharT>
     constexpr void expr_tree<CharT>::optimise_tags()
     {
-        const auto const_len{ make_const_len_vec() };
+        const auto const_len = make_const_len_vec();
 
         std::flat_map<tag_number_t, capture_info::pair_entry> tag_remap;
 
@@ -370,7 +368,7 @@ namespace rx::detail
                 continue;
 
             std::optional<capture_info::pair_entry> current;
-            auto& target{ get<concat>(expressions_.at(i)).idxs };
+            auto& target = get<concat>(expressions_.at(i)).idxs;
 
             if (i == root_idx())
                 current = { .tag_number = end_of_input_tag, .offset = 0 };
@@ -379,13 +377,13 @@ namespace rx::detail
             {
                 const std::size_t idx{ target.at(j - 1) };
 
-                if (auto* tn{ get_if<tag>(&expressions_.at(idx)) }; tn != nullptr)
+                if (auto* tn = get_if<tag>(&expressions_.at(idx)); tn != nullptr)
                 {
                     if (current.has_value())
                     {
                         /* remap tag */
 
-                        auto [_, success]{ tag_remap.try_emplace(tn->number, *current) };
+                        auto [_, success] = tag_remap.try_emplace(tn->number, *current);
                         if (not success)
                             throw tree_error("Tag appears more than once in AST");
 
@@ -409,19 +407,19 @@ namespace rx::detail
 
         /* re-map start of input tag if possible */
 
-        if (const auto& opt{ const_len.at(root_idx_) }; opt.has_value())
+        if (const auto& opt = const_len.at(root_idx_); opt.has_value())
             tag_remap.try_emplace(start_of_input_tag, capture_info::pair_entry{ .tag_number = end_of_input_tag, .offset = -(static_cast<int>(*opt)) });
 
         /* re-number map and re-number tags in capture_info */
 
-        const auto remapper{ capture_info_.remap_tags(tag_remap) };
+        const auto remapper = capture_info_.remap_tags(tag_remap);
 
         /* re-number tags in ast */
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
-                if (auto it{ remapper.find(tn->number) }; it != remapper.end())
+            if (auto* tn = get_if<tag>(&expr); tn != nullptr)
+                if (auto it = remapper.find(tn->number); it != remapper.end())
                     tn->number = it->second;
         }
 
@@ -462,7 +460,7 @@ namespace rx::detail
         if (type& ast{ expressions_.at(root_idx_) }; holds_alternative<concat>(ast))
         {
             /* root idx is already concat, so we can avoid creating a new concat as root */
-            auto& target{ get<concat>(ast).idxs };
+            auto& target = get<concat>(ast).idxs;
             if (flags_.enable_start_tag)
                 target.insert(target.begin(), { repeater_idx, start_tag_idx });
             else
@@ -501,7 +499,7 @@ namespace rx::detail
                 {
                     std::size_t cat{ rep.idx };
 
-                    for (auto i{ rep.min + 1 }; i < rep.max; ++i)
+                    for (auto i = rep.min + 1; i < rep.max; ++i)
                     {
                         const std::size_t quest{ expressions_.size() };
                         expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
@@ -523,7 +521,7 @@ namespace rx::detail
                 std::size_t quest{ expressions_.size() };
                 expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, 1, rep.mode);
 
-                for (auto i{ rep.min + 1 }; i < rep.max; ++i)
+                for (auto i = rep.min + 1; i < rep.max; ++i)
                 {
                     const std::size_t cat{ expressions_.size() };
                     expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
@@ -562,9 +560,9 @@ namespace rx::detail
             if (rep.min != rep.max or not holds_alternative<char_str>(expressions_.at(rep.idx)))
                 continue;
 
-            auto& cs{ expressions_[i].template emplace<char_str>() };
+            auto& cs = expressions_[i].template emplace<char_str>();
 
-            const auto& old{ get<char_str>(expressions_[rep.idx]) };
+            const auto& old = get<char_str>(expressions_[rep.idx]);
             cs.data.reserve(rep.min * old.data.size());
             for (int j{ 0 }; j < rep.min; ++j)
                 cs.data += old.data;
@@ -574,12 +572,12 @@ namespace rx::detail
     template<typename CharT>
     constexpr auto expr_tree<CharT>::tag_to_register()
     {
-        const auto branch_remapper{ capture_info_.eliminate_branch_reset() };
+        const auto branch_remapper = capture_info_.eliminate_branch_reset();
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
-                if (auto it{ branch_remapper.find(tn->number) }; it != branch_remapper.end())
+            if (auto* tn = get_if<tag>(&expr); tn != nullptr)
+                if (auto it = branch_remapper.find(tn->number); it != branch_remapper.end())
                     tn->number = it->second;
         }
 
@@ -593,7 +591,7 @@ namespace rx::detail
         for (const auto tag : branch_remapper.values())
             ignore.at(tag) = true;
 
-        const auto const_len{ make_const_len_vec() };
+        const auto const_len = make_const_len_vec();
 
         std::flat_map<tag_number_t, capture_info::pair_entry> tag_remap;
 
@@ -603,7 +601,7 @@ namespace rx::detail
                 continue;
 
             std::optional<capture_info::pair_entry> current;
-            auto& target{ get<concat>(expressions_.at(i)).idxs };
+            auto& target = get<concat>(expressions_.at(i)).idxs;
 
             if (i == root_idx())
                 current = { .tag_number = end_of_input_tag, .offset = 0 };
@@ -612,13 +610,13 @@ namespace rx::detail
             {
                 const std::size_t idx{ target.at(j - 1) };
 
-                if (auto* tn{ get_if<tag>(&expressions_.at(idx)) }; tn != nullptr and not ignore.at(tn->number))
+                if (auto* tn = get_if<tag>(&expressions_.at(idx)); tn != nullptr and not ignore.at(tn->number))
                 {
                     if (current.has_value())
                     {
                         /* remap tag */
 
-                        auto [_, success]{ tag_remap.try_emplace(tn->number, *current) };
+                        auto [_, success] = tag_remap.try_emplace(tn->number, *current);
                         if (not success)
                             throw tree_error("Tag appears more than once in AST");
 
@@ -642,14 +640,14 @@ namespace rx::detail
 
         /* re-number map and re-number tags in capture_info */
 
-        const auto remapper{ capture_info_.remap_tags(tag_remap) };
+        const auto remapper = capture_info_.remap_tags(tag_remap);
 
         /* re-number tags in ast */
 
         for (auto& expr : expressions_)
         {
-            if (auto* tn{ get_if<tag>(&expr) }; tn != nullptr)
-                if (auto it{ remapper.find(tn->number) }; it != remapper.end())
+            if (auto* tn = get_if<tag>(&expr); tn != nullptr)
+                if (auto it = remapper.find(tn->number); it != remapper.end())
                     tn->number = it->second;
         }
 

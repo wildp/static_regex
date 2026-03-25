@@ -72,7 +72,7 @@ namespace rx::detail::parser
         template<in_variant<type> T, typename... Args>
         [[nodiscard]] constexpr std::size_t new_expression(Args... args)
         {
-            auto& exprs{ ref_.get().expressions_ };
+            auto& exprs = ref_.get().expressions_;
 
             if (overwritable_.empty())
             {
@@ -204,14 +204,14 @@ namespace rx::detail::parser
         ll1_stack<char_type> stack;
         semantic_stack<char_type> semstack;
 
-        auto token{ lex_.nexttok() };
+        auto token = lex_.nexttok();
 
         for (bool loop{ true }; loop;)
         {
             if (stack.empty())
                 throw pattern_error("Invalid pattern");
 
-            const auto top{ std::move(stack.root()) };
+            const auto top = std::move(stack.root());
             stack.pop();
 
             if (const auto* const term{ get_if<terminal>(&top) })
@@ -516,54 +516,54 @@ namespace rx::detail::parser
                 }
                 case sa::make_alt:
                 {
-                    const auto rhs_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto rhs_idx = get<std::size_t>(semstack.pop());
                     std::ignore = semstack.pop(); /* pop tok::vert */
-                    const auto lhs_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto lhs_idx = get<std::size_t>(semstack.pop());
                     semstack.push(sa_make_alt(lhs_idx, rhs_idx));
                     break;
                 }
                 case sa::make_concat:
                 {
-                    const auto rhs_idx{ get<std::size_t>(semstack.pop()) };
-                    const auto lhs_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto rhs_idx = get<std::size_t>(semstack.pop());
+                    const auto lhs_idx = get<std::size_t>(semstack.pop());
                     semstack.push(sa_make_concat(lhs_idx, rhs_idx));
                     break;
                 }
                 case sa::make_bref:
                 {
-                    const auto bref{ get<tok::backref>(get<terminal>(semstack.pop())) }; /* pop tok::backref */
+                    const auto bref = get<tok::backref>(get<terminal>(semstack.pop())); /* pop tok::backref */
                     semstack.push(sa_make_bref(bref));
                     break;
                 }
                 case sa::make_star:
                 {
-                    const auto mode{ get<repeater_mode>(semstack.pop()) };
+                    const auto mode = get<repeater_mode>(semstack.pop());
                     std::ignore = semstack.pop(); /* pop tok::star */
-                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto child_idx = get<std::size_t>(semstack.pop());
                     semstack.push(sa_make_star(child_idx, mode));
                     break;
                 }
                 case sa::make_plus:
                 {
-                    const auto mode{ get<repeater_mode>(semstack.pop()) };
+                    const auto mode = get<repeater_mode>(semstack.pop());
                     std::ignore = semstack.pop(); /* pop tok::plus */
-                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto child_idx = get<std::size_t>(semstack.pop());
                     semstack.push(sa_make_plus(child_idx, mode));
                     break;
                 }
                 case sa::make_quest:
                 {
-                    const auto mode{ get<repeater_mode>(semstack.pop()) };
+                    const auto mode = get<repeater_mode>(semstack.pop());
                     std::ignore = semstack.pop(); /* pop tok::quest */
-                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto child_idx = get<std::size_t>(semstack.pop());
                     semstack.push(sa_make_quest(child_idx, mode));
                     break;
                 }
                 case sa::make_repeat:
                 {
-                    const auto mode{ get<repeater_mode>(semstack.pop()) };
-                    const auto rep{ get<tok::repeat_n_m>(get<terminal>(semstack.pop())) };
-                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto mode = get<repeater_mode>(semstack.pop());
+                    const auto rep = get<tok::repeat_n_m>(get<terminal>(semstack.pop()));
+                    const auto child_idx = get<std::size_t>(semstack.pop());
                     semstack.push(sa_make_repeat(child_idx, rep, mode));
                     break;
                 }
@@ -592,7 +592,7 @@ namespace rx::detail::parser
                 case sa::cap_pop:
                 {
                     std::ignore = semstack.pop(); /* pop tok::rparen */
-                    const auto child_idx{ get<std::size_t>(semstack.pop()) };
+                    const auto child_idx = get<std::size_t>(semstack.pop());
                     std::ignore = semstack.pop(); /* pop tok::lparen */
                     semstack.push(sa_cap_pop(child_idx));
                     break;
@@ -689,14 +689,14 @@ namespace rx::detail::parser
         {
             static constexpr auto is_alphabetic = [](char_type c) -> bool { return ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z'); };
 
-            if (auto c{ lit.get_if_single() })
+            if (auto c = lit.get_if_single())
             {
                 /* single character (therefore easier to implement) */
 
                 if (is_alphabetic(*c))
                 {
-                    const auto new_idx{ new_expression<char_class>() };
-                    auto& target{ get<char_class>(get_expr(new_idx)).data };
+                    const auto new_idx = new_expression<char_class>();
+                    auto& target = get<char_class>(get_expr(new_idx)).data;
 
                     target.insert(*c);
                     target.make_caseless();
@@ -713,23 +713,23 @@ namespace rx::detail::parser
                     throw tree_error("Caseless flag on multibyte strings not implemented");
                 }
 
-                auto lit_it{ lit.data.begin() };
-                const auto lit_end{ lit.data.end() };
+                auto lit_it = lit.data.begin();
+                const auto lit_end = lit.data.end();
 
                 if (std::ranges::any_of(lit_it, lit_end, is_alphabetic))
                 {
                     /* create new concat to insert caseless string into */
-                    const auto cat_idx{ new_expression<concat>() };
+                    const auto cat_idx = new_expression<concat>();
 
                     while (lit_it != lit_end)
                     {
-                        const auto c{ *lit_it++ };
+                        const auto c = *lit_it++;
 
                         if (is_alphabetic(c))
                         {
                             /* insert character class of [cC] into cat */
-                            const auto new_idx{ new_expression<char_class>() };
-                            auto& target{ get<char_class>(get_expr(new_idx)).data };
+                            const auto new_idx = new_expression<char_class>();
+                            auto& target = get<char_class>(get_expr(new_idx)).data;
                             get<concat>(get_expr(cat_idx)).idxs.push_back(new_idx);
 
                             target.insert(c);
@@ -738,8 +738,8 @@ namespace rx::detail::parser
                         else
                         {
                             /* insert character string into cat */
-                            const auto new_idx{ new_expression<char_str>() };
-                            auto& target{ get<char_str>(get_expr(new_idx)).data };
+                            const auto new_idx = new_expression<char_str>();
+                            auto& target = get<char_str>(get_expr(new_idx)).data;
 
                             target.push_back(c);
 
@@ -772,7 +772,7 @@ namespace rx::detail::parser
     {
         if (type& ast{ get_expr(rhs_idx) }; holds_alternative<alt>(ast))
         {
-            auto& ast_alt{ get<alt>(ast) };
+            auto& ast_alt = get<alt>(ast);
 
             if (flags().enable_alttocc and not ast_alt.idxs.empty())
             {
@@ -782,19 +782,19 @@ namespace rx::detail::parser
 
                 if (holds_alternative<char_class>(rhs))
                 {
-                    auto& target{ get<char_class>(rhs).data };
+                    auto& target = get<char_class>(rhs).data;
 
                     if (holds_alternative<char_class>(lhs))
                     {
                         /* merge char classes */
-                        auto& other{ get<char_class>(lhs).data };
+                        auto& other = get<char_class>(lhs).data;
                         target.insert(other);
                         overwritable_.push_back(lhs_idx);
                         return rhs_idx;
                     }
                     else if (holds_alternative<char_str>(lhs))
                     {
-                        if (auto to_insert{ get<char_str>(lhs).get_if_single() })
+                        if (auto to_insert = get<char_str>(lhs).get_if_single())
                         {
                             /* insert char into char class */
                             target.insert(*to_insert);
@@ -805,14 +805,14 @@ namespace rx::detail::parser
                 }
                 else if (holds_alternative<char_str>(rhs))
                 {
-                    const auto saved_idx{ ast_alt.idxs.front() };
+                    const auto saved_idx = ast_alt.idxs.front();
 
-                    if (auto to_insert{ get<char_str>(rhs).get_if_single() })
+                    if (auto to_insert = get<char_str>(rhs).get_if_single())
                     {
                         if (holds_alternative<char_class>(lhs))
                         {
                             /* replace rhs with lhs in alt, and insert char into char class */
-                            auto& target{ get<char_class>(lhs).data };
+                            auto& target = get<char_class>(lhs).data;
                             ast_alt.idxs.front() = lhs_idx;
                             target.insert(*to_insert);
                             overwritable_.push_back(saved_idx);
@@ -820,14 +820,14 @@ namespace rx::detail::parser
                         }
                         else if (holds_alternative<char_str>(lhs))
                         {
-                            if (auto other_insert{ get<char_str>(lhs).get_if_single() })
+                            if (auto other_insert = get<char_str>(lhs).get_if_single())
                             {
                                 /* replace rhs with new char class in alt */
-                                const auto new_idx{ new_expression<char_class>() };
-                                auto& target{ get<char_class>(get_expr(new_idx)).data };
+                                const auto new_idx = new_expression<char_class>();
+                                auto& target = get<char_class>(get_expr(new_idx)).data;
 
                                 /* calling new_expression invalidates references, so we must re-get ast_alt */
-                                auto& ast_alt2{ get<alt>(get_expr(rhs_idx)) };
+                                auto& ast_alt2 = get<alt>(get_expr(rhs_idx));
                                 ast_alt2.idxs.front() = new_idx;
 
                                 target.insert(*to_insert);
@@ -855,19 +855,19 @@ namespace rx::detail::parser
 
                 if (holds_alternative<char_class>(rhs))
                 {
-                    auto& target{ get<char_class>(rhs).data };
+                    auto& target = get<char_class>(rhs).data;
 
                     if (holds_alternative<char_class>(lhs))
                     {
                         /* merge char classes */
-                        auto& other{ get<char_class>(lhs).data };
+                        auto& other = get<char_class>(lhs).data;
                         target.insert(other);
                         overwritable_.push_back(lhs_idx);
                         return rhs_idx;
                     }
                     else if (holds_alternative<char_str>(lhs))
                     {
-                        if (auto to_insert{ get<char_str>(lhs).get_if_single() })
+                        if (auto to_insert = get<char_str>(lhs).get_if_single())
                         {
                             /* insert char into char class */
                             target.insert(*to_insert);
@@ -878,23 +878,23 @@ namespace rx::detail::parser
                 }
                 else if (holds_alternative<char_str>(rhs))
                 {
-                    if (auto to_insert{ get<char_str>(rhs).get_if_single() })
+                    if (auto to_insert = get<char_str>(rhs).get_if_single())
                     {
                         if (holds_alternative<char_class>(lhs))
                         {
                             /* insert (rhs) char into (lhs) char class */
-                            auto& target{ get<char_class>(lhs).data };
+                            auto& target = get<char_class>(lhs).data;
                             target.insert(*to_insert);
                             overwritable_.push_back(rhs_idx);
                             return lhs_idx;
                         }
                         else if (holds_alternative<char_str>(lhs))
                         {
-                            if (auto other_insert{ get<char_str>(lhs).get_if_single() })
+                            if (auto other_insert = get<char_str>(lhs).get_if_single())
                             {
                                 /* create new char class */
-                                const auto new_idx{ new_expression<char_class>() };
-                                auto& target{ get<char_class>(get_expr(new_idx)).data };
+                                const auto new_idx = new_expression<char_class>();
+                                auto& target = get<char_class>(get_expr(new_idx)).data;
 
                                 target.insert(*to_insert);
                                 target.insert(*other_insert);
@@ -919,14 +919,14 @@ namespace rx::detail::parser
         {
             /* append rhs into existing concat */
             /* this case _should_ only arise from captures, so we can skip merging strings */
-            auto& target{ get<concat>(ast).idxs };
+            auto& target = get<concat>(ast).idxs;
 
             type& rhs{ get_expr(rhs_idx) };
 
             if (holds_alternative<concat>(rhs))
             {
                 /* append contents of rhs concat to lhs concat  */
-                auto& src{ get<concat>(rhs).idxs };
+                auto& src = get<concat>(rhs).idxs;
                 target.append_range(src);
                 src.clear();
                 overwritable_.push_back(rhs_idx);
@@ -942,7 +942,7 @@ namespace rx::detail::parser
         else if (type& ast{ get_expr(rhs_idx) }; holds_alternative<concat>(ast))
         {
             /* insert lhs into existing concat */
-            auto& ast_concat{ get<concat>(ast) };
+            auto& ast_concat = get<concat>(ast);
             bool merged{ false };
 
             if (not ast_concat.idxs.empty())
@@ -953,8 +953,8 @@ namespace rx::detail::parser
                 if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
                 {
                     /* merge lhs string with first entry of rhs (also a string) */
-                    auto& target{ get<char_str>(rhs).data };
-                    auto& lhs_str{ get<char_str>(lhs).data };
+                    auto& target = get<char_str>(rhs).data;
+                    auto& lhs_str = get<char_str>(lhs).data;
                     lhs_str.append(target);
                     std::ranges::swap(lhs_str, target);
                     overwritable_.push_back(lhs_idx);
@@ -978,8 +978,8 @@ namespace rx::detail::parser
             if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
             {
                 /* lhs and rhs are both strings: merge strings into one instead of creating concat  */
-                auto& target{ get<char_str>(rhs).data };
-                auto& lhs_str{ get<char_str>(lhs).data };
+                auto& target = get<char_str>(rhs).data;
+                auto& lhs_str = get<char_str>(lhs).data;
                 lhs_str.append(target);
                 std::ranges::swap(lhs_str, target);
                 overwritable_.push_back(lhs_idx);
@@ -1064,7 +1064,7 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx)
     {
-        const auto cap_number{ capstack_.pop() };
+        const auto cap_number = capstack_.pop();
 
         if (cap_number.has_value())
         {
@@ -1093,11 +1093,11 @@ namespace rx::detail::parser
                 if (lhs_tag < 0 or rhs_tag < 0)
                     throw tree_error("Capture limit exceed");
 
-                const auto lhs_tag_entry{ new_expression<tag>(lhs_tag) };
-                const auto rhs_tag_entry{ new_expression<tag>(rhs_tag) };
+                const auto lhs_tag_entry = new_expression<tag>(lhs_tag);
+                const auto rhs_tag_entry = new_expression<tag>(rhs_tag);
 
                 /* calling new_expression invalidates references, so we must re-get ast for target */
-                auto& target{ get<concat>(get_expr(child_idx)).idxs };
+                auto& target = get<concat>(get_expr(child_idx)).idxs;
                 target.insert(target.cbegin(), lhs_tag_entry);
                 target.insert(target.cend(), rhs_tag_entry);
                 return child_idx;
@@ -1112,8 +1112,8 @@ namespace rx::detail::parser
                 if (lhs_tag < 0 or rhs_tag < 0)
                     throw tree_error("Capture limit exceed");
 
-                const auto lhs_tag_entry{ new_expression<tag>(lhs_tag) };
-                const auto rhs_tag_entry{ new_expression<tag>(rhs_tag) };
+                const auto lhs_tag_entry = new_expression<tag>(lhs_tag);
+                const auto rhs_tag_entry = new_expression<tag>(rhs_tag);
                 return new_expression<concat>(std::vector{ lhs_tag_entry, child_idx, rhs_tag_entry });
             }
         }
@@ -1142,8 +1142,8 @@ namespace rx::detail::parser
     {
         /* manually parse flags */
 
-        auto& lit{ lex_.it_ };
-        const auto& lend{ lex_.end_ };
+        auto& lit = lex_.it_;
+        const auto& lend = lex_.end_;
 
         bool flag_value{ true };
 
@@ -1181,7 +1181,7 @@ namespace rx::detail::parser
                 if (lit == lend)
                     throw pattern_error("Invalid Pattern");
 
-                const auto lookahead{ *lit };
+                const auto lookahead = *lit;
                 bool increment{ true };
 
                 switch (lookahead)

@@ -26,7 +26,7 @@
 namespace rx
 {
     template<std::ranges::bidirectional_range V, typename Regex>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_match_view
     {
         static_assert("regex_match_view: invalid regex");
@@ -34,7 +34,7 @@ namespace rx
 
 
     template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>>
     {
         class iterator;
@@ -50,7 +50,7 @@ namespace rx
         {
             /* since regex_match_view is an input range, there
                is no need to cache future calls to begin() */
-            auto current{ std::ranges::begin(base_) };
+            auto current = std::ranges::begin(base_);
             find_first(current);
             return iterator{ *this, std::move(current) };
         }
@@ -103,7 +103,7 @@ namespace rx
     };
 
     template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_match_view<V, static_regex<Pattern, Mode>>::iterator
     {
     public:
@@ -132,7 +132,7 @@ namespace rx
             if (not parent_->cached_result_.has_value())
                 return *this;
 
-            const auto& [mfirst, mlast]{ force_get<0>(parent_->cached_result_) };
+            const auto& [mfirst, mlast] = force_get<0>(parent_->cached_result_);
             current_ = mlast;
 
             if constexpr (not matcher_type::never_empty)
@@ -169,11 +169,11 @@ namespace rx
         }
 
         template<std::ranges::input_range W, int...>
-        requires std::ranges::view<W>
+            requires std::ranges::view<W>
         friend class submatches_view;
 
         template<std::ranges::input_range W, typename>
-        requires std::ranges::view<W>
+            requires std::ranges::view<W>
         friend class replace_view;
 
     private:
@@ -196,7 +196,7 @@ namespace rx
 
 
     template<std::ranges::input_range V, int... Submatches>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class submatches_view
     {
         static_assert("submatches_view: invalid range");
@@ -204,7 +204,7 @@ namespace rx
 
 
     template<std::ranges::input_range V, int... Submatches>
-    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+        requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
     class submatches_view<V, Submatches...> : std::ranges::view_interface<submatches_view<V, Submatches...>>
     {
         using match_result_type = std::ranges::range_value_t<V>;
@@ -220,14 +220,14 @@ namespace rx
         submatches_view() requires std::default_initializable<V> = default;
 
         constexpr explicit submatches_view(V base, std::integer_sequence<int, Submatches...> /* submatches */)
-        requires (sizeof...(Submatches) > 0)
+            requires (sizeof...(Submatches) > 0)
             : base_{ std::move(base) } {}
 
         template<std::ranges::input_range R>
-        requires std::same_as<std::ranges::range_value_t<R>, int>
+            requires std::same_as<std::ranges::range_value_t<R>, int>
         constexpr explicit submatches_view(V base, R&& submatches)
-        requires (sizeof...(Submatches) == 0)
-            : base_{ std::move(base) }, dynamic_submatches_{ std::from_range, std::forward<R>(submatches) }
+            requires (sizeof...(Submatches) == 0)
+            : base_{ std::move(base) }, dynamic_submatches_(std::from_range, std::forward<R>(submatches))
         {
             if (dynamic_submatches_.empty())
                 throw std::invalid_argument("submatches_view::submatches_view: no submatches specified");
@@ -262,7 +262,7 @@ namespace rx
     };
 
     template<std::ranges::input_range V, int... Submatches>
-    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+        requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
     struct submatches_view<V, Submatches...>::iterator
     {
     public:
@@ -300,7 +300,7 @@ namespace rx
                 if (index_ == suffix_index)
                     return sf::make_submatch(current_.base(), current_.end());
 
-            const auto submatch_index{ get_submatch(index_) };
+            const auto submatch_index = get_submatch(index_);
 
             if constexpr (maybe_has_suffix_iterator)
                 if (submatch_index == -1)
@@ -358,26 +358,26 @@ namespace rx
         }
 
         [[nodiscard]] static consteval std::size_t submatch_count()
-        requires (sizeof...(Submatches) > 0)
+            requires (sizeof...(Submatches) > 0)
         {
             return sizeof...(Submatches);
         }
 
         [[nodiscard]] constexpr std::size_t submatch_count() const
-        requires (sizeof...(Submatches) == 0)
+            requires (sizeof...(Submatches) == 0)
         {
             return parent_->dynamic_submatches_.size();
         }
 
         [[nodiscard]] static constexpr int get_submatch(std::size_t i)
-        requires (sizeof...(Submatches) > 0)
+            requires (sizeof...(Submatches) > 0)
         {
             static constexpr std::array static_submatches{ Submatches... };
             return static_submatches[i];
         }
 
         [[nodiscard]] constexpr int get_submatch(std::size_t i) const
-        requires (sizeof...(Submatches) == 0)
+            requires (sizeof...(Submatches) == 0)
         {
             return parent_->dynamic_submatches_[i];
         }
@@ -396,7 +396,7 @@ namespace rx
 
 
     template<std::ranges::input_range V, typename Fmt>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class replace_view
     {
         static_assert("replace_view: invalid range");
@@ -404,7 +404,7 @@ namespace rx
 
 
     template<std::ranges::input_range V, string_literal Fmt>
-    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+        requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
     class replace_view<V, fmt_t<Fmt>> : std::ranges::view_interface<replace_view<V, fmt_t<Fmt>>>
     {
         using match_result_type = std::ranges::range_value_t<V>;
@@ -451,7 +451,7 @@ namespace rx
     };
 
     template<std::ranges::input_range V, string_literal Fmt>
-    requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
+        requires std::ranges::view<V> and detail::static_regex_match_view_like<V>
     struct replace_view<V, fmt_t<Fmt>>::iterator
     {
     public:
@@ -523,7 +523,7 @@ namespace rx
                         return;
                     }
 
-                    const auto& subrange_ref{ subrange_.template emplace<base_subrange_index>(current_.base(), get<0>(*current_).begin()) };
+                    const auto& subrange_ref = subrange_.template emplace<base_subrange_index>(current_.base(), get<0>(*current_).begin());
 
                     if (not subrange_ref.empty())
                         return;
@@ -571,7 +571,7 @@ namespace rx
 
 
     template<std::ranges::input_range V, std::ranges::bidirectional_range Fmt>
-    requires std::ranges::view<V> and detail::static_regex_match_view_like<V> and std::ranges::view<Fmt>
+        requires std::ranges::view<V> and detail::static_regex_match_view_like<V> and std::ranges::view<Fmt>
     class replace_view<V, Fmt> : std::ranges::view_interface<replace_view<V, Fmt>>
     {
         using match_result_type = std::ranges::range_value_t<V>;
@@ -625,7 +625,7 @@ namespace rx
     };
 
     template<std::ranges::input_range V, std::ranges::bidirectional_range Fmt>
-    requires std::ranges::view<V> and detail::static_regex_match_view_like<V> and std::ranges::view<Fmt>
+        requires std::ranges::view<V> and detail::static_regex_match_view_like<V> and std::ranges::view<Fmt>
     struct replace_view<V, Fmt>::iterator
     {
     public:
@@ -697,7 +697,7 @@ namespace rx
                         return;
                     }
 
-                    const auto& subrange_ref{ subrange_.template emplace<base_subrange_index>(current_.base(), get<0>(*current_).begin()) };
+                    const auto& subrange_ref = subrange_.template emplace<base_subrange_index>(current_.base(), get<0>(*current_).begin());
 
                     if (not subrange_ref.empty())
                         return;
@@ -707,7 +707,7 @@ namespace rx
 
                 if (index_ % 2 == 0)
                 {
-                    const auto& format{ parent_->fmt_.subranges().at(index_ / 2) };
+                    const auto& format = parent_->fmt_.subranges().at(index_ / 2);
 
                     if (not format.empty())
                     {
@@ -717,7 +717,7 @@ namespace rx
                 }
                 else
                 {
-                    const auto match_index{ parent_->fmt_.captures().at(index_ / 2) };
+                    const auto match_index = parent_->fmt_.captures().at(index_ / 2);
                     submatch capture{ (*current_).at(match_index) };
 
                     if (not capture.empty())
@@ -742,7 +742,7 @@ namespace rx
 
 
     template<std::ranges::bidirectional_range V, typename Regex>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_split_view
     {
         static_assert("regex_split_view: invalid regex");
@@ -750,7 +750,7 @@ namespace rx
 
 
     template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_split_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_split_view<V, static_regex<Pattern, Mode>>>
     {
         class iterator;
@@ -767,15 +767,15 @@ namespace rx
         {
             if (not cache_engaged_)
             {
-                const auto beg{ std::ranges::begin(base_) };
-                const auto end{ std::ranges::end(base_) };
-                auto result{ matcher(beg, end, detail::match_non_empty) };
+                const auto beg = std::ranges::begin(base_);
+                const auto end = std::ranges::end(base_);
+                auto result = matcher(beg, end, detail::match_non_empty);
 
                 if (result.has_value())
                 {
                     if constexpr (result_type::has_continue)
                         cached_begin_continue_at_ = result.continue_at_;
-                    auto [mfirst, mlast]{ force_get<0>(result) };
+                    auto [mfirst, mlast] = force_get<0>(result);
                     cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
                 }
                 else
@@ -786,7 +786,7 @@ namespace rx
                     }
                     else
                     {
-                        const auto it{ std::ranges::next(beg, end) };
+                        const auto it = std::ranges::next(beg, end);
                         cached_begin_next_ = { it, it };
                     }
                 }
@@ -806,7 +806,7 @@ namespace rx
         }
 
         [[nodiscard]] constexpr iterator end()
-        requires std::ranges::common_range<V>
+            requires std::ranges::common_range<V>
         {
             return iterator{ *this, std::ranges::end(base_), {} };
         }
@@ -834,7 +834,7 @@ namespace rx
     };
 
     template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_split_view<V, static_regex<Pattern, Mode>>::iterator
     {
     public:
@@ -849,7 +849,7 @@ namespace rx
             : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
         explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
-        requires result_type::has_continue
+            requires result_type::has_continue
             : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 
         constexpr std::ranges::iterator_t<V>& base() const
@@ -866,7 +866,7 @@ namespace rx
         {
             current_ = next_.begin();
 
-            if (const auto end{ std::ranges::end(parent_->base_) }; current_ != end)
+            if (const auto end = std::ranges::end(parent_->base_); current_ != end)
             {
                 current_ = next_.end();
 
@@ -903,7 +903,7 @@ namespace rx
                     {
                         if constexpr (result_type::has_continue)
                             continue_at_ = result.continue_at_;
-                        auto [mfirst, mlast]{ force_get<0>(result) };
+                        auto [mfirst, mlast] = force_get<0>(result);
                         next_ = { std::move(mfirst), std::move(mlast) };
                     }
                     else
@@ -914,7 +914,7 @@ namespace rx
                         }
                         else
                         {
-                            const auto it{ std::ranges::next(current_, end) };
+                            const auto it = std::ranges::next(current_, end);
                             next_ = { it, it };
                         }
                     }
@@ -930,13 +930,13 @@ namespace rx
 
         constexpr iterator operator++(int)
         {
-            auto tmp{ *this };
+            auto tmp = *this;
             ++*this;
             return tmp;
         }
 
         friend constexpr bool operator==(const iterator& x, const iterator& y)
-        requires std::equality_comparable<std::ranges::iterator_t<V>>
+            requires std::equality_comparable<std::ranges::iterator_t<V>>
         {
             return x.current_ == y.current_ and x.trailing_empty_ == y.trailing_empty_;
         }
@@ -952,7 +952,7 @@ namespace rx
     };
 
     template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
-    requires std::ranges::view<V>
+        requires std::ranges::view<V>
     class regex_split_view<V, static_regex<Pattern, Mode>>::sentinel
     {
     public:
@@ -1006,7 +1006,7 @@ namespace rx
             struct static_regex_match_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_match_adaptor_closure<Regex>>
             {
                 template<std::ranges::viewable_range Range>
-                requires detail::can_regex_match_view<Range, Regex>
+                    requires detail::can_regex_match_view<Range, Regex>
                 [[nodiscard]] constexpr auto operator()(Range&& r) const
                 {
                     return regex_match_view(std::forward<Range>(r), Regex{});
@@ -1016,14 +1016,14 @@ namespace rx
             struct regex_match_adaptor
             {
                 template<std::ranges::viewable_range Range, typename Regex>
-                requires detail::can_regex_match_view<Range, Regex>
+                    requires detail::can_regex_match_view<Range, Regex>
                 [[nodiscard]] constexpr auto operator()(Range&& r, Regex&& x) const
                 {
                     return regex_match_view(std::forward<Range>(r), std::forward<Regex>(x));
                 }
 
                 template<typename Regex>
-                requires rx::detail::static_regex_like<Regex>
+                    requires rx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
                     return static_regex_match_adaptor_closure<Regex>();
@@ -1034,7 +1034,7 @@ namespace rx
             struct static_submatches_adaptor_closure : std::ranges::range_adaptor_closure<static_submatches_adaptor_closure<Submatches...>>
             {
                 template<std::ranges::viewable_range Range>
-                requires detail::can_submatches_view<Range, std::integer_sequence<int, Submatches...>>
+                    requires detail::can_submatches_view<Range, std::integer_sequence<int, Submatches...>>
                 [[nodiscard]] constexpr auto operator()(Range&& r) const
                 {
                     return submatches_view(std::forward<Range>(r), std::integer_sequence<int, Submatches...>{});
@@ -1045,7 +1045,7 @@ namespace rx
             struct dynamic_submatches_adaptor_closure : std::ranges::range_adaptor_closure<dynamic_submatches_adaptor_closure<T>>
             {
                 template<std::ranges::viewable_range Range>
-                requires detail::can_submatches_view<Range, std::views::all_t<T>>
+                    requires detail::can_submatches_view<Range, std::views::all_t<T>>
                 [[nodiscard]] constexpr auto operator()(Range&& r) const
                 {
                     return submatches_view(std::forward<Range>(r), sub_);
@@ -1061,7 +1061,7 @@ namespace rx
             struct submatches_adaptor
             {
                 template<std::ranges::viewable_range Range, typename Submatches>
-                requires detail::can_submatches_view<Range, Submatches>
+                    requires detail::can_submatches_view<Range, Submatches>
                 [[nodiscard]] constexpr auto operator()(Range&& r, Submatches&& x) const
                 {
                     return submatches_view(std::forward<Range>(r), std::forward<Submatches>(x));
@@ -1081,7 +1081,7 @@ namespace rx
 
                 template<int... Submatches>
                 [[nodiscard]] consteval auto operator()(std::integral_constant<int, Submatches>...) const
-                requires (sizeof...(Submatches) == 1)
+                    requires (sizeof...(Submatches) == 1)
                 {
                     return static_submatches_adaptor_closure<Submatches...>();
                 }
@@ -1091,7 +1091,7 @@ namespace rx
             struct static_replace_adaptor_closure : std::ranges::range_adaptor_closure<static_replace_adaptor_closure<Fmt>>
             {
                 template<std::ranges::viewable_range Range>
-                requires detail::can_replace_view<Range, fmt_t<Fmt>>
+                    requires detail::can_replace_view<Range, fmt_t<Fmt>>
                 [[nodiscard]] constexpr auto operator()(Range&& r) const
                 {
                     return replace_view(std::forward<Range>(r), fmt<Fmt>);
@@ -1102,7 +1102,7 @@ namespace rx
             struct dynamic_replace_adaptor_closure : std::ranges::range_adaptor_closure<dynamic_replace_adaptor_closure<T>>
             {
                 template<std::ranges::viewable_range Range>
-                requires detail::can_replace_view<Range, std::views::all_t<T>>
+                    requires detail::can_replace_view<Range, std::views::all_t<T>>
                 [[nodiscard]] constexpr auto operator()(Range&& r) const
                 {
                     return replace_view(std::forward<Range>(r), fmt_);
@@ -1118,14 +1118,14 @@ namespace rx
             struct replace_adaptor
             {
                 template<std::ranges::viewable_range Range, typename Fmt>
-                requires detail::can_submatches_view<Range, Fmt>
+                    requires detail::can_submatches_view<Range, Fmt>
                 [[nodiscard]] constexpr auto operator()(Range&& r, Fmt&& fmt) const
                 {
                     return replace_view(std::forward<Range>(r), std::forward<Fmt>(fmt));
                 }
 
                 template<std::ranges::viewable_range Range, typename CharT>
-                requires detail::can_submatches_view<Range, std::ranges::subrange<const CharT*, rx::detail::cstr_sentinel_t>>
+                    requires detail::can_submatches_view<Range, std::ranges::subrange<const CharT*, rx::detail::cstr_sentinel_t>>
                 [[nodiscard]] constexpr auto operator()(Range&& r, const CharT* fmtstr) const
                 {
                     return replace_view(std::forward<Range>(r), std::ranges::subrange(fmtstr, rx::detail::cstr_sentinel));
@@ -1154,7 +1154,7 @@ namespace rx
             struct static_regex_split_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_split_adaptor_closure<Regex>>
             {
                 template<std::ranges::viewable_range Range>
-                requires detail::can_regex_split_view<Range, Regex>
+                    requires detail::can_regex_split_view<Range, Regex>
                 [[nodiscard]] constexpr auto operator()(Range&& r) const
                 {
                     return regex_split_view(std::forward<Range>(r), Regex{});
@@ -1164,14 +1164,14 @@ namespace rx
             struct regex_split_adaptor
             {
                 template<std::ranges::viewable_range Range, typename Regex>
-                requires detail::can_regex_split_view<Range, Regex>
+                    requires detail::can_regex_split_view<Range, Regex>
                 [[nodiscard]] constexpr auto operator()(Range&& r, Regex&& x) const
                 {
                     return regex_split_view(std::forward<Range>(r), std::forward<Regex>(x));
                 }
 
                 template<typename Regex>
-                requires rx::detail::static_regex_like<Regex>
+                    requires rx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
                     return static_regex_split_adaptor_closure<Regex>();
@@ -1194,7 +1194,7 @@ namespace rx
 
     template<string_literal Pattern, mode Mode>
     template<std::ranges::bidirectional_range R>
-    requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type>
+        requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type>
     constexpr auto static_regex<Pattern, Mode>::range(R&& r)
     {
         return views::regex_match(std::forward<R>(r), static_regex<Pattern, Mode>{});

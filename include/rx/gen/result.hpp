@@ -42,7 +42,7 @@ namespace rx::detail
 namespace rx
 {
     template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
-    requires std::default_initializable<I> and std::copyable<I>
+        requires std::default_initializable<I> and std::copyable<I>
     class static_regex_match_result
     {
         using factory = detail::submatch_factory<I>;
@@ -154,7 +154,7 @@ namespace rx
         /* tuple support */
 
         template<size_type N>
-        requires (N < submatch_count)
+            requires (N < submatch_count)
         [[nodiscard]] friend constexpr submatch_type get(const static_regex_match_result& r) noexcept
         {
             if (r.has_value())
@@ -172,11 +172,11 @@ namespace rx
         friend struct detail::p1306_naive_impl;
 
         template<std::ranges::bidirectional_range V, typename Regex>
-        requires std::ranges::view<V>
+            requires std::ranges::view<V>
         friend class regex_match_view;
 
         template<std::ranges::bidirectional_range V, typename Regex>
-        requires std::ranges::view<V>
+            requires std::ranges::view<V>
         friend class regex_split_view;
 
         template<std::bidirectional_iterator J, std::sentinel_for<J> S, typename Regex>
@@ -231,10 +231,10 @@ namespace rx
         }
 
         template<size_type N>
-        requires (N < submatch_count)
+            requires (N < submatch_count)
         [[nodiscard]] friend constexpr submatch_type force_get(const static_regex_match_result& r) noexcept
         {
-            static constexpr auto current{ Captures.fci.captures[N] };
+            static constexpr auto current = Captures.fci.captures[N];
 
             if constexpr (current.first.tag_number == current.second.tag_number)
             {
@@ -287,7 +287,7 @@ namespace rx
     /* iterator implementation */
 
     template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
-    requires std::default_initializable<I> and std::copyable<I>
+        requires std::default_initializable<I> and std::copyable<I>
     template<bool Const>
     class static_regex_match_result<I, Captures>::proxy_iterator
     {
@@ -327,7 +327,7 @@ namespace rx
 
         constexpr proxy_iterator operator++(int)
         {
-            auto tmp{ *this };
+            auto tmp = *this;
             ++*this;
             return tmp;
         }
@@ -340,7 +340,7 @@ namespace rx
 
         constexpr proxy_iterator operator--(int)
         {
-            auto tmp{ *this };
+            auto tmp = *this;
             --*this;
             return tmp;
         }
@@ -395,7 +395,7 @@ struct std::tuple_size<rx::static_regex_match_result<Iter, Captures>>
     : integral_constant<std::size_t, rx::static_regex_match_result<Iter, Captures>::submatch_count> {};
 
 template<std::size_t N, std::bidirectional_iterator Iter, rx::detail::static_match_result_info Captures>
-requires (N < rx::static_regex_match_result<Iter, Captures>::submatch_count)
+    requires (N < rx::static_regex_match_result<Iter, Captures>::submatch_count)
 struct std::tuple_element<N, rx::static_regex_match_result<Iter, Captures>>
 {
     using type = rx::static_regex_match_result<Iter, Captures>::submatch_type;

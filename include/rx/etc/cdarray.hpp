@@ -86,9 +86,9 @@ namespace rx::detail
             : alloc_{ alloc } {}
 
         constexpr explicit cdarray(size_type count, const Allocator& alloc = Allocator())
-            : alloc_{ alloc },
-              data_{ std::allocator_traits<Allocator>::allocate(alloc_, count) },
-              end_{ data_ + count }
+            : alloc_{ alloc }
+            , data_{ std::allocator_traits<Allocator>::allocate(alloc_, count) }
+            , end_{ data_ + count }
         {
             for (pointer p{ data_ }; p != end_; ++p)
                 std::allocator_traits<Allocator>::construct(alloc_, p);
@@ -98,9 +98,9 @@ namespace rx::detail
 
 
         constexpr cdarray(size_type count, const T& value, const Allocator& alloc = Allocator())
-            : alloc_{ alloc },
-              data_{ std::allocator_traits<Allocator>::allocate(alloc_, count) },
-              end_{ data_ + count }
+            : alloc_{ alloc }
+            , data_{ std::allocator_traits<Allocator>::allocate(alloc_, count) }
+            , end_{ data_ + count }
         {
             for (pointer p{ data_ }; p != end_; ++p)
                 std::allocator_traits<Allocator>::construct(alloc_, p, value);
@@ -110,9 +110,9 @@ namespace rx::detail
 
         template<std::input_iterator I, std::sentinel_for<I> S>
         constexpr cdarray(I first, S last, const Allocator& alloc = Allocator())
-            : alloc_{ alloc },
-              data_{ std::allocator_traits<Allocator>::allocate(alloc_, std::ranges::distance(first, last)) },
-              end_{ data_ }
+            : alloc_{ alloc }
+            , data_{ std::allocator_traits<Allocator>::allocate(alloc_, std::ranges::distance(first, last)) }
+            , end_{ data_ }
         {
             for (; first != last; ++first)
             {
@@ -124,11 +124,11 @@ namespace rx::detail
         }
 
         template<typename Range>
-        requires std::ranges::input_range<Range> and std::convertible_to<std::ranges::range_reference_t<Range>, T>
+            requires std::ranges::input_range<Range> and std::convertible_to<std::ranges::range_reference_t<Range>, T>
         constexpr cdarray(std::from_range_t, Range&& rg, const Allocator& alloc = Allocator())
-            : alloc_{ alloc },
-              data_{ std::allocator_traits<Allocator>::allocate(alloc, std::ranges::size(rg)) },
-              end_{ data_ }
+            : alloc_{ alloc }
+            , data_{ std::allocator_traits<Allocator>::allocate(alloc, std::ranges::size(rg)) }
+            , end_{ data_ }
         {
             for (const auto& item : rg)
             {
@@ -140,19 +140,19 @@ namespace rx::detail
         }
 
         constexpr cdarray(const cdarray& other) noexcept
-            : alloc_{ other.get_allocator() },
-              data_{ other.data_ },
-              end_{ other.end_ },
-              use_count_ptr_{ other.use_count_ptr_ }
+            : alloc_{ other.get_allocator() }
+            , data_{ other.data_ }
+            , end_{ other.end_ }
+            , use_count_ptr_{ other.use_count_ptr_ }
         {
             *use_count_ptr_ += 1;
         }
 
         constexpr cdarray(cdarray&& other) noexcept
-            : alloc_{ other.get_allocator() },
-              data_{ std::exchange(other.data_, nullptr) },
-              end_{ std::exchange(other.end_, nullptr) },
-              use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) } {}
+            : alloc_{ other.get_allocator() }
+            , data_{ std::exchange(other.data_, nullptr) }
+            , end_{ std::exchange(other.end_, nullptr) }
+            , use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) } {}
 
         constexpr cdarray(const cdarray& other, const std::type_identity_t<Allocator>& alloc)
             : alloc_{ alloc }, data_{ other.data_ }, end_{ other.end_ }, use_count_ptr_{ other.use_count_ptr_ }
@@ -161,10 +161,10 @@ namespace rx::detail
         }
 
         constexpr cdarray(cdarray&& other, const std::type_identity_t<Allocator>& alloc) noexcept
-            : alloc_{ alloc },
-              data_{ std::exchange(other.data_, nullptr) },
-              end_{ std::exchange(other.end_, nullptr) },
-              use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) } {}
+            : alloc_{ alloc }
+            , data_{ std::exchange(other.data_, nullptr) }
+            , end_{ std::exchange(other.end_, nullptr) }
+            , use_count_ptr_{ std::exchange(other.use_count_ptr_, nullptr) } {}
 
         constexpr cdarray(std::initializer_list<T> init, const Allocator& alloc = Allocator())
             : cdarray(init.begin(), init.end(), alloc) {}

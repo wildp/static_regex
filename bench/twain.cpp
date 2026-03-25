@@ -16,7 +16,7 @@ static void BM_ctre(benchmark::State& state, Matcher m)
     const char* cstr{ input.data() };
     for (auto _ : state)
     {
-        auto range{ m.range(cstr) };
+        auto range = m.range(cstr);
         for (auto result : range)
             benchmark::DoNotOptimize(result);
     }
@@ -28,7 +28,7 @@ static void BM_rx(benchmark::State& state, rx::static_regex<Pattern> m)
     const char* cstr{ input.data() };
     for (auto _ : state)
     {
-        auto range{ m.range(cstr) };
+        auto range = m.range(cstr);
         for (auto result : range)
             benchmark::DoNotOptimize(result);
     }
@@ -40,7 +40,7 @@ static void BM_rxf(benchmark::State& state, rx::static_regex<Pattern, rx::mode::
     const char* cstr{ input.data() };
     for (auto _ : state)
     {
-        auto range{ m.range(cstr) };
+        auto range = m.range(cstr);
         for (auto result : range)
             benchmark::DoNotOptimize(result);
     }
@@ -52,7 +52,7 @@ static void BM_rxn(benchmark::State& state, rx::static_regex<Pattern, rx::mode::
     const char* cstr{ input.data() };
     for (auto _ : state)
     {
-        auto range{ m.range(cstr) };
+        auto range = m.range(cstr);
         for (auto result : range)
             benchmark::DoNotOptimize(result);
     }

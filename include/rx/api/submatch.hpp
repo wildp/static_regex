@@ -97,25 +97,25 @@ namespace rx
 
 #if __cpp_lib_ranges_as_const >= 202311L
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept
-        requires std::bidirectional_iterator<const_iterator>
+            requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_const_iterator(this->begin());
         }
 
         [[nodiscard]] constexpr const_iterator cend() const noexcept
-        requires std::bidirectional_iterator<const_iterator>
+            requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_const_iterator(this->end());
         }
 
         [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
-        requires std::bidirectional_iterator<const_iterator>
+            requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_reverse_iterator(this->cend());
         }
 
         [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept
-        requires std::bidirectional_iterator<const_iterator>
+            requires std::bidirectional_iterator<const_iterator>
         {
             return std::make_reverse_iterator(this->cbegin());
         }
@@ -124,7 +124,7 @@ namespace rx
         /* structured binding support */
 
         template<std::size_t N>
-        requires (N < 2)
+            requires (N < 2)
         [[nodiscard]] friend constexpr const auto& get(const submatch& s)
         {
             if constexpr (N == 0)
@@ -134,7 +134,7 @@ namespace rx
         }
 
         template<std::size_t N>
-        requires (N < 2)
+            requires (N < 2)
         [[nodiscard]] friend constexpr auto&& get(submatch&& s)
         {
             if constexpr (N == 0)
@@ -151,7 +151,7 @@ namespace rx
         }
 
         [[nodiscard]] constexpr view_type view() const
-        requires std::contiguous_iterator<I>
+            requires std::contiguous_iterator<I>
         {
             return { first_, last_ };
         }
@@ -162,20 +162,20 @@ namespace rx
         }
 
         [[nodiscard]] constexpr explicit(false) operator view_type() const
-        requires std::contiguous_iterator<I>
+            requires std::contiguous_iterator<I>
         {
             return this->view();
         }
 
 #if __cpp_lib_ranges_as_const >= 202311L
         [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() const &
-        requires (not std::same_as<const_iterator, iterator>)
+            requires (not std::same_as<const_iterator, iterator>)
         {
             return { first_, last_ };
         }
 
         [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() &&
-        requires (not std::same_as<const_iterator, iterator>)
+            requires (not std::same_as<const_iterator, iterator>)
         {
             return { std::move(first_), std::move(last_) };
         }
@@ -251,7 +251,7 @@ template<std::bidirectional_iterator I>
 struct std::tuple_size<rx::submatch<I>> : integral_constant<std::size_t, 2> {};
 
 template<std::size_t N, std::bidirectional_iterator I>
-requires (N < 2)
+    requires (N < 2)
 struct std::tuple_element<N, rx::submatch<I>>
 {
     using type = rx::submatch<I>::iterator;
@@ -280,7 +280,7 @@ namespace rx::detail
         }
 
         template<std::sentinel_for<I> S>
-        requires (not std::same_as<I, S>)
+            requires (not std::same_as<I, S>)
         [[nodiscard]] static constexpr submatch<I> make_submatch(I first, S last)
         {
             return { first, std::ranges::next(first, last) };

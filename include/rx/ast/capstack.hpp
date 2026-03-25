@@ -52,16 +52,16 @@ namespace rx::detail::parser
             modes mode;
 
             constexpr cse() noexcept
-                : number{ 1 },
-                  number_end{ 1 },
-                  flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled },
-                  mode{ modes::non_capturing } {}
+                : number{ 1 }
+                , number_end{ 1 }
+                , flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled }
+                , mode{ modes::non_capturing } {}
 
             constexpr explicit cse(number_t cur, number_t end) noexcept
-                : number{ cur },
-                  number_end{ end },
-                  flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit },
-                  mode{ modes::normal } {}
+                : number{ cur }
+                , number_end{ end }
+                , flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit }
+                , mode{ modes::normal } {}
         };
 
     public:
@@ -69,7 +69,7 @@ namespace rx::detail::parser
 
         constexpr void push_non_capturing()
         {
-            auto next{ next_number() };
+            auto next = next_number();
             elems_.emplace_back(next, next);
             elems_.back().mode = cse::modes::non_capturing;
         }
@@ -78,7 +78,7 @@ namespace rx::detail::parser
         {
             /* return true if overflow and false otherwise */
 
-            auto next{ next_number() };
+            auto next = next_number();
 
             if (next + 1 == 0) /* unsigned integer overflow */
                 return true;
@@ -92,7 +92,7 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; elem.mode != cse::modes::non_capturing)
+            if (auto& elem = elems_.back(); elem.mode != cse::modes::non_capturing)
             {
                 elem.mode = cse::modes::non_capturing;
                 elem.number_end = elem.number;
@@ -104,7 +104,7 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; elem.mode != cse::modes::branch_reset)
+            if (auto& elem = elems_.back(); elem.mode != cse::modes::branch_reset)
             {
                 elem.mode = cse::modes::branch_reset;
                 elem.number_end = elem.number;
@@ -116,7 +116,7 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; elem.mode != cse::modes::flag_assigning)
+            if (auto& elem = elems_.back(); elem.mode != cse::modes::flag_assigning)
             {
                 elem.mode = cse::modes::flag_assigning;
                 elem.number_end = elem.number;
@@ -128,9 +128,9 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return;
 
-            if (auto& elem{ elems_.back() }; elem.mode == cse::modes::branch_reset)
+            if (auto& elem = elems_.back(); elem.mode == cse::modes::branch_reset)
             {
-                auto& target{ (elems_.size() < 2) ? base_ : *(std::ranges::next(elems_.rbegin())) };
+                auto& target = (elems_.size() < 2) ? base_ : *(std::ranges::next(elems_.rbegin()));
                 target.number_end = std::max(target.number_end, elem.number_end);
                 elem.number_end = elem.number;
             }
@@ -148,10 +148,10 @@ namespace rx::detail::parser
             if (elems_.empty())
                 return {};
 
-            auto elem{ elems_.back() };
+            auto elem = elems_.back();
             elems_.pop_back();
 
-            auto& target{ elems_.empty() ? base_ : elems_.back() };
+            auto& target = elems_.empty() ? base_ : elems_.back();
 
             /* overwrite containing capturing group's flags when elem is an empty capturing group */
             if (elem.mode == cse::modes::flag_assigning)
@@ -202,7 +202,7 @@ namespace rx::detail::parser
     private:
         [[nodiscard]] constexpr number_t next_number() const noexcept
         {
-            auto& target{ elems_.empty() ? base_ : elems_.back() };
+            auto& target = elems_.empty() ? base_ : elems_.back();
             return target.number_end;
         }
 

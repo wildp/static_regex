@@ -39,7 +39,7 @@ namespace rx::testing
             if (value == 0)
                 buf.emplace_back('0');
             else
-                for (auto v{ value }; v > 0; v /= base)
+                for (auto v = value; v > 0; v /= base)
                     buf.emplace_back('0' + (v % base));
             if (value < 0)
                 buf.emplace_back('-');
@@ -112,7 +112,7 @@ namespace rx::testing
                         result.pop_back();
                 },
                 [&](const ast_t::tag& tag) {
-                    auto [is_lhs, is_rhs]{ ast.get_capture_info().capture_side(tag.number) };
+                    auto [is_lhs, is_rhs] = ast.get_capture_info().capture_side(tag.number);
                     if (is_lhs)
                         result += '(';
                     if (is_rhs)
@@ -160,8 +160,8 @@ namespace rx::testing
                 },
                 [&](const ast_t::char_class& cla) {
                     using pair_t = typename ast_t::char_class::impl_type::underlying_type::char_interval;
-                    const auto dn{ cla.data.denormalise() };
-                    const auto ci{ dn.intervals() };
+                    const auto dn = cla.data.denormalise();
+                    const auto ci = dn.intervals();
 
                     if (dn.is_negated() and ((ci.empty()) or (ci.size() == 1 and ci.front() == pair_t{ '\n', '\n' })))
                     {

@@ -76,9 +76,9 @@ namespace rx::detail
 
             if (not data_.empty())
             {
-                if (const auto [beg, end]{ data_.front() }; beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                if (const auto [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
                     --score;
-                if (const auto [beg, end]{ data_.back() }; end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                if (const auto [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
                     --score;
             }
 
@@ -87,7 +87,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr bool contains(char_type c) const
         {
-            const auto it{ std::ranges::lower_bound(data_, c, {}, &char_interval::second) };
+            const auto it = std::ranges::lower_bound(data_, c, {}, &char_interval::second);
             if (it == data_.end())
                 return false;
             return c >= it->first;
@@ -260,12 +260,12 @@ namespace rx::detail
             return data_.emplace(data_.end(), c, c);
 
         /* form a closed interval */
-        auto lower_bound{ data_.begin() };
-        auto upper_bound{ std::ranges::prev(data_.end()) };
+        auto lower_bound = data_.begin();
+        auto upper_bound = std::ranges::prev(data_.end());
 
         while (true)
         {
-            auto midpoint{ lower_bound + ((upper_bound - lower_bound) / 2) };
+            auto midpoint = lower_bound + ((upper_bound - lower_bound) / 2);
 
             if (midpoint->first != std::numeric_limits<char_type>::min() and c + 1 == midpoint->first)
             {
@@ -275,7 +275,7 @@ namespace rx::detail
                 /* attempt to merge with (mid - 1) */
                 if (midpoint != data_.begin())
                 {
-                    if (auto prev{ std::ranges::prev(midpoint) }; midpoint->first - prev->second <= 1)
+                    if (auto prev = std::ranges::prev(midpoint); midpoint->first - prev->second <= 1)
                     {
                         midpoint->first = prev->second;
                         midpoint = data_.erase(prev);
@@ -290,7 +290,7 @@ namespace rx::detail
                 midpoint->second += 1;
 
                 /* attempt to merge with (mid + 1) */
-                if (auto next{ std::ranges::next(midpoint) }; next != data_.end() and next->first - midpoint->second <= 1)
+                if (auto next = std::ranges::next(midpoint); next != data_.end() and next->first - midpoint->second <= 1)
                 {
                     midpoint->second = next->second;
                     data_.erase(next);
@@ -346,7 +346,7 @@ namespace rx::detail
 
         while (true)
         {
-            auto next{ std::ranges::next(inserted) };
+            auto next = std::ranges::next(inserted);
 
             if (next == data_.end())
                 break; /* inserted is at end of data_: can't merge */
@@ -382,10 +382,10 @@ namespace rx::detail
     {
         underlying_t result;
 
-        auto lit{ std::ranges::cbegin(lhs) };
-        auto rit{ std::ranges::cbegin(rhs) };
-        const auto lend{ std::ranges::cend(lhs) };
-        const auto rend{ std::ranges::cend(rhs) };
+        auto lit = std::ranges::cbegin(lhs);
+        auto rit = std::ranges::cbegin(rhs);
+        const auto lend = std::ranges::cend(lhs);
+        const auto rend = std::ranges::cend(rhs);
 
         while (lit != lend and rit != rend)
         {
@@ -429,10 +429,10 @@ namespace rx::detail
 
         std::ranges::merge(lhs, rhs, std::back_inserter(result), {}, &char_interval::first, &char_interval::first);
 
-        for (auto it{ result.begin() }; it != result.end();)
+        for (auto it = result.begin(); it != result.end();)
         {
-            const auto erase_begin{ std::ranges::next(it) };
-            auto next{ erase_begin };
+            const auto erase_begin = std::ranges::next(it);
+            auto next = erase_begin;
 
             for (; next != result.end(); ++next)
             {
@@ -453,26 +453,26 @@ namespace rx::detail
     constexpr auto charset<CharT>::make_symmetric_difference(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
     {
         if (lhs.empty())
-            return underlying_t{ std::from_range, rhs };
+            return underlying_t(std::from_range, rhs);
         if (rhs.empty())
-            return underlying_t{ std::from_range, lhs };
+            return underlying_t(std::from_range, lhs);
 
         underlying_t result;
 
-        auto lit{ std::ranges::cbegin(lhs) };
-        auto rit{ std::ranges::cbegin(rhs) };
-        const auto lend{ std::ranges::cend(lhs) };
-        const auto rend{ std::ranges::cend(rhs) };
+        auto lit = std::ranges::cbegin(lhs);
+        auto rit = std::ranges::cbegin(rhs);
+        const auto lend = std::ranges::cend(lhs);
+        const auto rend = std::ranges::cend(rhs);
 
         std::optional<char_type> tmp;
 
         while (lit != lend and rit != rend)
         {
-            const auto [min_first, max_first]{ std::minmax(lit->first, rit->first) };
-            const auto min_first_or_tmp{ tmp.value_or(min_first) };
+            const auto [min_first, max_first] = std::minmax(lit->first, rit->first);
+            const auto min_first_or_tmp = tmp.value_or(min_first);
 
-            const auto [min_second, max_second]{ std::minmax(lit->second, rit->second) };
-            auto& smaller_it{ (lit->second < rit->second) ? lit : rit };
+            const auto [min_second, max_second] = std::minmax(lit->second, rit->second);
+            auto& smaller_it = (lit->second < rit->second) ? lit : rit;
 
             if (min_second < max_first)
             {
@@ -512,9 +512,9 @@ namespace rx::detail
 
         if (lit != lend or rit != rend)
         {
-            auto it{ (lit != lend) ? lit : rit };
-            const auto end{ (lit != lend) ? lend : rend };
-            const auto min_first_or_tmp{ tmp.value_or(it->first) };
+            auto it = (lit != lend) ? lit : rit;
+            const auto end = (lit != lend) ? lend : rend;
+            const auto min_first_or_tmp = tmp.value_or(it->first);
 
             if (not result.empty() and result.back().second + 1 == min_first_or_tmp)
                 result.back().second = it->second;
@@ -537,14 +537,14 @@ namespace rx::detail
     constexpr auto charset<CharT>::make_relative_complement(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
     {
         if (rhs.empty())
-            return underlying_t{ std::from_range, lhs };
+            return underlying_t(std::from_range, lhs);
 
         underlying_t result;
 
-        auto lit{ lhs.cbegin() };
-        auto rit{ rhs.cbegin() };
-        const auto lend{ lhs.cend() };
-        const auto rend{ rhs.cend() };
+        auto lit = lhs.cbegin();
+        auto rit = rhs.cbegin();
+        const auto lend = lhs.cend();
+        const auto rend = rhs.cend();
 
         char_type rhs_lower{ std::numeric_limits<char_type>::min() };
 
@@ -638,12 +638,12 @@ namespace rx::detail
     template<typename CharT>
     constexpr void charset<CharT>::part_sort_lookahead(partitioned_intervals& part, std::size_t current_idx)
     {
-        if (auto it{ part.begin() + current_idx + 1 }; it + 1 != part.end())
+        if (auto it = part.begin() + current_idx + 1; it + 1 != part.end())
         {
             if (*it >= *(it + 1))
             {
                 /* re-sort lookahead */
-                const auto pos{ std::ranges::lower_bound(it + 1, part.end(), it->first, {}, &partition_entry::first) };
+                const auto pos = std::ranges::lower_bound(it + 1, part.end(), it->first, {}, &partition_entry::first);
                 if (pos == part.end() or *pos != *it)
                 {
                     std::ranges::rotate(it, it + 1, pos);
@@ -660,18 +660,18 @@ namespace rx::detail
     template<typename CharT>
     constexpr void charset<CharT>::part_sort_lookahead_and_insert(partitioned_intervals& part, std::size_t current_idx, partition_entry&& to_insert)
     {
-        if (auto it{ part.begin() + current_idx + 1 }; it + 1 != part.end())
+        if (auto it = part.begin() + current_idx + 1; it + 1 != part.end())
         {
             if (*it >= *(it + 1))
             {
                 /* re-sort lookahead */
-                const auto pos{ std::ranges::lower_bound(it + 1, part.end(), it->first, {}, &partition_entry::first) };
+                const auto pos = std::ranges::lower_bound(it + 1, part.end(), it->first, {}, &partition_entry::first);
                 if (pos == part.end() or *pos != *it)
                 {
-                    const auto rot{ std::ranges::rotate(it, it + 1, pos) };
+                    const auto rot = std::ranges::rotate(it, it + 1, pos);
 
                     /* insert new pair */
-                    const auto pos2{ std::ranges::upper_bound(std::ranges::begin(rot) + 1, part.end(), to_insert) };
+                    const auto pos2 = std::ranges::upper_bound(std::ranges::begin(rot) + 1, part.end(), to_insert);
                     if (pos2 == part.end() or *pos2 != to_insert)
                         part.emplace(pos2, std::move(to_insert));
                 }
@@ -680,7 +680,7 @@ namespace rx::detail
                     /* remove lookahead as a duplicate */
                     if (to_insert >= *(it + 1))
                     {
-                        const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first) };
+                        const auto pos2 = std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first);
                         if (pos2 == part.end() or pos2->first != to_insert.first)
                         {
                             *it = std::move(to_insert);
@@ -700,7 +700,7 @@ namespace rx::detail
             }
             else
             {
-                const auto pos2{ std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first) };
+                const auto pos2 = std::ranges::lower_bound(it + 1, part.end(), to_insert.first, {}, &partition_entry::first);
                 if (pos2 == part.end() or pos2->first != to_insert.first)
                     part.emplace(pos2, std::move(to_insert));
             }
@@ -728,10 +728,10 @@ namespace rx::detail
     {
         std::ranges::sort(part, {}, &partition_entry::first);
 
-        for (auto it{ part.begin() }; it != part.end(); ++it)
+        for (auto it = part.begin(); it != part.end(); ++it)
         {
-            const auto duplicate_begin{ std::ranges::next(it) };
-            auto duplicate_it{ duplicate_begin };
+            const auto duplicate_begin = std::ranges::next(it);
+            auto duplicate_it = duplicate_begin;
 
             for (; duplicate_it != part.end() and duplicate_it->first == it->first; ++duplicate_it)
                 for (std::size_t j{ 0 }, j_end{ std::min(it->second.size(), duplicate_it->second.size()) }; j < j_end; ++j)
@@ -747,8 +747,8 @@ namespace rx::detail
     {
         for (std::size_t i{ 0 }; i + 1 < part.size();)
         {
-            auto& [current, current_mask]{ part[i] };
-            auto& [lookahead, lookahead_mask]{ part[i + 1] };
+            auto& [current, current_mask] = part[i];
+            auto& [lookahead, lookahead_mask] = part[i + 1];
 
             if (current.first == lookahead.first)
             {
@@ -860,7 +860,7 @@ namespace rx::detail
 
         part_sort_and_dedup(part);
         part_merge_intervals(part);
-        const auto map{ part_make_map(part) };
+        const auto map = part_make_map(part);
 
         return map.values();
     }
@@ -890,11 +890,11 @@ namespace rx::detail
 
         part_sort_and_dedup(part);
         part_merge_intervals(part);
-        auto map{ part_make_map(part) };
+        auto map = part_make_map(part);
 
         partition_pair_result<T> result;
 
-        for (auto it{ map.begin() }, end{ map.end() }; it != end; ++it)
+        for (auto it = map.begin(), end{ map.end() }; it != end; ++it)
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
             for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
@@ -934,11 +934,11 @@ namespace rx::detail
 
         part_sort_and_dedup(part);
         part_merge_intervals(part);
-        const auto map{ part_make_map(part) };
+        const auto map = part_make_map(part);
 
         partition_contents_result<T> result;
 
-        for (auto it{ map.cbegin() }, end{ map.cend() }; it != end; ++it)
+        for (auto it = map.cbegin(), end{ map.cend() }; it != end; ++it)
         {
             result.emplace_back();
             for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)

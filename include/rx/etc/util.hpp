@@ -55,8 +55,8 @@ namespace rx::detail
         if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
             throw std::invalid_argument("index_in_variant: variant is not an instantiation of std::variant");
 
-        const auto vartypes{ template_arguments_of(dealias(variant)) };
-        const auto it{ std::ranges::find(vartypes, dealias(type), std::meta::dealias) };
+        const auto vartypes = template_arguments_of(dealias(variant));
+        const auto it = std::ranges::find(vartypes, dealias(type), std::meta::dealias);
 
         if (it == vartypes.end())
             throw std::invalid_argument("index_in_variant: type is not an alternative in variant");

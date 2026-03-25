@@ -30,7 +30,7 @@ namespace rx::detail
 
             for (std::size_t i{ 0 }, i_end{ ci.capture_count() }; i < i_end; ++i)
             {
-                const auto range{ ci.lookup(i) };
+                const auto range = ci.lookup(i);
 
                 if (std::ranges::size(range) != 1)
                     throw tree_error("Capture info contains branch reset");
@@ -51,7 +51,7 @@ namespace rx::detail
         [[nodiscard]] consteval bool has_match_start() const
         {
             static constexpr auto pred = [](const capture_info::tag_pair_t& pair) {
-                const auto& [fst, snd]{ pair };
+                const auto& [fst, snd] = pair;
                 return (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag);
             };
 
@@ -111,9 +111,9 @@ namespace rx::detail
         {
             return static_span{ o | std::views::transform(
                 [](const tdfa::regop& op) consteval -> register_operation {
-                    if (const auto* set{ get_if<tdfa::regop::set>(&op.op) }; set != nullptr)
+                    if (const auto* set = get_if<tdfa::regop::set>(&op.op); set != nullptr)
                         return { .dst = op.dst, .cpy_src = 0, .set_val = set->val, .is_copy = false };
-                    else if (const auto* cpy{ get_if<tdfa::regop::copy>(&op.op) }; cpy != nullptr)
+                    else if (const auto* cpy = get_if<tdfa::regop::copy>(&op.op); cpy != nullptr)
                         return { .dst = op.dst, .cpy_src = cpy->src, .set_val = false, .is_copy = true };
                     else
                         std::unreachable();
@@ -133,10 +133,10 @@ namespace rx::detail
 
             if (not vec.empty())
             {
-                std::vector scored_pairs{
-                    std::from_range, // TODO: switch to using views::enumerate when supported by clang
-                    std::views::zip(std::views::iota(0uz), vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
-                };
+                // TODO: switch to using views::enumerate when supported by clang
+                auto scored_pairs = std::views::zip(std::views::iota(0uz),
+                                                    vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
+                                    | std::ranges::to<std::vector>();
 
                 std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
 
@@ -146,7 +146,7 @@ namespace rx::detail
 
                 for (const auto& [i, _] : scored_pairs)
                 {
-                    auto& tr{ vec.at(i) };
+                    auto& tr = vec.at(i);
                     dont_cares.emplace_back(acc);
                     acc |= tr.second;
                     new_tr.emplace_back(std::move(tr));
@@ -189,17 +189,17 @@ namespace rx::detail
 
     public:
         explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
-            : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) },
-              regops{ dfa.regops_ | std::views::transform(make_register_operations) },
-              continue_nodes{ dfa.continue_nodes() },
-              additional_continue_nodes{ dfa.additional_continue_nodes() },
-              final_nodes{ dfa.final_nodes() },
-              fallback_nodes{ dfa.fallback_nodes() },
-              final_registers{ dfa.final_registers() },
-              register_count{ dfa.reg_count() },
-              match_start{ dfa.match_start },
-              captures{ dfa.get_capture_info() },
-              outer_transitions{ make_continue_info(dfa, nfa) } {}
+            : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
+            , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
+            , continue_nodes{ dfa.continue_nodes() }
+            , additional_continue_nodes{ dfa.additional_continue_nodes() }
+            , final_nodes{ dfa.final_nodes() }
+            , fallback_nodes{ dfa.fallback_nodes() }
+            , final_registers{ dfa.final_registers() }
+            , register_count{ dfa.reg_count() }
+            , match_start{ dfa.match_start }
+            , captures{ dfa.get_capture_info() }
+            , outer_transitions{ make_continue_info(dfa, nfa) } {}
 
         [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
         {
@@ -264,7 +264,7 @@ namespace rx::detail
     template<string_literal Pattern, fsm_flags Flags>
     struct compiled_dfa
     {
-        static constexpr auto value{ compile_pattern(Pattern.view(), Flags) };
+        static constexpr auto value = compile_pattern(Pattern.view(), Flags);
     };
 
 

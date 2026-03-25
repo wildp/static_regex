@@ -18,7 +18,7 @@ namespace
         nfa.rewrite_assertions();
 
         const rx::testing::tdfa_matcher dfa{ nfa };
-        const auto match_result{ dfa.match(str) };
+        const auto match_result = dfa.match(str);
 
         if (captures.empty())
             return match_result.has_value();
@@ -37,7 +37,7 @@ namespace
         nfa.rewrite_assertions();
 
         const rx::testing::tdfa_matcher dfa{ nfa };
-        const auto match_result{ dfa.partial_match(str) };
+        const auto match_result = dfa.partial_match(str);
 
         if (captures.empty())
             return match_result.has_value();
@@ -57,7 +57,7 @@ namespace
         nfa.rewrite_assertions();
 
         const rx::testing::tdfa_matcher dfa{ nfa };
-        const auto match_result{ dfa.partial_match(str) };
+        const auto match_result = dfa.partial_match(str);
 
         if (captures.empty())
             return match_result.has_value();
@@ -79,7 +79,7 @@ namespace
             nfa.add_non_empty_match_pathway();
 
         const rx::testing::tdfa_matcher dfa{ nfa };
-        const auto match_result{ dfa.match_all(str) };
+        const auto match_result = dfa.match_all(str);
 
         if (captures.empty())
             return not match_result.empty();

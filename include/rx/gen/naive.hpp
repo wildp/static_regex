@@ -49,12 +49,12 @@ namespace rx::detail
                 if (is_aggregate_type(expr_type) and is_trivially_copyable_type(expr_type))
                     continue;
 
-                auto spec{ nonstatic_data_members_of(expr_type, std::meta::access_context::current()) };
+                auto spec = nonstatic_data_members_of(expr_type, std::meta::access_context::current());
 
                 for (auto& info : spec)
                 {
                     std::meta::data_member_options options{ .name = identifier_of(info) };
-                    const auto type{ type_of(info) };
+                    const auto type = type_of(info);
 
                     if (has_template_arguments(type) and (template_of(type) == ^^std::vector or template_of(type) == ^^std::basic_string))
                         info = data_member_spec(substitute(^^static_span, { template_arguments_of(type)[0] }), options);
@@ -78,7 +78,7 @@ namespace rx::detail
 
             consteval
             {
-                auto mems{ template_arguments_of(dealias(^^old_type)) };
+                auto mems = template_arguments_of(dealias(^^old_type));
                 for (auto& member : mems)
                 {
                     std::string_view name;
@@ -98,7 +98,7 @@ namespace rx::detail
                 define_aggregate(^^value_t, mems);
             }
 
-            static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^value_t, std::meta::access_context::unchecked())) };
+            static constexpr auto nsdms = define_static_array(nonstatic_data_members_of(^^value_t, std::meta::access_context::unchecked()));
 
             using index_t = unsigned char;
 
@@ -109,7 +109,7 @@ namespace rx::detail
     private:
         static consteval type to_static_expression(const old_type& expr)
         {
-            constexpr auto original_type{ dealias(^^old_type) };
+            constexpr auto original_type = dealias(^^old_type);
 
             /* splicing designated initializers is unsupported in C++26; if it was, we could do something like this: */
 
@@ -117,7 +117,7 @@ namespace rx::detail
             // {
             //     if (expr.index() == I)
             //     {
-            //         const auto& [...mems]{ get<I>(expr) };
+            //         const auto& [...mems] = get<I>(expr);
             //         return { .value{ .[: type::nsdms[I] :]{ mems... } }, .index = I };
             //     }
             // }
@@ -131,48 +131,48 @@ namespace rx::detail
             return expr.visit(overloads{
                 [](const typename expr_tree<CharT>::assertion& e) -> type
                 {
-                    const auto& [...mems]{ e };
+                    const auto& [...mems] = e;
                     return { .value{ .assertion{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_str& e) -> type
                 {
-                     const auto& [...mems]{ e };
+                     const auto& [...mems] = e;
                      return { .value{ .char_str{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_class& e) -> type
                 {
-                     const auto& [...mems]{ e };
+                     const auto& [...mems] = e;
                      return { .value{ .char_class{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::backref& e) -> type
                 {
-                    const auto& [...mems]{ e };
+                    const auto& [...mems] = e;
                     return { .value{ .backref{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::alt& e) -> type
                 {
-                    const auto& [...mems]{ e };
+                    const auto& [...mems] = e;
                     return { .value{ .alt{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::concat& e) -> type
                 {
-                    const auto& [...mems]{ e };
+                    const auto& [...mems] = e;
                     return { .value{ .concat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, ^^old_type)) };
                 },
                 [](const typename expr_tree<CharT>::tag& e) -> type
                 {
-                    const auto& [...mems]{ e };
+                    const auto& [...mems] = e;
                     return { .value{ .tag{  mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
 
                 },
                 [](const typename expr_tree<CharT>::repeat& e) -> type
                 {
-                    const auto& [...mems]{ e };
+                    const auto& [...mems] = e;
                     return { .value{ .repeat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
                 }
                 // , [](const typename expr_tree<CharT>::special& e) -> type
                 // {
-                //     const auto& [...mems]{ e };
+                //     const auto& [...mems] = e;
                 //     return { .value{ .special{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
                 // }
             });
@@ -180,12 +180,12 @@ namespace rx::detail
 
     public:
         consteval tree_info(const expr_tree<CharT>& ast, const capture_info::staging_info_t& tag_info)
-            : root_idx{ ast.root_idx() },
-              tag_count{ ast.tag_count() },
-              exprs{ ast.get_all_exprs() | std::views::transform(to_static_expression) },
-              staging{ tag_info },
-              fci{ ast.get_capture_info() },
-              empty_match_possible{ ast.empty_match_possible() } {}
+            : root_idx{ ast.root_idx() }
+            , tag_count{ ast.tag_count() }
+            , exprs{ ast.get_all_exprs() | std::views::transform(to_static_expression) }
+            , staging{ tag_info }
+            , fci{ ast.get_capture_info() }
+            , empty_match_possible{ ast.empty_match_possible() } {}
 
         [[nodiscard]] consteval static_match_result_info make_match_result_info() const
         {
@@ -218,7 +218,7 @@ namespace rx::detail
         expr_tree ast{ pattern, p };
         ast.simplify_counted_repeat();
         ast.optimise_exact_repeat();
-        auto tag_info{ ast.tag_to_register() };
+        auto tag_info = ast.tag_to_register();
 
         return tree_info{ ast, tag_info };
     }
@@ -281,7 +281,7 @@ namespace rx::detail
                         if (v == end_of_input_tag)
                             vec.emplace_back(k);
                     std::ranges::sort(vec);
-                    auto [it, _]{ std::ranges::unique(vec) };
+                    auto [it, _] = std::ranges::unique(vec);
                     vec.erase(it, vec.end());
                     return std::define_static_array(vec);
                 }();
@@ -330,10 +330,10 @@ namespace rx::detail
 
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_str>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_str>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto str{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_str>] :] };
+            static constexpr auto str = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_str>] :];
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
@@ -401,14 +401,14 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_class>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::char_class>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto cla{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_class>] :] };
+            static constexpr auto cla = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::char_class>] :];
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (std::same_as<char_type, char> or std::same_as<char_type, char32_t>)
+                requires (std::same_as<char_type, char> or std::same_as<char_type, char32_t>)
             {
                 if constexpr (Fwd)
                 {
@@ -434,7 +434,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& /* res */, staging_info<I>& /* si */, const I /* first */, const S /* last */, I& /* it */)
-            requires (not std::same_as<char_type, char> and not std::same_as<char_type, char32_t>)
+                requires (not std::same_as<char_type, char> and not std::same_as<char_type, char32_t>)
             {
                 // using uct = decltype(cla)::underlying_char_type;
 
@@ -459,18 +459,18 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::alt>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::alt>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto alt{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::alt>] :] };
+            static constexpr auto alt = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::alt>] :];
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator() (result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (not alt.idxs.empty())
+                requires (not alt.idxs.empty())
             {
                 template for (constexpr std::size_t Next : alt.idxs | std::views::take(alt.idxs.size() - 1))
                 {
-                    if (auto saved_it{ it }; state<Fwd, Next, Cont...>::operator()(res, si, first, last, it))
+                    if (auto saved_it = it; state<Fwd, Next, Cont...>::operator()(res, si, first, last, it))
                         return true;
                     else
                         it = saved_it;
@@ -481,17 +481,17 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator() (result<I>& /* res */, const I /* first */, const S /* last */, I& /* it */)
-            requires (alt.idxs.empty())
+                requires (alt.idxs.empty())
             {
                 return false;
             }
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::concat>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::concat>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto cat{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::concat>] :] };
+            static constexpr auto cat = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::concat>] :];
 
             template<typename T> struct helper {};
             template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
@@ -517,7 +517,7 @@ namespace rx::detail
                     return substitute(^^std::index_sequence, vec);
                 }() :];
 
-                // constexpr auto [...Next]{ next_sequence_t{} };
+                // constexpr auto [...Next] = next_sequence_t{};
 
                 // [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
 
@@ -527,10 +527,10 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::repeat>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::repeat>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto rep{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::repeat>] :] };
+            static constexpr auto rep = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::repeat>] :];
 
             // TEMPORARY: TODO: REMOVE
             template<typename T> struct helper {};
@@ -539,14 +539,14 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == rep.max)
+                requires (rep.min == rep.max)
             {
                 using next_sequence_t = [: [] consteval {
                     std::vector vec(rep.min, std::meta::reflect_constant(rep.idx));
                     return substitute(^^std::index_sequence, vec);
                 }() :];
 
-                // constexpr auto [...Next]{ next_sequence_t{} };
+                // constexpr auto [...Next] = next_sequence_t{};
 
                 // [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
 
@@ -559,9 +559,9 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::greedy)
+                requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::greedy)
             {
-                if (auto saved_it{ it }; state<Fwd, rep.idx, Expr, Cont...>::operator()(res, si, first, last, it))
+                if (auto saved_it = it; state<Fwd, rep.idx, Expr, Cont...>::operator()(res, si, first, last, it))
                     return true;
                 else
                     it = saved_it;
@@ -571,9 +571,9 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::lazy)
+                requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::lazy)
             {
-                if (auto saved_it{ it }; state<Fwd, Cont...>::operator()(res, si, first, last, it))
+                if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                     return true;
                 else
                     it = saved_it;
@@ -583,11 +583,11 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::possessive)
+                requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::possessive)
             {
                 while (true)
                 {
-                    if (auto saved_it{ it }; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
+                    if (auto saved_it = it; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
                     {
                         it = saved_it;
                         break;
@@ -599,9 +599,9 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::greedy)
+                requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::greedy)
             {
-                if (auto saved_it{ it }; state<Fwd, rep.idx, Cont...>::operator()(res, si, first, last, it))
+                if (auto saved_it = it; state<Fwd, rep.idx, Cont...>::operator()(res, si, first, last, it))
                     return true;
                 else
                     it = saved_it;
@@ -611,9 +611,9 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::lazy)
+                requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::lazy)
             {
-                if (auto saved_it{ it }; state<Fwd, Cont...>::operator()(res, si, first, last, it))
+                if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                     return true;
                 else
                     it = saved_it;
@@ -623,9 +623,9 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::possessive)
+                requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::possessive)
             {
-                if (auto saved_it{ it }; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
+                if (auto saved_it = it; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
                     it = saved_it;
 
                 [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
@@ -633,42 +633,42 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::assertion>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::assertion>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto asr{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::assertion>] :] };
+            static constexpr auto asr = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::assertion>] :];
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S  /* last */, const I it)
-            requires (asr.type == assert_type::text_start)
+                requires (asr.type == assert_type::text_start)
             {
                 return (it == first);
             }
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool check_impl(const I  /* first */, const S last, const I it)
-            requires (asr.type == assert_type::text_end)
+                requires (asr.type == assert_type::text_end)
             {
                 return (it == last);
             }
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S  /* last */, const I it)
-            requires (asr.type == assert_type::line_start)
+                requires (asr.type == assert_type::line_start)
             {
                 return (it == first or *std::ranges::prev(it) == '\n');
             }
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool check_impl(const I  /* first */, const S last, const I it)
-            requires (asr.type == assert_type::line_end)
+                requires (asr.type == assert_type::line_end)
             {
                 return (it == last or *it == '\n');
             }
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
-            requires (asr.type == assert_type::ascii_word_boundary)
+                requires (asr.type == assert_type::ascii_word_boundary)
             {
                 static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
@@ -682,7 +682,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
-            requires (asr.type == assert_type::not_ascii_word_boundary)
+                requires (asr.type == assert_type::not_ascii_word_boundary)
             {
                 static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
@@ -706,17 +706,17 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::backref>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::backref>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto bref{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::backref>] :] };
+            static constexpr auto bref = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::backref>] :];
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
             {
                 static_assert(bref.number < result<I>::submatch_count, "Backreference to non-existent submatch");
 
-                const auto submatch{ force_get<bref.number>(res) };
+                const auto submatch = force_get<bref.number>(res);
 
                 if (not submatch.matched())
                     return false;
@@ -728,7 +728,7 @@ namespace rx::detail
                         if (static_cast<std::size_t>(std::ranges::distance(it, last)) < submatch.size())
                             return false;
 
-                        auto submatch_it{ submatch.begin() };
+                        auto submatch_it = submatch.begin();
                         int mismatch{ false };  /* encourage vectorisation */
                         for (std::size_t i{ 0 }, i_end{ submatch.size() }; i < i_end; ++i)
                             mismatch |= (it[i] != submatch_it[i]);
@@ -758,7 +758,7 @@ namespace rx::detail
 
                         std::ranges::advance(it, -static_cast<std::ptrdiff_t>(submatch.size()));
 
-                        auto submatch_it{ submatch.begin() };
+                        auto submatch_it = submatch.begin();
                         int mismatch{ false };  /* encourage vectorisation */
                         for (std::size_t i{ 0 }, i_end{ submatch.size() }; i < i_end; ++i)
                             mismatch |= (it[i] != submatch_it[i]);
@@ -786,14 +786,14 @@ namespace rx::detail
         };
 
         template<bool Fwd, std::size_t Expr, std::size_t... Cont>
-        requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::tag>)
+            requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::tag>)
         struct state<Fwd, Expr, Cont...>
         {
-            static constexpr auto tag{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::tag>] :] };
+            static constexpr auto tag = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::tag>] :];
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (ast.staging.contains(tag.number))
+                requires (ast.staging.contains(tag.number))
             {
                 si.reg[get_staging_index(tag.number)] = it;
 
@@ -802,7 +802,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (not ast.staging.contains(tag.number))
+                requires (not ast.staging.contains(tag.number))
             {
                 static_assert(tag.number < res.reg_.size());
 
@@ -812,7 +812,7 @@ namespace rx::detail
                         if (v == tag.number)
                             vec.emplace_back(k);
                     std::ranges::sort(vec);
-                    auto [it, _]{ std::ranges::unique(vec) };
+                    auto [it, _] = std::ranges::unique(vec);
                     vec.erase(it, vec.end());
                     return std::define_static_array(vec);
                 }();
@@ -853,7 +853,7 @@ namespace rx::detail
                             res.enabled_[tagnum] = true;
                 }
 
-                if (auto saved_it{ it }; state<Fwd, Cont...>::operator()(res, si, first, last, it))
+                if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                     return true;
                 else
                     it = saved_it;
@@ -883,7 +883,7 @@ namespace rx::detail
         // requires (Expr < ast.exprs.size() and ast.exprs[Expr].index == ast_index<typename ast_t::special>)
         // struct state<Fwd, Expr, Cont...>
         // {
-        //     static constexpr auto spg{ ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::special>] :] };
+        //     static constexpr auto spg = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::special>] :];
 
         //     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         //     [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
@@ -901,7 +901,7 @@ namespace rx::detail
         //     {
         //         static constexpr bool required_result{ spg.mode == special_group_mode::negative_lookahead };
 
-        //         if (auto it_copy{ it }; state<true, spg.idx>(res, first, last, it_copy) == required_result)
+        //         if (auto it_copy = it; state<true, spg.idx>(res, first, last, it_copy) == required_result)
         //             return false;
 
         //         [[clang::musttail]] return state<Fwd, Cont...>(res, first, last, it);
@@ -913,7 +913,7 @@ namespace rx::detail
         //     {
         //         static constexpr bool required_result{ spg.mode == special_group_mode::negative_lookbehind };
 
-        //         if (auto it_copy{ it }; state<false, spg.idx>(res, first, last, it_copy) == required_result)
+        //         if (auto it_copy = it; state<false, spg.idx>(res, first, last, it_copy) == required_result)
         //             return false;
 
         //         [[clang::musttail]] return state<Fwd, Cont...>(res, first, last, it);
@@ -972,7 +972,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr auto operator()(const I first, const S last)
-            requires (Full)
+                requires (Full)
             {
                 result<I> res{ first };
                 staging_info<I> si{};
@@ -989,7 +989,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr auto operator()(const I first, const S last)
-            requires (not Full)
+                requires (not Full)
             {
                 result<I> res{ first };
                 staging_info<I> si{};
@@ -1078,7 +1078,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr auto operator()(const I first, const S last, I continue_from)
-            requires (not Single)
+                requires (not Single)
             {
                 return outer_state(first, last, continue_from);
             }
@@ -1094,7 +1094,7 @@ namespace rx::detail
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr auto operator()(const I first, const S last, I continue_from, match_non_empty_t)
-            requires (not Single)
+                requires (not Single)
             {
                 if constexpr (ast.empty_match_possible)
                     return non_empty_outer_state(first, last, continue_from);
@@ -1138,7 +1138,7 @@ namespace rx::detail
     struct p1306_naive_adaptor : public [: p1306_naive_impl<Pattern>::get_matcher(Flags) :] {};
 
     template<string_literal Pattern, fsm_flags Flags>
-    requires (Flags.return_bool)
+        requires (Flags.return_bool)
     struct p1306_naive_adaptor<Pattern, Flags>
     {
         using underlying = p1306_naive_adaptor<Pattern, [](fsm_flags f) consteval { f.return_bool = false; return f; }(Flags)>;

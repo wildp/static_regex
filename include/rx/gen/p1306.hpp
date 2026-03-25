@@ -121,7 +121,7 @@ namespace rx::detail
             {
                 if (fallback_state == pair.first)
                 {
-                    static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
+                    static constexpr auto fni = dfa_t::value.final_nodes.at(pair.first);
                     set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, fallback_it);
                     return;
                 }
@@ -148,9 +148,9 @@ namespace rx::detail
                     }
                 }
 
-                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
                 {
-                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                    if constexpr (static constexpr auto* fbn = dfa_t::value.fallback_nodes.at_if(DFAState); Flags.enable_fallback and fbn != nullptr)
                     {
                         set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, it);
                         return;
@@ -159,9 +159,9 @@ namespace rx::detail
             }
             else
             {
-                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
                 {
-                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                    if constexpr (static constexpr auto* fbn = dfa_t::value.fallback_nodes.at_if(DFAState); Flags.enable_fallback and fbn != nullptr)
                         set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, it);
                     else
                         set_final_info<fn->op_index, fn->final_offset>(res, it);
@@ -191,9 +191,9 @@ namespace rx::detail
                 }
             }
 
-            if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+            if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
             {
-                if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                if constexpr (static constexpr auto* fbn = dfa_t::value.fallback_nodes.at_if(DFAState); Flags.enable_fallback and fbn != nullptr)
                 {
                     set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, it);
                     return;
@@ -214,7 +214,7 @@ namespace rx::detail
 
     public:
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
         {
             result<I> res{ first };
@@ -223,9 +223,9 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
-        requires result<I>::has_continue
+            requires result<I>::has_continue
         {
             result<I> res{ first };
 
@@ -242,9 +242,9 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
-        requires (Flags.maybe_no_empty)
+            requires (Flags.maybe_no_empty)
         {
             result<I> res{ first };
             if constexpr (never_empty)
@@ -255,9 +255,9 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
-        requires result<I>::has_continue and (Flags.maybe_no_empty)
+            requires result<I>::has_continue and (Flags.maybe_no_empty)
         {
             result<I> res{ first };
 
@@ -379,7 +379,7 @@ namespace rx::detail
             {
                 if (fallback_state == pair.first)
                 {
-                    static constexpr auto fni{ dfa_t::value.final_nodes.at(pair.first) };
+                    static constexpr auto fni = dfa_t::value.final_nodes.at(pair.first);
                     set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(res, gen, fallback_it);
                     return true;
                 }
@@ -408,9 +408,9 @@ namespace rx::detail
                     }
                 }
 
-                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
                 {
-                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                    if constexpr (static constexpr auto* fbn = dfa_t::value.fallback_nodes.at_if(DFAState); Flags.enable_fallback and fbn != nullptr)
                     {
                         set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
                         return true;
@@ -419,9 +419,9 @@ namespace rx::detail
             }
             else
             {
-                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
                 {
-                    if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                    if constexpr (static constexpr auto* fbn = dfa_t::value.fallback_nodes.at_if(DFAState); Flags.enable_fallback and fbn != nullptr)
                         set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
                     else
                         set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
@@ -453,9 +453,9 @@ namespace rx::detail
                 }
             }
 
-            if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+            if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
             {
-                if constexpr (static constexpr auto* fbn{ dfa_t::value.fallback_nodes.at_if(DFAState) }; Flags.enable_fallback and fbn != nullptr)
+                if constexpr (static constexpr auto* fbn = dfa_t::value.fallback_nodes.at_if(DFAState); Flags.enable_fallback and fbn != nullptr)
                 {
                     set_fallback_info<fn->op_index, fn->final_offset, fbn->continue_at>(res, gen, it);
                     return true;
@@ -493,7 +493,7 @@ namespace rx::detail
             }
             else
             {
-                if constexpr (static constexpr auto* fn{ dfa_t::value.final_nodes.at_if(DFAState) }; fn != nullptr)
+                if constexpr (static constexpr auto* fn = dfa_t::value.final_nodes.at_if(DFAState); fn != nullptr)
                 {
                     set_final_info<fn->op_index, fn->final_offset>(res, gen, it);
                     if constexpr (result<I>::has_match_start)
@@ -511,7 +511,7 @@ namespace rx::detail
 
     public:
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
         {
             result<I> res{ first };
@@ -522,9 +522,9 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
-        requires result<I>::has_continue
+            requires result<I>::has_continue
         {
             result<I> res{ first };
             gen_info gen{};
@@ -543,9 +543,9 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
-        requires (Flags.maybe_no_empty)
+            requires (Flags.maybe_no_empty)
         {
             result<I> res{ first };
             gen_info gen{};
@@ -560,9 +560,9 @@ namespace rx::detail
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
-        requires result<I>::has_continue and (Flags.maybe_no_empty)
+            requires result<I>::has_continue and (Flags.maybe_no_empty)
         {
             result<I> res{ first };
             gen_info gen{};
@@ -586,7 +586,7 @@ namespace rx::detail
 
 
     template<string_literal Pattern, fsm_flags Flags>
-    requires (Flags.return_bool)
+        requires (Flags.return_bool)
     struct p1306_matcher<Pattern, Flags>
     {
         using dfa_t = compiled_dfa<Pattern, Flags>;
@@ -600,7 +600,7 @@ namespace rx::detail
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool fallback(I /* it */, const S /* last */, std::size_t fallback_state)
-        requires (Flags.enable_fallback)
+            requires (Flags.enable_fallback)
         {
             if (fallback_state == fallback_disabled)
                 return false;
@@ -681,27 +681,27 @@ namespace rx::detail
 
     public:
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr bool operator()(const I first, const S last)
         {
             return state<dfa_t::value.match_start>(first, last, fallback_disabled);
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, match_non_empty_t) = delete;
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) = delete;
     };
 
     template<string_literal Pattern, fsm_flags Flags>
-    requires (Flags.return_bool)
+        requires (Flags.return_bool)
     struct p1306_searcher<Pattern, Flags>
     {
         static_assert(Flags.is_search);
@@ -735,22 +735,22 @@ namespace rx::detail
 
     public:
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr bool operator()(const I first, const S last)
         {
             return outer_state<dfa_t::value.match_start>(first, last);
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at) = delete;
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, match_non_empty_t) = delete;
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+            requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         static constexpr bool operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) = delete;
     };
 }

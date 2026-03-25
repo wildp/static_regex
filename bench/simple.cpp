@@ -6,21 +6,21 @@
 template<typename Matcher>
 static void BM_ctre_match(benchmark::State& state, Matcher m, const std::string_view input)
 {
-   for (auto _ : state)
-   {
-      auto result{ m.match(input) };
-      benchmark::DoNotOptimize(result);
-   }
+    for (auto _ : state)
+    {
+        auto result = m.match(input);
+        benchmark::DoNotOptimize(result);
+    }
 }
 
 template<typename Matcher>
 static void BM_rx_match(benchmark::State& state, Matcher m, const std::string_view input)
 {
-   for (auto _ : state)
-   {
-      auto result{ m.match(input) };
-      benchmark::DoNotOptimize(result);
-   }
+    for (auto _ : state)
+    {
+        auto result = m.match(input);
+        benchmark::DoNotOptimize(result);
+    }
 }
 
 using namespace rx::literals;

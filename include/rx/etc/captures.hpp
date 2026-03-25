@@ -51,8 +51,8 @@ namespace rx::detail
             if (cap == 0)
                 throw std::invalid_argument("capture_info::insert: cannot insert capture with number 0");
 
-            const auto key_it{ std::ranges::upper_bound(keys_, cap) };
-            const auto value_it{ values_.begin() + (key_it - keys_.begin()) };
+            const auto key_it = std::ranges::upper_bound(keys_, cap);
+            const auto value_it = values_.begin() + (key_it - keys_.begin());
 
             keys_.emplace(key_it, cap);
             values_.emplace(value_it, pair_entry{ .tag_number = lhs, .offset = 0 }, pair_entry{ .tag_number = rhs, .offset = 0 });
@@ -65,8 +65,8 @@ namespace rx::detail
 
         [[nodiscard]] constexpr capture_number_t capture_count() const
         {
-            auto key_copy{ keys_ };
-            auto [last, _]{ std::ranges::unique(key_copy) };
+            auto key_copy = keys_;
+            auto [last, _] = std::ranges::unique(key_copy);
             return std::saturate_cast<capture_number_t>(last - key_copy.begin());
         }
 
@@ -87,7 +87,7 @@ namespace rx::detail
 
         [[nodiscard]] constexpr auto lookup(capture_number_t cap) const
         {
-            auto [key_beg, key_end]{ std::ranges::equal_range(keys_, cap) };
+            auto [key_beg, key_end] = std::ranges::equal_range(keys_, cap);
 
             return std::ranges::subrange{
                 values_.begin() + (key_beg - keys_.begin()),
@@ -105,13 +105,13 @@ namespace rx::detail
 
             for (auto& val : values_)
             {
-                if (auto it{ map.find(val.first.tag_number) }; it != map.end())
+                if (auto it = map.find(val.first.tag_number); it != map.end())
                 {
                     val.first.offset += it->second.offset;
                     val.first.tag_number = it->second.tag_number;
                 }
 
-                if (auto it{ map.find(val.second.tag_number) }; it != map.end())
+                if (auto it = map.find(val.second.tag_number); it != map.end())
                 {
                     val.second.offset += it->second.offset;
                     val.second.tag_number = it->second.tag_number;
@@ -124,7 +124,7 @@ namespace rx::detail
             set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::first)));
             set.append_range(values_ | std::views::transform(compose(&pair_entry::tag_number, &tag_pair_t::second)));
             std::ranges::sort(set);
-            auto [tmp_beg, tmp_end]{ std::ranges::unique(set) };
+            auto [tmp_beg, tmp_end] = std::ranges::unique(set);
             set.erase(tmp_beg, tmp_end);
             std::erase_if(set, [](tag_number_t n) { return n < 0; });
 
@@ -133,10 +133,10 @@ namespace rx::detail
 
             for (auto& val : values_)
             {
-                if (auto it{ remapper.find(val.first.tag_number) }; it != remapper.end())
+                if (auto it = remapper.find(val.first.tag_number); it != remapper.end())
                     val.first.tag_number = it->second;
 
-                if (auto it{ remapper.find(val.second.tag_number) }; it != remapper.end())
+                if (auto it = remapper.find(val.second.tag_number); it != remapper.end())
                     val.second.tag_number = it->second;
             }
 
@@ -149,7 +149,7 @@ namespace rx::detail
 
             for (std::size_t i{ 1 }, i_end{ keys_.size() }; i < i_end; ++i)
             {
-                const auto capnum{ keys_.at(i - 1) };
+                const auto capnum = keys_.at(i - 1);
 
                 if (keys_.at(i) != capnum)
                     continue;
@@ -157,8 +157,8 @@ namespace rx::detail
                 if (values_[i - 1].first.offset != 0 or values_[i - 1].first.offset != 0)
                     throw std::logic_error("capture_info::get_multitags: tags already optimised");
 
-                const auto first_target{ values_[i - 1].first.tag_number };
-                const auto second_target{ values_[i - 1].second.tag_number };
+                const auto first_target = values_[i - 1].first.tag_number;
+                const auto second_target = values_[i - 1].second.tag_number;
 
                 result.emplace(values_[i].first.tag_number, first_target);
                 result.emplace(values_[i].second.tag_number, second_target);
@@ -178,9 +178,9 @@ namespace rx::detail
                 };
             }
 
-            auto zv{ std::views::zip(keys_, values_) };
-            auto [it, _]{ std::ranges::unique(zv, {}, [](const auto& v) -> decltype(auto) { return get<0>(v); }) };
-            auto dist{ std::ranges::distance(std::ranges::begin(zv), it) };
+            auto zv = std::views::zip(keys_, values_);
+            auto [it, _] = std::ranges::unique(zv, {}, [](const auto& v) -> decltype(auto) { return get<0>(v); });
+            auto dist = std::ranges::distance(std::ranges::begin(zv), it);
             keys_.erase(keys_.begin() + dist, keys_.end());
             values_.erase(values_.begin() + dist, values_.end());
 

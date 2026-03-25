@@ -46,8 +46,8 @@ namespace rx::detail
     constexpr auto tagged_nfa<CharT>::node_copy(const state_t q) -> state_t
     {
         const state_t p{ nodes_.size() };
-        auto& new_n{ nodes_.emplace_back() };
-        const auto& old_n{ nodes_.at(q) };
+        auto& new_n = nodes_.emplace_back();
+        const auto& old_n = nodes_.at(q);
 
         new_n.is_final = old_n.is_final;
         new_n.is_fallback = old_n.is_fallback;
@@ -84,7 +84,7 @@ namespace rx::detail
 
     template<typename CharT>
     template<typename CharSet>
-    requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
+        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharSet&& cs)
     {
         transition_create(q0, qf, std::in_place_type<normal_tr>, std::forward<CharSet>(cs));
@@ -92,7 +92,7 @@ namespace rx::detail
 
     template<typename CharT>
     template<typename T>
-    requires one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>
+        requires one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */)
     {
         using type = std::conditional_t<std::same_as<T, tnfa::assert_category::eof_tag_t>, eof_anchor_tr, sof_anchor_tr>;
@@ -102,7 +102,7 @@ namespace rx::detail
 
     template<typename CharT>
     template<typename T, typename CharSet>
-    requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
+        requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
              and std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */, CharSet&& cs)
     {
@@ -152,19 +152,19 @@ namespace rx::detail
 
         while (not stack.empty())
         {
-            auto [q0, qf, idx]{ stack.back() };
+            auto [q0, qf, idx] = stack.back();
             stack.pop_back();
 
-            const auto& entry{ ast.get_expr(idx) };
+            const auto& entry = ast.get_expr(idx);
 
             switch (entry.index())
             {
             case ast_index<typename ast_t::char_str>:
-                if (const auto& str{ get<typename ast_t::char_str>(entry) }; not str.data.empty())
+                if (const auto& str = get<typename ast_t::char_str>(entry); not str.data.empty())
                 {
                     for (const auto c : str.data | std::views::take(str.data.size() - 1))
                     {
-                        auto qi{ node_create() };
+                        auto qi = node_create();
                         make_transition(q0, qi, c);
                         q0 = qi;
                     }
@@ -179,7 +179,7 @@ namespace rx::detail
 
             case ast_index<typename ast_t::char_class>:
             {
-                const auto& cla{ get<typename ast_t::char_class>(entry) };
+                const auto& cla = get<typename ast_t::char_class>(entry);
                 // using uct = decltype(cla)::underlying_char_type;
 
                 if constexpr (char_is_utf8<char_type>)
@@ -205,7 +205,7 @@ namespace rx::detail
             }
 
             case ast_index<typename ast_t::concat>:
-                if (const auto& cat{ get<typename ast_t::concat>(entry) }; not cat.idxs.empty())
+                if (const auto& cat = get<typename ast_t::concat>(entry); not cat.idxs.empty())
                 {
                     for (const auto i : cat.idxs | std::views::take(cat.idxs.size() - 1))
                     {
@@ -223,7 +223,7 @@ namespace rx::detail
                 break;
 
             case ast_index<typename ast_t::alt>:
-                if (const auto& alt{ get<typename ast_t::alt>(entry) }; not alt.idxs.empty())
+                if (const auto& alt = get<typename ast_t::alt>(entry); not alt.idxs.empty())
                 {
                     if (tag_vec.empty() or tag_vec.at(idx).empty())
                     {
@@ -262,7 +262,7 @@ namespace rx::detail
                                     std::ranges::copy(tag_vec.at(alt.idxs.at(j)), std::back_inserter(remaining_ntags));
 
                                 std::ranges::sort(remaining_ntags);
-                                auto [_, last]{ std::ranges::unique(remaining_ntags) };
+                                auto [_, last] = std::ranges::unique(remaining_ntags);
                                 remaining_ntags.erase(last, remaining_ntags.end());
 
                                 make_ntags(p2, qf, remaining_ntags);
@@ -280,7 +280,7 @@ namespace rx::detail
 
             case ast_index<typename ast_t::repeat>:
             {
-                const auto& rep{ get<typename ast_t::repeat>(entry) };
+                const auto& rep = get<typename ast_t::repeat>(entry);
 
                 if (rep.mode == repeater_mode::possessive)
                     throw tnfa_error("Possessive repetition is unimplemented");
@@ -368,7 +368,7 @@ namespace rx::detail
             case ast_index<typename ast_t::tag>:
             {
                 /* in tree_expr tags start at 0, whereas here they start at 1 */
-                const auto& tag_entry{ get<typename ast_t::tag>(entry) };
+                const auto& tag_entry = get<typename ast_t::tag>(entry);
                 make_epsilon(q0, qf, 0, tag_entry.number + 1);
                 break;
             }
@@ -493,8 +493,8 @@ namespace rx::detail
 
             for (const tr_index i : std::invoke(node_proj, get_node(current)) | std::views::reverse)
             {
-                const auto& tr{ get_tr(i) };
-                const auto val{ std::invoke(tr_proj, tr) };
+                const auto& tr = get_tr(i);
+                const auto val = std::invoke(tr_proj, tr);
 
                 if constexpr (requires { { std::invoke(pred, tr, i) } -> std::convertible_to<bool>; })
                 {
@@ -552,7 +552,7 @@ namespace rx::detail
         initial_nodes.append_range(cont_info_ | std::views::transform(&tnfa::continue_info<CharT>::value));
         initial_nodes.append_range(additional_cont_);
 
-        const auto reachable_nodes{ epsilon_closure<false>(std::move(initial_nodes), tnfa::reachable_predicate{}) };
+        const auto reachable_nodes = epsilon_closure<false>(std::move(initial_nodes), tnfa::reachable_predicate{});
 
         /* determine live states */
 
@@ -562,17 +562,17 @@ namespace rx::detail
             if (nodes_[q].is_final)
                 final_nodes.emplace_back(q);
 
-        const auto live_nodes{ backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::reachable_predicate{}) };
+        const auto live_nodes = backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::reachable_predicate{});
 
         /* remove transitions containing dead and unreachable nodes */
 
-        const auto live_and_reachable{ live_nodes & reachable_nodes };
+        const auto live_and_reachable = live_nodes & reachable_nodes;
 
         bitset_t removed_transitions(transitions_.size(), false);
 
         for (tr_index i{ 0 }, i_end{ transitions_.size() }; i < i_end; ++i)
         {
-            auto& tr{ transitions_[i] };
+            auto& tr = transitions_[i];
 
             if (tr.src == std::numeric_limits<state_t>::max() or tr.dst == std::numeric_limits<state_t>::max())
                 continue;
@@ -614,7 +614,7 @@ namespace rx::detail
             return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookbehind_1_tr>(tr.type);
         };
 
-        const auto ec{ epsilon_closure({ start_node() }, pred) };
+        const auto ec = epsilon_closure({ start_node() }, pred);
 
         /* create a copy of the start node's e-closure */
 
@@ -622,7 +622,7 @@ namespace rx::detail
 
         for (const state_t q : ec)
         {
-            if (const auto& node{ get_node(q) }; node.is_final)
+            if (const auto& node = get_node(q); node.is_final)
                 mapped_states[q] = q; /* do not create duplicate final nodes */
             else
                 mapped_states[q] = node_copy(q);
@@ -638,7 +638,7 @@ namespace rx::detail
             for (const tr_index i : nodes_.at(q).out_tr)
             {
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                const auto& tr{ get_tr(i) };
+                const auto& tr = get_tr(i);
 
                 if (holds_alternative<normal_tr>(tr.type))
                 {
@@ -669,7 +669,7 @@ namespace rx::detail
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
-            auto& tr{ transitions_[i] };
+            auto& tr = transitions_[i];
 
             if (not holds_alternative<sof_anchor_tr>(tr.type))
                 continue;
@@ -695,14 +695,14 @@ namespace rx::detail
             return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookahead_1_tr>(tr.type);
         };
 
-        const auto bec{ backwards_epsilon_closure<false>({ default_final_node }, pred) };
+        const auto bec = backwards_epsilon_closure<false>({ default_final_node }, pred);
 
         std::vector<state_t> initial;
         std::vector<tr_index> to_revisit;
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
-            const auto& tr{ transitions_[i] };
+            const auto& tr = transitions_[i];
 
             if (not holds_alternative<eof_anchor_tr>(tr.type))
                 continue;
@@ -713,7 +713,7 @@ namespace rx::detail
                 initial.emplace_back(tr.dst);
         }
 
-        const auto ec{ epsilon_closure(std::move(initial), pred) };
+        const auto ec = epsilon_closure(std::move(initial), pred);
 
         /* create copy of the e-closures  */
 
@@ -721,7 +721,7 @@ namespace rx::detail
 
         for (const state_t q : ec)
         {
-            if (const auto& node{ get_node(q) }; node.is_final)
+            if (const auto& node = get_node(q); node.is_final)
             {
                 if (node.is_fallback)
                 {
@@ -750,7 +750,7 @@ namespace rx::detail
             for (const tr_index i : nodes_.at(q).out_tr)
             {
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                const auto& tr{ get_tr(i) };
+                const auto& tr = get_tr(i);
 
                 if (holds_alternative<normal_tr>(tr.type))
                 {
@@ -773,12 +773,12 @@ namespace rx::detail
 
         for (const tr_index i : to_revisit)
         {
-            auto& tr{ transitions_.at(i) };
+            auto& tr = transitions_.at(i);
 
-            if (auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
+            if (auto it = mapped_states.find(tr.dst); it != mapped_states.end())
             {
                 /* remap rhs and replace with e-transition */
-                const auto [q, p]{ *it };
+                const auto [q, p] = *it;
                 tr.type.template emplace<tnfa::epsilon_tr>(0, 0);
 
                 if (q != p)
@@ -809,8 +809,8 @@ namespace rx::detail
 
         for (tr_index i{ 0 }; i < transitions_.size(); ++i)
         {
-            const auto& tr{ transitions_[i] };
-            if (const auto* ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
+            const auto& tr = transitions_[i];
+            if (const auto* ptr = get_if<lookahead_1_tr>(&tr.type); ptr != nullptr)
                 sc_transitions[ptr->cs].emplace_back(i);
         }
 
@@ -824,16 +824,15 @@ namespace rx::detail
         {
             outer_visit.emplace_back(
                 edge,
-                std::vector<state_t>{
-                    std::from_range,
-                    tr_vec | std::views::transform([this](const tr_index i) { return transitions_.at(i).dst; })
-                }
+                tr_vec
+                | std::views::transform([this](const tr_index i) { return transitions_.at(i).dst; })
+                | std::ranges::to<std::vector>()
             );
         }
 
         while (not outer_visit.empty())
         {
-            const auto edge{ std::move(outer_visit.back().first) };
+            const auto edge = std::move(outer_visit.back().first);
             std::vector tmp{ std::move(outer_visit.back().second) };
             outer_visit.pop_back();
 
@@ -846,7 +845,7 @@ namespace rx::detail
 
                 if (const auto* const ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                 {
-                    if (auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
+                    if (auto new_edge = edge & ptr->cs; not new_edge.empty() and new_edge != ptr->cs)
                     {
                         /* intersection with lookahead_1 transition requires a cloned subgraph */
                         outer_visit.emplace_back(std::move(new_edge), std::vector{ tr.dst });
@@ -858,11 +857,11 @@ namespace rx::detail
                 return true;
             };
 
-            const auto ec{ epsilon_closure(std::move(tmp), pred) };
+            const auto ec = epsilon_closure(std::move(tmp), pred);
 
 
             /* duplicate all nodes in each subgraph at most once */
-            auto& mapped_states{ all_mapped_states[edge] };
+            auto& mapped_states = all_mapped_states[edge];
             for (const state_t q : ec)
                 if (not mapped_states.contains(q)) /* probably inefficient */
                     mapped_states[q] = node_create();
@@ -876,16 +875,16 @@ namespace rx::detail
         {
             for (const auto [q, p] : mapped_states)
             {
-                if (const auto& node{ nodes_.at(q) }; node.is_final and node.is_fallback)
+                if (const auto& node = nodes_.at(q); node.is_final and node.is_fallback)
                 {
                     /* reminder: reference 'node' may be invalidated after calling node_create */
 
                     if (not offset_end.has_value())
                     {
                         /* create new offset end node */
-                        const auto saved_cont{ node.continue_at };
+                        const auto saved_cont = node.continue_at;
                         offset_end = node_create();
-                        auto& n{ nodes_.at(*offset_end) };
+                        auto& n = nodes_.at(*offset_end);
                         n.is_final = true;
                         n.is_fallback = true;
                         n.final_offset = 1;
@@ -898,18 +897,18 @@ namespace rx::detail
                 for (const tr_index i : nodes_.at(q).out_tr)
                 {
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                    const auto& tr{ get_tr(i) };
+                    const auto& tr = get_tr(i);
 
                     if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally transition from copied e-closure to main graph */
-                        if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                        if (auto new_edge = edge & ptr->cs; not new_edge.empty())
                             make_transition(p, tr.dst, std::move(new_edge));
                     }
                     else if (const auto* const ptr{ get_if<lookahead_1_tr>(&tr.type) }; ptr != nullptr)
                     {
                         /* conditionally e-transition between copied subgraphs */
-                        if (auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                        if (auto new_edge = edge & ptr->cs; not new_edge.empty())
                             make_epsilon(p, all_mapped_states.at(std::move(new_edge)).at(tr.dst));
                     }
                     else if (not holds_alternative<eof_anchor_tr>(tr.type))
@@ -925,14 +924,14 @@ namespace rx::detail
 
         for (const auto& [edge, tr_vec] : sc_transitions)
         {
-            const auto& mapped_states{ all_mapped_states.at(edge) };
+            const auto& mapped_states = all_mapped_states.at(edge);
             for (const tr_index i : tr_vec)
             {
-                auto& tr{ transitions_.at(i) };
+                auto& tr = transitions_.at(i);
 
                 /* assign the lowest priority to avoid clashes with eof_anchor */
                 using priority_t = decltype(epsilon_tr::priority);
-                const auto p{ std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz)) };
+                const auto p = std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz));
 
                 std::erase(nodes_.at(tr.dst).in_tr, i);
                 tr.dst = mapped_states.at(tr.dst);
@@ -965,7 +964,7 @@ namespace rx::detail
 
         std::vector<state_t> fallback_states;
         for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
-            if (const auto& node{ nodes_[q] }; node.is_final and node.is_fallback and not node.in_tr.empty())
+            if (const auto& node = nodes_[q]; node.is_final and node.is_fallback and not node.in_tr.empty())
                 fallback_states.emplace_back(q);
 
 
@@ -981,7 +980,7 @@ namespace rx::detail
             /* assign results here instead of using the normal return value */
             if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
             {
-                if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                if (const auto new_edge = edge & ptr->cs; not new_edge.empty())
                     lb.tr_into.emplace_back(i);
 
                 return false;
@@ -994,7 +993,7 @@ namespace rx::detail
             /* intersection with lookbehind_1 transition requires cloned subgraph */
             if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
             {
-                if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty() and new_edge != ptr->cs)
+                if (const auto new_edge = edge & ptr->cs; not new_edge.empty() and new_edge != ptr->cs)
                     lb.tr_between.emplace_back(i);
 
                 return false;
@@ -1004,11 +1003,11 @@ namespace rx::detail
         };
 
         static constexpr auto dedup_transitions_map = [](transition_map_t& map) static {
-            for (auto it{ map.begin() }, end{ map.end() }; it != end; ++it)
+            for (auto it = map.begin(), end{ map.end() }; it != end; ++it)
             {
-                auto& vec{ it->second };
+                auto& vec = it->second;
                 std::ranges::sort(vec);
-                const auto [first, last]{ std::ranges::unique(vec) };
+                const auto [first, last] = std::ranges::unique(vec);
                 vec.erase(first, last);
             }
         };
@@ -1024,14 +1023,14 @@ namespace rx::detail
 
         for (tr_index i{ 0 }, i_end{ transitions_.size() }; i < i_end; ++i)
         {
-            const auto& tr{ transitions_[i] };
-            const auto* ptr{ get_if<lookbehind_1_tr>(&tr.type) };
+            const auto& tr = transitions_[i];
+            const auto* ptr = get_if<lookbehind_1_tr>(&tr.type);
 
             if (ptr == nullptr)
                 continue;
 
-            auto [it, _]{ lb_closures.try_emplace(i) };
-            auto& lb{ it->second };
+            auto [it, _] = lb_closures.try_emplace(i);
+            auto& lb = it->second;
             std::vector bec{ backwards_epsilon_closure({ tr.src }, std::bind_front(search_predicate, std::ref(lb), std::cref(ptr->cs))) };
             // TODO: replace with static bind_front;
 
@@ -1085,11 +1084,11 @@ namespace rx::detail
         if (wraparound_lb_closure.has_value())
         {
             const auto fn = [this](const tr_index i) {
-                const auto& tr{ get_tr(i) };
+                const auto& tr = get_tr(i);
                 return std::cref(get<lookbehind_1_tr>(tr.type).cs);
             };
 
-            const std::vector refs{ std::from_range, wraparounds | std::views::transform(fn) };
+            const auto refs = wraparounds | std::views::transform(fn) | std::ranges::to<std::vector>();
             wrap_starts = charset_type::partition(refs);
             std::ranges::sort(wrap_starts);
         }
@@ -1098,7 +1097,7 @@ namespace rx::detail
         /* determine starts transitions */
 
         start_tr_map_t start_transitions;
-        std::vector to_visit{ std::from_range, sc_transitions };
+        std::vector to_visit(std::from_range, sc_transitions);
 
         if (wraparound_lb_closure.has_value())
         {
@@ -1108,11 +1107,11 @@ namespace rx::detail
             for (const auto& edge : wrap_starts)
             {
                 for (const tr_index i : wraparound_lb_closure->tr_into)
-                    if (auto new_edge{ edge & get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                    if (auto new_edge = edge & get<normal_tr>(get_tr(i).type).cs; not new_edge.empty())
                         start_transitions[i].try_emplace(std::move(new_edge));
 
                 for (const tr_index i : wraparound_lb_closure->tr_between)
-                    if (auto new_edge{ edge & get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                    if (auto new_edge = edge & get<lookbehind_1_tr>(get_tr(i).type).cs; not new_edge.empty() and new_edge != edge)
                         to_insert[std::move(new_edge)].emplace_back(i);
             }
 
@@ -1126,19 +1125,19 @@ namespace rx::detail
             const visit_type current{ std::move(to_visit.back()) };
             to_visit.pop_back();
 
-            const auto& [edge, idxs]{ current };
+            const auto& [edge, idxs] = current;
             transition_map_t to_insert;
 
             for (const tr_index lb_tr_index : idxs)
             {
-                const auto& lb{ lb_closures.at(lb_tr_index) };
+                const auto& lb = lb_closures.at(lb_tr_index);
 
                 for (const tr_index i : lb.tr_into)
-                    if (auto new_edge{ edge & get<normal_tr>(get_tr(i).type).cs }; not new_edge.empty())
+                    if (auto new_edge = edge & get<normal_tr>(get_tr(i).type).cs; not new_edge.empty())
                         start_transitions[i].try_emplace(std::move(new_edge));
 
                 for (const tr_index i : lb.tr_between)
-                    if (auto new_edge{ edge & get<lookbehind_1_tr>(get_tr(i).type).cs }; not new_edge.empty() and new_edge != edge)
+                    if (auto new_edge = edge & get<lookbehind_1_tr>(get_tr(i).type).cs; not new_edge.empty() and new_edge != edge)
                         to_insert[std::move(new_edge)].emplace_back(i);
             }
 
@@ -1167,7 +1166,7 @@ namespace rx::detail
 
                 for (std::size_t i{ 0 }, i_max{ wrap_starts.size() }; i < i_max; ++i)
                 {
-                    if (const auto& ws{ wrap_starts[i] }; (edge | ws) == ws)
+                    if (const auto& ws = wrap_starts[i]; (edge | ws) == ws)
                     {
                         cont_index = i;
                         break;
@@ -1177,7 +1176,7 @@ namespace rx::detail
                 return std::pair{ std::cref(edge), cont_index };
             };
 
-            const std::vector ref_pairs{ std::from_range, edges.keys() | std::views::transform(fn) };
+            const auto ref_pairs = edges.keys() | std::views::transform(fn) | std::ranges::to<std::vector>();
 
             for (auto&& [new_edge, vec] : charset_type::partition_ext(ref_pairs))
             {
@@ -1186,7 +1185,7 @@ namespace rx::detail
                     throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: vec.size() > 1");
 
                 if (vec.size() == 1)
-                    if (const auto [it, success]{ closure_wraparounds.try_emplace(new_edge, vec.front()) }; not success and it->second != vec.front())
+                    if (const auto [it, success] = closure_wraparounds.try_emplace(new_edge, vec.front()); not success and it->second != vec.front())
                         throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: new_edge already exists in closure_wraparounds with different value");
 
                 closure_starts[std::move(new_edge)].emplace_back(transitions_.at(i).dst);
@@ -1200,7 +1199,7 @@ namespace rx::detail
 
         for (auto&& [edge, initial_states] : closure_starts)
         {
-            auto& mapped_states{ all_mapped_states[edge] };
+            auto& mapped_states = all_mapped_states[edge];
 
             auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr) {
                 if (holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
@@ -1216,11 +1215,11 @@ namespace rx::detail
 
             /* set ec to be keys */
             std::ranges::sort(ec, mapped_states.key_comp());
-            const auto [first, last]{ std::ranges::unique(ec) };
+            const auto [first, last] = std::ranges::unique(ec);
             ec.erase(first, last);
 
             /* create new state for each state in ec; defer making nodes fallback to later */
-            std::vector new_states{ std::from_range, ec | std::views::transform([this](auto&&) { return node_create(); }) };
+            auto new_states = ec | std::views::transform([this](auto&&) { return node_create(); }) | std::ranges::to<std::vector>();
             mapped_states.replace(std::move(ec), std::move(new_states));
         }
 
@@ -1233,8 +1232,8 @@ namespace rx::detail
 
         for (const auto& edge : wrap_starts)
         {
-            const auto& mapped_states{ all_mapped_states.at(edge) };
-            const auto mapped_cont{ mapped_states.at(continue_state.value()) };
+            const auto& mapped_states = all_mapped_states.at(edge);
+            const auto mapped_cont = mapped_states.at(continue_state.value());
 
             if (cont_info_.size() >= std::numeric_limits<tnfa::continue_at_t>::max())
                 throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
@@ -1248,22 +1247,22 @@ namespace rx::detail
         {
             for (const auto& [edge, mapped_states] : all_mapped_states)
             {
-                auto it{ closure_wraparounds.find(edge) };
+                auto it = closure_wraparounds.find(edge);
 
                 if (it == closure_wraparounds.end())
                     continue;
 
-                const auto continue_at{ continue_ats.at(it->second) };
+                const auto continue_at = continue_ats.at(it->second);
 
                 for (const state_t qf : fallback_states)
                 {
-                    auto it2{ mapped_states.find(qf) };
+                    auto it2 = mapped_states.find(qf);
 
                     if (it2 == mapped_states.end())
                         continue;
 
-                    const auto& old_n{ nodes_.at(qf) };
-                    auto& new_n{ nodes_.at(it2->second) };
+                    const auto& old_n = nodes_.at(qf);
+                    auto& new_n = nodes_.at(it2->second);
 
                     new_n.is_final = old_n.is_final;
                     new_n.is_fallback = old_n.is_fallback;
@@ -1290,7 +1289,7 @@ namespace rx::detail
                 for (const tr_index i : nodes_.at(q).out_tr)
                 {
                     /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                    const auto& tr{ get_tr(i) };
+                    const auto& tr = get_tr(i);
 
                     if (const auto* const ptr{ get_if<normal_tr>(&tr.type) }; ptr != nullptr)
                     {
@@ -1306,9 +1305,9 @@ namespace rx::detail
                     }
                     else if (const auto* const ptr{ get_if<lookbehind_1_tr>(&tr.type) }; ptr != nullptr)
                     {
-                        if (const auto new_edge{ edge & ptr->cs }; not new_edge.empty())
+                        if (const auto new_edge = edge & ptr->cs; not new_edge.empty())
                         {
-                            if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
+                            if (const auto it = mapped_states.find(tr.dst); it != mapped_states.end())
                                 make_epsilon(p, it->second); /* continue within copied subgraph if possible  */
                             else
                                 make_epsilon(p, tr.dst); /* transition from copied subgraph back to main graph */
@@ -1317,7 +1316,7 @@ namespace rx::detail
                     else if (not holds_alternative<sof_anchor_tr>(tr.type))
                     {
                         /* transition within copied e-closure (if necessary) */
-                        if (const auto it{ mapped_states.find(tr.dst) }; it != mapped_states.end())
+                        if (const auto it = mapped_states.find(tr.dst); it != mapped_states.end())
                             make_copy(p, it->second, tr.type);
                     }
                 }
@@ -1338,13 +1337,13 @@ namespace rx::detail
                     if (not is_closure_start.at(i))
                         continue;
 
-                    auto& tr{ transitions_.at(i) };
+                    auto& tr = transitions_.at(i);
                     auto* const ptr{ get_if<normal_tr>(&tr.type) };
 
                     if (ptr == nullptr)
                         continue;
 
-                    auto new_edge{ edge & ptr->cs };
+                    auto new_edge = edge & ptr->cs;
 
                     /* remove edge from existing transition */
                     ptr->cs -= edge;
@@ -1362,12 +1361,12 @@ namespace rx::detail
         /* remove lookbehind_1 transitions and empty regular transitions */
 
         std::ranges::sort(to_remove);
-        const auto [new_end, old_end]{ std::ranges::unique(to_remove) };
+        const auto [new_end, old_end] = std::ranges::unique(to_remove);
         to_remove.erase(new_end, old_end);
 
         for (const tr_index i : to_remove)
         {
-            auto& tr{ transitions_.at(i) };
+            auto& tr = transitions_.at(i);
 
             /* delete transition */
             std::erase(nodes_.at(tr.src).out_tr, i);
@@ -1412,14 +1411,14 @@ namespace rx::detail
 
                     for (std::size_t o{ 0 }, o_max{ nodes_[q].final_offset }; o < o_max; ++o)
                     {
-                        const auto ec{ epsilon_closure(std::move(to_insert), tnfa::e_closure_predicate{}) };
+                        const auto ec = epsilon_closure(std::move(to_insert), tnfa::e_closure_predicate{});
                         to_insert.clear();
 
                         for (const state_t q : ec)
                         {
                             is_trailing_state.at(q) = true;
                             for (const tr_index i : nodes_.at(q).in_tr)
-                                if (const auto& tr{ get_tr(i) }; holds_alternative<normal_tr>(tr.type))
+                                if (const auto& tr = get_tr(i); holds_alternative<normal_tr>(tr.type))
                                     to_insert.emplace_back(tr.src);
                         }
                     }
@@ -1429,7 +1428,7 @@ namespace rx::detail
             }
         }
 
-        const auto bec{ backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::e_closure_predicate{}) };
+        const auto bec = backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::e_closure_predicate{});
 
 
         /* determine start and continue nodes that can result in an empty match */
@@ -1464,7 +1463,7 @@ namespace rx::detail
             for (const tr_index i : nodes_.at(q).out_tr)
             {
                 /* reminder: reference may be invalidated after one call to emplace_back (when transitions_ is resized) */
-                const auto& tr{ get_tr(i) };
+                const auto& tr = get_tr(i);
 
                 if (holds_alternative<normal_tr>(tr.type))
                 {
@@ -1485,13 +1484,13 @@ namespace rx::detail
 
         for (const auto& cont : cont_info_)
         {
-            if (const auto it{ mapped_states.find(cont.value) }; it != mapped_states.end())
+            if (const auto it = mapped_states.find(cont.value); it != mapped_states.end())
                 additional_cont_.emplace_back((*it).second);
             else
                 additional_cont_.emplace_back(cont.value);
         }
 
-        if (const auto it{ mapped_states.find(start_node_) }; it != mapped_states.end())
+        if (const auto it = mapped_states.find(start_node_); it != mapped_states.end())
             additional_cont_.emplace_back((*it).second);
         else
             additional_cont_.emplace_back(start_node_);
@@ -1505,7 +1504,7 @@ namespace rx::detail
     constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags)
         : capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
     {
-        auto& dfn{ nodes_.at(default_final_node) };
+        auto& dfn = nodes_.at(default_final_node);
         dfn.is_final = true;
         dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
 

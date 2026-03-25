@@ -49,7 +49,7 @@ namespace rx::detail
             : data_{ span.data() }, size_{ span.size() } {}
 
         template<typename R>
-        requires (std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, value_type> and not std::same_as<R, static_span>)
+            requires (std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, value_type> and not std::same_as<R, static_span>)
         consteval static_span(R&& r) noexcept
             : static_span(std::define_static_array(std::forward<R>(r))) {}
 
@@ -121,7 +121,7 @@ namespace rx::detail
 
         template<typename K, typename V, typename Cmp, typename KeyCont, typename MappedCont>
         consteval explicit static_map(const std::flat_map<K, V, Cmp, KeyCont, MappedCont>& map)
-            : data_{ std::vector<value_type>{ std::from_range, map } }, compare_{ map.key_comp() } {}
+            : data_{ std::vector<value_type>(std::from_range, map) }, compare_{ map.key_comp() } {}
 
         /* size and other observers */
         [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
@@ -141,7 +141,7 @@ namespace rx::detail
         /* element access */
         [[nodiscard]] constexpr const mapped_type& at(const key_type& x) const
         {
-            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            const auto it = std::ranges::lower_bound(data_, x, compare_, &element_type::first);
             if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
                 throw std::out_of_range("static_map::at");
             return it->second;
@@ -150,7 +150,7 @@ namespace rx::detail
         // TODO: replace with std::optional<T&> accessor?
         [[nodiscard]] constexpr const mapped_type* at_if(const key_type& x) const &
         {
-            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            const auto it = std::ranges::lower_bound(data_, x, compare_, &element_type::first);
             if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
                 return nullptr;
             return &(it->second);
@@ -161,7 +161,7 @@ namespace rx::detail
         /* map operations */
         [[nodiscard]] constexpr const_iterator find(const key_type& x) const
         {
-            const auto it{ std::ranges::lower_bound(data_, x, compare_, &element_type::first) };
+            const auto it = std::ranges::lower_bound(data_, x, compare_, &element_type::first);
             if (it == data_.end() or compare_(it->first, x) or compare_(x, it->first))
                 return data_.end();
             return it;

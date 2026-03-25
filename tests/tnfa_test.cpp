@@ -16,7 +16,7 @@ namespace
         const expr_tree ast{ pattern };
 
         const rx::testing::tnfa_matcher nfa{ ast, default_fsm_flags::full_match };
-        const auto match_result{ nfa.match(str) };
+        const auto match_result = nfa.match(str);
 
         if (captures.empty())
             return match_result.has_value();
@@ -34,7 +34,7 @@ namespace
         ast.insert_search_prefix();
 
         const rx::testing::tnfa_matcher nfa{ ast, default_fsm_flags::full_match };
-        const auto match_result{ nfa.match(str) };
+        const auto match_result = nfa.match(str);
 
         if (not match_result.has_value())
             return false;
