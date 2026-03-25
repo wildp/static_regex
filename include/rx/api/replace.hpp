@@ -211,7 +211,10 @@ namespace rx
                         match_result = delim_matcher(first, last);
                 }
 
-                subranges_.emplace_back(first, last);
+                if constexpr (std::same_as<I, S>)
+                    subranges_.emplace_back(first, last);
+                else
+                    subranges_.emplace_back(first, std::ranges::next(first, last));
             }
 
             constexpr auto zipped() const
@@ -228,6 +231,16 @@ namespace rx
             {
                 if (std::ranges::any_of(captures_, [n](std::size_t x){ return x >= n; }))
                     throw regex_error("replace_fmt: invalid replacement");
+            }
+
+            constexpr const auto& subranges() const noexcept
+            {
+                return subranges_;
+            }
+
+            constexpr const auto& captures() const noexcept
+            {
+                return captures_;
             }
 
             template<typename CharT>
@@ -268,13 +281,24 @@ namespace rx
                 if (std::ranges::any_of(captures_, [n](std::size_t x){ return x >= n; }))
                     throw regex_error("replace_fmt: invalid replacement");
             }
+
+            constexpr const auto& subranges() const noexcept
+            {
+                return subranges_;
+            }
+
+            constexpr const auto& captures() const noexcept
+            {
+                return captures_;
+            }
+
+        private:
             static consteval subrange_type make_subrange(const std::ranges::subrange<const char_type*>& s)
             {
                 const auto& [first, last]{ s };
                 return { detail::non_owning_tag, first, last };
             }
 
-        private:
             detail::static_span<subrange_type> subranges_;
             detail::static_span<std::size_t> captures_;
         };
