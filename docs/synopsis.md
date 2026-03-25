@@ -23,7 +23,7 @@ namespace rx {
   template<std::bidirectional_iterator I>
   class submatch;
 
-  template<std::ranges::bidirectional_range V, /* regex-like */ Regex>
+  template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
   class regex_match_view;
 
@@ -31,9 +31,26 @@ namespace rx {
     requires std::ranges::view<V>
   class submatches_view;
 
+  template<std::ranges::input_range V, typename Fmt>
+    requires std::ranges::view<V>
+  class replace_view {};
+
+  template<std::ranges::bidirectional_range V, typename Regex>
+    requires std::ranges::view<V>
+  class regex_split_view {}
+
   namespace views {
     inline constexpr /* range adaptor */ regex_match;
     inline constexpr /* range adaptor */ submatches;
+    inline constexpr /* range-adaptor */ replace;
+    inline constexpr /* range adaptor */ regex_split;
+
+    template<int... Submatches>
+      requires (sizeof...(Submatches) > 0)
+    inline constexpr /* range-adaptor */ static_submatches;
+
+    template<string_literal Fmt>
+    inline constexpr /* range-adaptor */ static_replace;
   }
 
   namespace literals {
@@ -392,7 +409,7 @@ It should be noted that `submatch` objects can be empty (i.e. `begin() == end()`
 
 ```cpp
 namespace rx {
-  template<std::ranges::bidirectional_range V, /* regex-like */ Regex>
+  template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
   class regex_match_view {};
 
@@ -471,6 +488,10 @@ namespace rx {
 
   namespace views {
     inline constexpr /* range-adaptor */ submatches;
+
+    template<int... Submatches>
+      requires (sizeof...(Submatches) > 0)
+    inline constexpr /* range-adaptor */ static_submatches;
   }
 } // namespace rx
 ```
@@ -484,6 +505,121 @@ If dereferenced, the suffix iterator returns a submatch object for the substring
 
 `submatches_view` is always an input range.
 It should be noted that `submatches_view::iterator` is a proxy iterator.
+
+`views::static_submatches<Ints...>` is equivalent to `views::submatches(std::integer_sequence<int, Ints...>)`.
+
+
+## Class template `rx::regex_replace_view`
+
+`regex_replace_view` adapts a `regex_match_view` to lazily produce a range where matched substrings are substituted for a replacement string.
+
+```cpp
+namespace rx {
+  template<std::ranges::input_range V, typename Fmt>
+    requires std::ranges::view<V>
+  class replace_view {};
+
+  template<std::ranges::input_range V, string_literal Fmt>
+    requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
+  class replace_view<V, fmt_t<Fmt>> : std::ranges::view_interface<replace_view<V, fmt_t<Fmt>>> {
+      struct iterator;
+
+  public:
+      replace_view() requires std::default_initializable<V> = default;
+
+      constexpr explicit replace_view(V base, fmt_t<Fmt> fmt);
+
+      constexpr V base() const& requires std::copy_constructible<V>;
+      constexpr V base() &&;
+      constexpr iterator begin();
+      constexpr std::default_sentinel_t end();
+  };
+
+  template<std::ranges::input_range V, std::ranges::bidirectional_range Fmt>
+    requires std::ranges::view<V> and detail::static_regex_match_view_like<V> and std::ranges::view<Fmt>
+  class replace_view<V, Fmt>
+    : std::ranges::view_interface<replace_view<V, Fmt>> {
+    struct iterator;
+
+  public:
+      replace_view() requires std::default_initializable<V> and std::default_initializable<Fmt> = default;
+
+      constexpr explicit replace_view(V base, Fmt fmt);
+
+      constexpr V base() const& requires std::copy_constructible<V>;
+      constexpr V base() &&;
+      constexpr iterator begin();
+      constexpr std::default_sentinel_t end();
+  };
+
+  template<typename R, string_literal Fmt>
+  replace_view(R&&, fmt_t<Fmt>)
+    -> replace_view<std::views::all_t<R>, fmt_t<Fmt>>;
+
+  template<typename R, std::ranges::bidirectional_range Fmt>
+  replace_view(R&&, Fmt&&)
+    -> replace_view<std::views::all_t<R>, std::views::all_t<Fmt>>;
+
+  namespace views {
+    inline constexpr /* range-adaptor */ replace;
+
+    template<string_literal Fmt>
+    inline constexpr /* range-adaptor */ static_replace;
+  }
+} // namespace rx
+```
+
+`replace_view` is always an input range.
+It produces a range over the original input to the adapted `regex_match_view` in which all matches are substituted with the contents of a replacement string.
+This replacement string is supplied in the form of either a bidirectional range, a c-style string, or a compile-time replacement string.
+*(See documentation for `rx::regex_replace` for more details)*.
+
+`views::static_replace<Fmt>` is equivalent to `views::replace(fmt<Fmt>)`.
+
+## Class template `rx::regex_split_view`
+
+`regex_split_view` splits an input string using a regular expression.
+
+```cpp
+namespace rx {
+  template<std::ranges::bidirectional_range V, typename Regex>
+    requires std::ranges::view<V>
+  class regex_split_view {};
+
+  template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+  requires std::ranges::view<V>
+  class regex_split_view<V, static_regex<Pattern, Mode>>
+    : std::ranges::view_interface<regex_split_view<V, static_regex<Pattern, Mode>>> {
+      class iterator;
+      class sentinel;
+
+  public:
+      regex_split_view() requires std::default_initializable<V> = default;
+      constexpr explicit regex_split_view(V base, static_regex<Pattern, Mode> regex);
+
+      V base() const& requires std::copy_constructible<V>;
+      V base() && requires std::copy_constructible<V>;
+
+      constexpr iterator begin();
+      constexpr sentinel end();
+      constexpr iterator end() requires std::ranges::common_range<V>;
+  };
+
+  template<typename R, string_literal Pattern, mode Mode>
+  regex_split_view(R&&, static_regex<Pattern, Mode>)
+    -> regex_split_view<std::views::all_t<R>, static_regex<Pattern, Mode>>;
+
+  namespace views {
+    inline constexpr /* range-adaptor */ regex_split;
+  }
+} // namespace rx
+```
+
+`r | views::regex_split(pattern)` produces the same result as `r | views::regex_match(pattern) | views::static_submatches<-1>`.
+However, `regex_split_view` is a forward range, while the alternative results in an input range.
+Additionally, the range value of `regex_split_view` is a common `std::ranges::subrange` of iterators to `r`, whereas `views::submatches` produces `submatch` objects.
+
+The iterator for `submatches_view` is a proxy iterator.
 
 
 ## Algorithm function object `rx::regex_replace`

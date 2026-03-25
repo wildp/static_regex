@@ -1,5 +1,9 @@
 # News
 
+### Version 0.1.3
+
+Added `regex_split_view` and `replace_view`.
+
 ### Version 0.1.2
 
 Fixed the implementation of `regex_match_view` so that patterns which sometimes match an empty substring (e.g. `"()|abc"`) produce the correct sequence of matches.
