@@ -96,7 +96,7 @@ namespace rx
             }
         }
 
-        static constexpr matcher_type matcher;
+        static constexpr matcher_type matcher{};
 
         V base_{};
         result_type cached_result_;

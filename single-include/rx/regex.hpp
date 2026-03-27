@@ -10990,9 +10990,9 @@ namespace rx::detail
                     std::string_view name;
 
                     if (has_template_arguments(dealias(member)))
-                        name = display_string_of(template_of(dealias(member)));
+                        name = identifier_of(template_of(dealias(member)));
                     else
-                        name = display_string_of(member);
+                        name = identifier_of(member);
 
                     member = dealias(member);
 
@@ -13426,7 +13426,7 @@ namespace rx
             }
         }
 
-        static constexpr matcher_type matcher;
+        static constexpr matcher_type matcher{};
 
         V base_{};
         result_type cached_result_;
