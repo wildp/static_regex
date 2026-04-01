@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <flat_map>
 #include <iterator>
@@ -34,6 +35,19 @@ namespace rx::detail
 
         consteval charset() noexcept = default;
 
+        template<typename... Args>
+            requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
+        constexpr explicit charset(Args... args)
+        {
+            template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
+            {
+                if constexpr (std::convertible_to<Args...[i], char_type>)
+                    insert(args...[i]);
+                else if constexpr (std::convertible_to<Args...[i], char_interval>)
+                    insert(args...[i].first, args...[i].second);
+            }
+        }
+
 
         /* observers */
 
@@ -52,7 +66,7 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };
-            for (const auto [first, second] : data_)
+            for (const auto& [first, second] : data_)
                 result += (first + 1 - second);
             return result;
         }

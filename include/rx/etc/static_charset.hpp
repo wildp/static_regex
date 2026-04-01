@@ -122,12 +122,12 @@ namespace rx::detail
 
         /* operators */
 
-        constexpr explicit operator charset_type() const
+        constexpr explicit(false) operator charset_type() const
         {
             return charset_type{ typename charset_type::underlying_t(std::from_range, data_) };
         }
 
-        constexpr charset_type operator~()
+        constexpr charset_type operator~() const
         {
             return charset_type{ charset_type::make_absolute_complement(data_) };
         }

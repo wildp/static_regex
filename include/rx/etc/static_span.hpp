@@ -93,7 +93,7 @@ namespace rx::detail
     };
 
     template<class R>
-    static_span(R&&) -> static_span<std::remove_reference_t<std::ranges::range_reference_t<R>>>;
+    static_span(R&&) -> static_span<std::ranges::range_value_t<R>>;
 
 
     template<typename Key, typename T, typename Compare = std::less<std::remove_cv_t<Key>>>

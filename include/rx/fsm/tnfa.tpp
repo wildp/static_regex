@@ -83,8 +83,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    template<typename CharSet>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
+    template<std::convertible_to<typename tagged_nfa<CharT>::charset_type> CharSet>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharSet&& cs)
     {
         transition_create(q0, qf, std::in_place_type<normal_tr>, std::forward<CharSet>(cs));
@@ -101,9 +100,8 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    template<typename T, typename CharSet>
+    template<typename T, std::convertible_to<typename tagged_nfa<CharT>::charset_type> CharSet>
         requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
-             and std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */, CharSet&& cs)
     {
         using type = std::conditional_t<std::same_as<T, tnfa::assert_category::lookahead1_tag_t>, lookahead_1_tr, lookbehind_1_tr>;

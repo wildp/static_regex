@@ -140,11 +140,11 @@ static_assert(parse_error("a{2,-3}"));
 static_assert(parse_error("a{ 2,5}"));
 static_assert(parse_error("a{ 2,5}"));
 static_assert(parse_error("a{0,1001}"));
-static_assert(parse_error("a{1001, 1001}"))
+static_assert(parse_error("a{1001, 1001}"));
 static_assert(parse_error("a{1, 22, 333}"));
 static_assert(parse_error("(a"));
-static_assert(parse_error(")-("))
-static_assert(parse_error("abcde:)"))
+static_assert(parse_error(")-("));
+static_assert(parse_error("abcde:)"));
 static_assert(parse_error("[]"));
 static_assert(parse_error("[^]"));
 #endif // __cpp_constexpr_exceptions >= 202411L

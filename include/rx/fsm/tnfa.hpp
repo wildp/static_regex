@@ -214,17 +214,15 @@ namespace rx::detail
 
         constexpr void make_transition(state_t q0, state_t qf, char_type c);
 
-        template<typename CharSet>
-            requires std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
+        template<std::convertible_to<charset_type> CharSet>
         constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
 
         template<typename T>
             requires one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>
         constexpr void make_assert(state_t q0, state_t qf, T category);
 
-        template<typename T, typename CharSet>
+        template<typename T, std::convertible_to<charset_type> CharSet>
             requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
-                 and std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
         constexpr void make_assert(state_t q0, state_t qf, T category, CharSet&& cs);
 
         constexpr void make_copy(state_t q0, state_t qf, const transition_info& type);

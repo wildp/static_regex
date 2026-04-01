@@ -1412,6 +1412,19 @@ namespace rx::detail
 
         consteval charset() noexcept = default;
 
+        template<typename... Args>
+            requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
+        constexpr explicit charset(Args... args)
+        {
+            template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
+            {
+                if constexpr (std::convertible_to<Args...[i], char_type>)
+                    insert(args...[i]);
+                else if constexpr (std::convertible_to<Args...[i], char_interval>)
+                    insert(args...[i].first, args...[i].second);
+            }
+        }
+
         /* observers */
 
         [[nodiscard]] constexpr bool empty() const noexcept
@@ -1429,7 +1442,7 @@ namespace rx::detail
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };
-            for (const auto [first, second] : data_)
+            for (const auto& [first, second] : data_)
                 result += (first + 1 - second);
             return result;
         }
@@ -2401,7 +2414,7 @@ namespace rx::detail
     };
 
     template<class R>
-    static_span(R&&) -> static_span<std::remove_reference_t<std::ranges::range_reference_t<R>>>;
+    static_span(R&&) -> static_span<std::ranges::range_value_t<R>>;
 
     template<typename Key, typename T, typename Compare = std::less<std::remove_cv_t<Key>>>
     class static_map
@@ -2609,12 +2622,12 @@ namespace rx::detail
 
         /* operators */
 
-        constexpr explicit operator charset_type() const
+        constexpr explicit(false) operator charset_type() const
         {
             return charset_type{ typename charset_type::underlying_t(std::from_range, data_) };
         }
 
-        constexpr charset_type operator~()
+        constexpr charset_type operator~() const
         {
             return charset_type{ charset_type::make_absolute_complement(data_) };
         }
@@ -6350,17 +6363,15 @@ namespace rx::detail
 
         constexpr void make_transition(state_t q0, state_t qf, char_type c);
 
-        template<typename CharSet>
-            requires std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
+        template<std::convertible_to<charset_type> CharSet>
         constexpr void make_transition(state_t q0, state_t qf, CharSet&& cs);
 
         template<typename T>
             requires one_of<T, tnfa::assert_category::eof_tag_t, tnfa::assert_category::sof_tag_t>
         constexpr void make_assert(state_t q0, state_t qf, T category);
 
-        template<typename T, typename CharSet>
+        template<typename T, std::convertible_to<charset_type> CharSet>
             requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
-                 and std::convertible_to<std::remove_cvref_t<CharSet>, charset_type>
         constexpr void make_assert(state_t q0, state_t qf, T category, CharSet&& cs);
 
         constexpr void make_copy(state_t q0, state_t qf, const transition_info& type);
@@ -6466,8 +6477,7 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    template<typename CharSet>
-        requires std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
+    template<std::convertible_to<typename tagged_nfa<CharT>::charset_type> CharSet>
     constexpr void tagged_nfa<CharT>::make_transition(const state_t q0, const state_t qf, CharSet&& cs)
     {
         transition_create(q0, qf, std::in_place_type<normal_tr>, std::forward<CharSet>(cs));
@@ -6484,9 +6494,8 @@ namespace rx::detail
     }
 
     template<typename CharT>
-    template<typename T, typename CharSet>
+    template<typename T, std::convertible_to<typename tagged_nfa<CharT>::charset_type> CharSet>
         requires one_of<T, tnfa::assert_category::lookahead1_tag_t, tnfa::assert_category::lookbehind1_tag_t>
-             and std::convertible_to<std::remove_cvref_t<CharSet>, tnfa::charset_t<CharT>>
     constexpr void tagged_nfa<CharT>::make_assert(const state_t q0, const state_t qf, T /* category */, CharSet&& cs)
     {
         using type = std::conditional_t<std::same_as<T, tnfa::assert_category::lookahead1_tag_t>, lookahead_1_tr, lookbehind_1_tr>;
