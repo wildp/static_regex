@@ -931,7 +931,12 @@ namespace rx::detail
 
                 /* assign the lowest priority to avoid clashes with eof_anchor */
                 using priority_t = decltype(epsilon_tr::priority);
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                const auto p = std::saturating_cast<priority_t>(std::saturating_sub(nodes_.at(tr.src).out_tr.size(), 1uz));
+#else
                 const auto p = std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz));
+#endif
+
 
                 std::erase(nodes_.at(tr.dst).in_tr, i);
                 tr.dst = mapped_states.at(tr.dst);
@@ -1238,7 +1243,11 @@ namespace rx::detail
             if (cont_info_.size() >= std::numeric_limits<tnfa::continue_at_t>::max())
                 throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+            continue_ats.emplace_back(std::saturating_cast<tnfa::continue_at_t>(cont_info_.size()));
+#else
             continue_ats.emplace_back(std::saturate_cast<tnfa::continue_at_t>(cont_info_.size()));
+#endif
             cont_info_.emplace_back(mapped_cont, edge);
             cont_info_.at(0).cs -= edge; /* note: cont_info should be non-empty to begin with */
         }

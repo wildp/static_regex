@@ -167,7 +167,11 @@ namespace rx
 
             while (first != last)
             {
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                result = std::saturating_add(std::saturating_mul(result, base), static_cast<std::size_t>(*first - '0'));
+#else
                 result = std::add_sat(std::mul_sat(result, base), static_cast<std::size_t>(*first - '0'));
+#endif
                 ++first;
             }
 

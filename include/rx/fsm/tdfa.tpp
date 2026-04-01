@@ -695,7 +695,11 @@ namespace rx::detail::tdfa
 
     template<typename CharT>
     constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        : tnfa_ptr_{ &input }, tag_count_{ std::saturating_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
+#else
         : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
+#endif
     {
         factory_init();
 

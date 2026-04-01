@@ -67,7 +67,11 @@ namespace rx::detail
         {
             auto key_copy = keys_;
             auto [last, _] = std::ranges::unique(key_copy);
+#if __cpp_lib_saturation_arithmetic >= 202603L
+            return std::saturating_cast<capture_number_t>(last - key_copy.begin());
+#else
             return std::saturate_cast<capture_number_t>(last - key_copy.begin());
+#endif
         }
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const

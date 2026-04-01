@@ -3348,7 +3348,11 @@ namespace rx::detail
                 if (rep.min == -1)
                     rep.min = c - '0';
                 else
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                    rep.min = std::saturating_add(std::saturating_mul(rep.min, base), static_cast<int>(c - '0'));
+#else
                     rep.min = std::add_sat(std::mul_sat(rep.min, base), static_cast<int>(c - '0'));
+#endif
             }
             else if (c == ',')
             {
@@ -3380,7 +3384,11 @@ namespace rx::detail
                 if (rep.max == -1)
                     rep.max = c - '0';
                 else
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                    rep.max = std::saturating_add(std::saturating_mul(rep.min, base), static_cast<int>(c - '0'));
+#else
                     rep.max = std::add_sat(std::mul_sat(rep.max, base), static_cast<int>(c - '0'));
+#endif
             }
             else if (c == '}')
             {
@@ -3806,7 +3814,11 @@ namespace rx::detail
         {
             auto key_copy = keys_;
             auto [last, _] = std::ranges::unique(key_copy);
+#if __cpp_lib_saturation_arithmetic >= 202603L
+            return std::saturating_cast<capture_number_t>(last - key_copy.begin());
+#else
             return std::saturate_cast<capture_number_t>(last - key_copy.begin());
+#endif
         }
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
@@ -4485,7 +4497,11 @@ namespace rx::detail
         if (remapper.size() > std::numeric_limits<tag_number_t>::max())
             throw tree_error("Tag number exceeded");
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
+#else
         tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
+#endif
     }
 
     /* convert pattern for use in regex search */
@@ -4711,7 +4727,11 @@ namespace rx::detail
         if (remapper.size() > std::numeric_limits<tag_number_t>::max())
             throw tree_error("Tag number exceeded");
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
+#else
         tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
+#endif
 
         /* --- end copied section ---  */
 
@@ -7282,7 +7302,11 @@ namespace rx::detail
 
                 /* assign the lowest priority to avoid clashes with eof_anchor */
                 using priority_t = decltype(epsilon_tr::priority);
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                const auto p = std::saturating_cast<priority_t>(std::saturating_sub(nodes_.at(tr.src).out_tr.size(), 1uz));
+#else
                 const auto p = std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz));
+#endif
 
                 std::erase(nodes_.at(tr.dst).in_tr, i);
                 tr.dst = mapped_states.at(tr.dst);
@@ -7578,7 +7602,11 @@ namespace rx::detail
             if (cont_info_.size() >= std::numeric_limits<tnfa::continue_at_t>::max())
                 throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+            continue_ats.emplace_back(std::saturating_cast<tnfa::continue_at_t>(cont_info_.size()));
+#else
             continue_ats.emplace_back(std::saturate_cast<tnfa::continue_at_t>(cont_info_.size()));
+#endif
             cont_info_.emplace_back(mapped_cont, edge);
             cont_info_.at(0).cs -= edge; /* note: cont_info should be non-empty to begin with */
         }
@@ -8680,7 +8708,11 @@ namespace rx::detail::tdfa
 
     template<typename CharT>
     constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        : tnfa_ptr_{ &input }, tag_count_{ std::saturating_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
+#else
         : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
+#endif
     {
         factory_init();
 
@@ -10324,7 +10356,7 @@ namespace rx
 
         [[nodiscard]] constexpr size_type size() const
         {
-            return std::saturate_cast<size_type>(std::ranges::distance(first_, last_));
+            return static_cast<size_type>(std::ranges::distance(first_, last_));
         }
 
         [[nodiscard]] constexpr size_type length() const
@@ -11017,50 +11049,56 @@ namespace rx::detail
 
             using index_t = type::index_t;
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+    #define INDEX_CAST std::saturating_cast<index_t>
+#else
+    #define INDEX_CAST std::saturate_cast<index_t>
+#endif
             return expr.visit(overloads{
                 [](const typename expr_tree<CharT>::assertion& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .assertion{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
+                    return { .value{ .assertion{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_str& e) -> type
                 {
                      const auto& [...mems] = e;
-                     return { .value{ .char_str{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
+                     return { .value{ .char_str{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_class& e) -> type
                 {
                      const auto& [...mems] = e;
-                     return { .value{ .char_class{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
+                     return { .value{ .char_class{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::backref& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .backref{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
+                    return { .value{ .backref{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::alt& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .alt{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
+                    return { .value{ .alt{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::concat& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .concat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, ^^old_type)) };
+                    return { .value{ .concat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::concat, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::tag& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .tag{  mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
+                    return { .value{ .tag{  mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
 
                 },
                 [](const typename expr_tree<CharT>::repeat& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .repeat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
+                    return { .value{ .repeat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
                 }
 
             });
+#undef INDEX_CAST
         }
 
     public:
@@ -13045,7 +13083,11 @@ namespace rx
 
             while (first != last)
             {
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                result = std::saturating_add(std::saturating_mul(result, base), static_cast<std::size_t>(*first - '0'));
+#else
                 result = std::add_sat(std::mul_sat(result, base), static_cast<std::size_t>(*first - '0'));
+#endif
                 ++first;
             }
 

@@ -67,7 +67,11 @@ namespace rx::testing
 
         constexpr explicit(false) cont_val(std::size_t i) : pos_{ i } {}
         constexpr explicit cont_val(std::size_t i, rep_t r) : pos_{ i }, reps_{ r } {}
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        constexpr explicit cont_val(std::size_t i, rep_t r, rep_t amt) : pos_{ i }, reps_{ std::saturating_add(r, amt) } {}
+#else
         constexpr explicit cont_val(std::size_t i, rep_t r, rep_t amt) : pos_{ i }, reps_{ std::add_sat(r, amt) } {}
+#endif
 
         [[nodiscard]] constexpr std::size_t pos() const noexcept { return pos_; }
         [[nodiscard]] constexpr rep_t reps() const noexcept { return reps_; }

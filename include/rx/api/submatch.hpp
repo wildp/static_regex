@@ -65,7 +65,7 @@ namespace rx
 
         [[nodiscard]] constexpr size_type size() const
         {
-            return std::saturate_cast<size_type>(std::ranges::distance(first_, last_));
+            return static_cast<size_type>(std::ranges::distance(first_, last_));
         }
 
         [[nodiscard]] constexpr size_type length() const

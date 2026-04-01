@@ -128,54 +128,60 @@ namespace rx::detail
 
             using index_t = type::index_t;
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+    #define INDEX_CAST std::saturating_cast<index_t>
+#else
+    #define INDEX_CAST std::saturate_cast<index_t>
+#endif
             return expr.visit(overloads{
                 [](const typename expr_tree<CharT>::assertion& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .assertion{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
+                    return { .value{ .assertion{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_str& e) -> type
                 {
                      const auto& [...mems] = e;
-                     return { .value{ .char_str{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
+                     return { .value{ .char_str{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::char_class& e) -> type
                 {
                      const auto& [...mems] = e;
-                     return { .value{ .char_class{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
+                     return { .value{ .char_class{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::backref& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .backref{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
+                    return { .value{ .backref{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::alt& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .alt{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
+                    return { .value{ .alt{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::concat& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .concat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, ^^old_type)) };
+                    return { .value{ .concat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::concat, original_type)) };
                 },
                 [](const typename expr_tree<CharT>::tag& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .tag{  mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
+                    return { .value{ .tag{  mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
 
                 },
                 [](const typename expr_tree<CharT>::repeat& e) -> type
                 {
                     const auto& [...mems] = e;
-                    return { .value{ .repeat{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
+                    return { .value{ .repeat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
                 }
                 // , [](const typename expr_tree<CharT>::special& e) -> type
                 // {
                 //     const auto& [...mems] = e;
-                //     return { .value{ .special{ mems... } }, .index = std::saturate_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
+                //     return { .value{ .special{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
                 // }
             });
+#undef INDEX_CAST
         }
 
     public:

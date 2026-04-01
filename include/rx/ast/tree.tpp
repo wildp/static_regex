@@ -426,7 +426,11 @@ namespace rx::detail
         if (remapper.size() > std::numeric_limits<tag_number_t>::max())
             throw tree_error("Tag number exceeded");
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
+#else
         tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
+#endif
     }
 
 
@@ -654,7 +658,11 @@ namespace rx::detail
         if (remapper.size() > std::numeric_limits<tag_number_t>::max())
             throw tree_error("Tag number exceeded");
 
+#if __cpp_lib_saturation_arithmetic >= 202603L
+        tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
+#else
         tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
+#endif
 
 
         /* --- end copied section ---  */
