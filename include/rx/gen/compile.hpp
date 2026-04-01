@@ -261,12 +261,6 @@ namespace rx::detail
         return tdfa_info{ dfa, nfa };
     }
 
-    template<string_literal Pattern, fsm_flags Flags>
-    struct compiled_dfa
-    {
-        static constexpr auto value = compile_pattern(Pattern.view(), Flags);
-    };
-
 
     struct match_non_empty_t {};
     inline constexpr match_non_empty_t match_non_empty;
