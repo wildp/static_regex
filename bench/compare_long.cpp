@@ -123,14 +123,13 @@ namespace
 template<typename Matcher>
 static void BM_ctre(benchmark::State& state, Matcher re, const std::size_t count)
 {
-    if (auto tmp = matchcount_ctre(re); tmp != count)
+    if (matchcount_ctre(re) != count)
         return;
 
     for (auto _ : state)
     {
-        auto range = re.multiline_range(input);
-        for (auto result : range)
-            benchmark::DoNotOptimize(result);
+        auto tmp = matchcount_ctre(re);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -142,9 +141,8 @@ static void BM_rx(benchmark::State& state, Matcher re, const std::size_t count)
 
     for (auto _ : state)
     {
-        auto range = re.range(input);
-        for (auto result : range)
-            benchmark::DoNotOptimize(result);
+        auto tmp = matchcount_rx(re);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -163,13 +161,8 @@ static void BM_std(benchmark::State& state, std::string_view pattern, const std:
 
     for (auto _ : state)
     {
-        std::basic_regex re{ std::string{ pattern }, flags };
-        std::cregex_iterator it{ input.begin(), input.end(), re };
-        for (const std::cregex_iterator end{}; it != end; ++it)
-        {
-            auto result = *it;
-            benchmark::DoNotOptimize(result);
-        }
+        auto tmp = matchcount_std(pattern, flags);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -180,13 +173,8 @@ static void BM_boost(benchmark::State& state, std::string_view pattern, const st
 
     for (auto _ : state)
     {
-        boost::basic_regex re{ std::string{ pattern } };
-        boost::cregex_iterator it{ input.begin(), input.end(), re, boost::regex_constants::match_not_dot_newline };
-        for (const boost::cregex_iterator end{}; it != end; ++it)
-        {
-            auto result = *it;
-            benchmark::DoNotOptimize(result);
-        }
+        auto tmp = matchcount_boost(pattern);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -197,15 +185,8 @@ static void BM_re2(benchmark::State& state, const std::string_view pattern, cons
 
     for (auto _ : state)
     {
-        re2::RE2 re(pattern);
-        std::string_view result;
-        std::string_view sv(input);
-
-        while (RE2::FindAndConsume(&sv, re, &result))
-        {
-            std::string_view tmp(result);
-            benchmark::DoNotOptimize(tmp);
-        }
+        auto tmp = matchcount_re2(pattern);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -216,28 +197,8 @@ static void BM_pcre2(benchmark::State& state, const std::string_view pattern, co
 
     for (auto _ : state)
     {
-        int err_num{};
-        PCRE2_SIZE err_off{};
-
-        auto* re = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pattern.data()), pattern.size(), 0, &err_num, &err_off, nullptr);
-
-        if (not re)
-            return;
-
-        auto* md = pcre2_match_data_create_from_pattern(re, nullptr);
-
-        PCRE2_SIZE offset{ 0 };
-        while ((pcre2_match(re, reinterpret_cast<PCRE2_SPTR>(input.data()), input.size(), offset, 0, md, nullptr)) >= 0)
-        {
-            auto* ovec = pcre2_get_ovector_pointer(md);
-            offset = ovec[1];
-
-            benchmark::DoNotOptimize(ovec[0]);
-            benchmark::DoNotOptimize(ovec[1]);
-        }
-
-        pcre2_match_data_free(md);
-        pcre2_code_free(re);
+        auto tmp = matchcount_pcre2(pattern);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -248,31 +209,8 @@ static void BM_pcre2jit(benchmark::State& state, const std::string_view pattern,
 
     for (auto _ : state)
     {
-        int err_num;
-        PCRE2_SIZE err_off;
-
-        auto* re = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pattern.data()), pattern.size(), 0, &err_num, &err_off, nullptr);
-
-        if (not re)
-            return;
-
-        if (pcre2_jit_compile(re, PCRE2_JIT_COMPLETE) != 0)
-            return;
-
-        auto* md = pcre2_match_data_create_from_pattern(re, nullptr);
-
-        PCRE2_SIZE offset{ 0 };
-        while ((pcre2_jit_match(re, reinterpret_cast<PCRE2_SPTR>(input.data()), input.size(), offset, 0, md, nullptr)) >= 0)
-        {
-            auto* ovec = pcre2_get_ovector_pointer(md);
-            offset = ovec[1];
-
-            benchmark::DoNotOptimize(ovec[0]);
-            benchmark::DoNotOptimize(ovec[1]);
-        }
-
-        pcre2_match_data_free(md);
-        pcre2_code_free(re);
+        auto tmp = matchcount_pcre2jit(pattern);
+        benchmark::DoNotOptimize(tmp);
     }
 }
 
@@ -301,7 +239,7 @@ TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))", 1973);
 TEST(R"(Tom.{10,25}river|river.{10,25}Tom)", 2);
 TEST(R"([a-zA-Z]+ing)", 78422);
 TEST(R"(\s[a-zA-Z]{0,12}ing\s)", 55248);
-TEST(R"(([A-Za-z]awyer|[A-Za-z]inn)\s)", 209);
+TEST(R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)", 209);
 TEST(R"(["'][^"']{0,30}[?!\.][\"'])", 8886);
 
 BENCHMARK_MAIN();
