@@ -202,6 +202,13 @@ namespace rx::detail
             return result;
         }
 
+        [[nodiscard]] constexpr const auto& get_values_branchfree() const
+        {
+            if (keys_.size() != capture_count())
+                throw std::logic_error("capture_info::get_values_branchfree: capture info contains branch reset");
+            return values_;
+        }
+
     private:
         std::vector<capture_number_t> keys_;
         std::vector<tag_pair_t> values_;

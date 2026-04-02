@@ -25,21 +25,7 @@ namespace rx::detail
     struct final_capture_info
     {
         explicit consteval final_capture_info(const capture_info& ci)
-        {
-            std::vector<capture_info::tag_pair_t> captures_tmp;
-
-            for (std::size_t i{ 0 }, i_end{ ci.capture_count() }; i < i_end; ++i)
-            {
-                const auto range = ci.lookup(i);
-
-                if (std::ranges::size(range) != 1)
-                    throw tree_error("Capture info contains branch reset");
-
-                captures_tmp.emplace_back(*std::ranges::begin(range));
-            }
-
-            captures = static_span{ captures_tmp };
-        }
+            : captures{ ci.get_values_branchfree() } {}
 
         consteval final_capture_info() = default;
 
@@ -68,6 +54,7 @@ namespace rx::detail
         static_span<tdfa::reg_t> final_registers;
         std::size_t register_count{ 0 };
         bool has_continue{ false };
+        bool continue_from_it{ false };
     };
 
     struct register_operation

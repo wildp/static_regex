@@ -116,7 +116,7 @@ namespace rx
             {
                 if constexpr (MatchNonEmpty)
                 {
-                    if constexpr (Mode == mode::naive)
+                    if constexpr (result_type::continue_from_it)
                         result_ = matcher_(first_, last_, current, detail::match_non_empty);
                     else if constexpr (result_type::has_continue)
                         result_ = matcher_(current, last_, result_.continue_at_, detail::match_non_empty);
@@ -126,7 +126,7 @@ namespace rx
                 else
                 {
 
-                    if constexpr (Mode == mode::naive)
+                    if constexpr (result_type::continue_from_it)
                         result_ = matcher_(first_, last_, current);
                     else if constexpr (result_type::has_continue)
                         result_ = matcher_(current, last_, result_.continue_at_);

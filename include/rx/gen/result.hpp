@@ -192,6 +192,7 @@ namespace rx
         static constexpr bool has_enabled{ has_registers and has_success };
         static constexpr bool has_match_start{ Captures.fci.has_match_start() };
         static constexpr bool has_continue{ Captures.has_continue };
+        static constexpr bool continue_from_it{ Captures.continue_from_it };
 
         explicit constexpr static_regex_match_result(I start)
             : match_start_{ std::move(start) }

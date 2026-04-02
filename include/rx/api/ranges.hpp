@@ -78,7 +78,7 @@ namespace rx
         {
             if constexpr (MatchNonEmpty)
             {
-                if constexpr (Mode == mode::naive)
+                if constexpr (result_type::continue_from_it)
                     cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current, detail::match_non_empty);
                 else if constexpr (result_type::has_continue)
                     cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_, detail::match_non_empty);
@@ -87,7 +87,7 @@ namespace rx
             }
             else
             {
-                if constexpr (Mode == mode::naive)
+                if constexpr (result_type::continue_from_it)
                     cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current);
                 else if constexpr (result_type::has_continue)
                     cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_);
@@ -882,7 +882,7 @@ namespace rx
                         {
                             if (next_.begin() == next_.end())
                             {
-                                if constexpr (Mode == mode::naive)
+                                if constexpr (result_type::continue_from_it)
                                     return matcher(std::ranges::begin(parent_->base_), end, current_, detail::match_non_empty);
                                 else if constexpr (result_type::has_continue)
                                     return matcher(current_, end, continue_at_, detail::match_non_empty);
@@ -891,7 +891,7 @@ namespace rx
                             }
                         }
 
-                        if constexpr (Mode == mode::naive)
+                        if constexpr (result_type::continue_from_it)
                             return matcher(std::ranges::begin(parent_->base_), end, current_);
                         else if constexpr (result_type::has_continue)
                             return matcher(current_, end, continue_at_);

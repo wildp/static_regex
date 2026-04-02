@@ -3962,6 +3962,13 @@ namespace rx::detail
             return result;
         }
 
+        [[nodiscard]] constexpr const auto& get_values_branchfree() const
+        {
+            if (keys_.size() != capture_count())
+                throw std::logic_error("capture_info::get_values_branchfree: capture info contains branch reset");
+            return values_;
+        }
+
     private:
         std::vector<capture_number_t> keys_;
         std::vector<tag_pair_t> values_;
@@ -10080,21 +10087,7 @@ namespace rx::detail
     struct final_capture_info
     {
         explicit consteval final_capture_info(const capture_info& ci)
-        {
-            std::vector<capture_info::tag_pair_t> captures_tmp;
-
-            for (std::size_t i{ 0 }, i_end{ ci.capture_count() }; i < i_end; ++i)
-            {
-                const auto range = ci.lookup(i);
-
-                if (std::ranges::size(range) != 1)
-                    throw tree_error("Capture info contains branch reset");
-
-                captures_tmp.emplace_back(*std::ranges::begin(range));
-            }
-
-            captures = static_span{ captures_tmp };
-        }
+            : captures{ ci.get_values_branchfree() } {}
 
         consteval final_capture_info() = default;
 
@@ -10123,6 +10116,7 @@ namespace rx::detail
         static_span<tdfa::reg_t> final_registers;
         std::size_t register_count{ 0 };
         bool has_continue{ false };
+        bool continue_from_it{ false };
     };
 
     struct register_operation
@@ -10756,6 +10750,7 @@ namespace rx
         static constexpr bool has_enabled{ has_registers and has_success };
         static constexpr bool has_match_start{ Captures.fci.has_match_start() };
         static constexpr bool has_continue{ Captures.has_continue };
+        static constexpr bool continue_from_it{ Captures.continue_from_it };
 
         explicit constexpr static_regex_match_result(I start)
             : match_start_{ std::move(start) }
@@ -11122,7 +11117,7 @@ namespace rx::detail
         [[nodiscard]] consteval static_match_result_info make_match_result_info() const
         {
             static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
-            return { .fci = fci, .final_registers = regs, .register_count = tag_count, .has_continue = false };
+            return { .fci = fci, .final_registers = regs, .register_count = tag_count, .continue_from_it = true };
         }
 
         std::size_t root_idx;
@@ -13042,7 +13037,7 @@ namespace rx
             {
                 if constexpr (MatchNonEmpty)
                 {
-                    if constexpr (Mode == mode::naive)
+                    if constexpr (result_type::continue_from_it)
                         result_ = matcher_(first_, last_, current, detail::match_non_empty);
                     else if constexpr (result_type::has_continue)
                         result_ = matcher_(current, last_, result_.continue_at_, detail::match_non_empty);
@@ -13052,7 +13047,7 @@ namespace rx
                 else
                 {
 
-                    if constexpr (Mode == mode::naive)
+                    if constexpr (result_type::continue_from_it)
                         result_ = matcher_(first_, last_, current);
                     else if constexpr (result_type::has_continue)
                         result_ = matcher_(current, last_, result_.continue_at_);
@@ -13467,7 +13462,7 @@ namespace rx
         {
             if constexpr (MatchNonEmpty)
             {
-                if constexpr (Mode == mode::naive)
+                if constexpr (result_type::continue_from_it)
                     cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current, detail::match_non_empty);
                 else if constexpr (result_type::has_continue)
                     cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_, detail::match_non_empty);
@@ -13476,7 +13471,7 @@ namespace rx
             }
             else
             {
-                if constexpr (Mode == mode::naive)
+                if constexpr (result_type::continue_from_it)
                     cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current);
                 else if constexpr (result_type::has_continue)
                     cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_);
@@ -14263,7 +14258,7 @@ namespace rx
                         {
                             if (next_.begin() == next_.end())
                             {
-                                if constexpr (Mode == mode::naive)
+                                if constexpr (result_type::continue_from_it)
                                     return matcher(std::ranges::begin(parent_->base_), end, current_, detail::match_non_empty);
                                 else if constexpr (result_type::has_continue)
                                     return matcher(current_, end, continue_at_, detail::match_non_empty);
@@ -14272,7 +14267,7 @@ namespace rx
                             }
                         }
 
-                        if constexpr (Mode == mode::naive)
+                        if constexpr (result_type::continue_from_it)
                             return matcher(std::ranges::begin(parent_->base_), end, current_);
                         else if constexpr (result_type::has_continue)
                             return matcher(current_, end, continue_at_);

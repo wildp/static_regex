@@ -196,7 +196,7 @@ namespace rx::detail
         [[nodiscard]] consteval static_match_result_info make_match_result_info() const
         {
             static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
-            return { .fci = fci, .final_registers = regs, .register_count = tag_count, .has_continue = false };
+            return { .fci = fci, .final_registers = regs, .register_count = tag_count, .continue_from_it = true };
         }
 
         std::size_t root_idx;
