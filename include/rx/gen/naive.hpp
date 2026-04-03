@@ -243,7 +243,7 @@ namespace rx::detail
     }
 
     template<string_literal Pattern>
-    struct p1306_naive_impl
+    struct naive_matcher
     {
         using char_type = decltype(Pattern)::value_type;
 
@@ -1074,7 +1074,7 @@ namespace rx::detail
             static constexpr bool never_empty{ not ast.empty_match_possible };
 
             template<std::bidirectional_iterator I>
-            using result = p1306_naive_impl::result<I>;
+            using result = naive_matcher::result<I>;
 
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             static constexpr auto operator()(const I first, const S last)
@@ -1134,20 +1134,19 @@ namespace rx::detail
             }
 
             /* invalid flag combination */
-            throw regex_error("p1306_naive_adaptor: invalid fsm flag combination");
+            throw regex_error("naive_matcher_adaptor: invalid fsm flag combination");
         }
     };
 
 
-
     template<string_literal Pattern, fsm_flags Flags>
-    struct p1306_naive_adaptor : public [: p1306_naive_impl<Pattern>::get_matcher(Flags) :] {};
+    struct naive_matcher_adaptor : public [: naive_matcher<Pattern>::get_matcher(Flags) :] {};
 
     template<string_literal Pattern, fsm_flags Flags>
         requires (Flags.return_bool)
-    struct p1306_naive_adaptor<Pattern, Flags>
+    struct naive_matcher_adaptor<Pattern, Flags>
     {
-        using underlying = p1306_naive_adaptor<Pattern, [](fsm_flags f) consteval { f.return_bool = false; return f; }(Flags)>;
+        using underlying = naive_matcher_adaptor<Pattern, [](fsm_flags f) consteval { f.return_bool = false; return f; }(Flags)>;
 
         template<typename... Ts>
         static constexpr bool operator()(Ts&&... args)
@@ -1155,6 +1154,4 @@ namespace rx::detail
             return underlying::operator()(std::forward<Ts>(args)...);
         }
     };
-
-
 }

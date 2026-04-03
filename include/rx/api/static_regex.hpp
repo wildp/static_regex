@@ -33,7 +33,7 @@ namespace rx
         consteval auto get_matcher_refl(mode i, bool is_search = false)
         {
             if (i == mode::naive)
-                return ^^detail::p1306_naive_adaptor;
+                return ^^detail::naive_matcher_adaptor;
             else if (i == mode::standard and is_search)
                 return ^^detail::p1306_searcher;
             else

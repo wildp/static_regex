@@ -24,13 +24,10 @@
 namespace rx::detail
 {
     template<string_literal Pattern, fsm_flags Flags>
-    struct p1306_matcher;
-
-    template<string_literal Pattern, fsm_flags Flags>
-    struct p1306_searcher;
+    struct p1306dfa;
 
     template<rx::string_literal Pattern>
-    struct p1306_naive_impl;
+    struct naive_matcher;
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, typename Regex>
     class stashing_regex_iterator;
@@ -163,13 +160,10 @@ namespace rx
         }
 
         template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
-        friend struct detail::p1306_matcher;
-
-        template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
-        friend struct detail::p1306_searcher;
+        friend struct detail::p1306dfa;
 
         template<rx::string_literal Pattern>
-        friend struct detail::p1306_naive_impl;
+        friend struct detail::naive_matcher;
 
         template<std::ranges::bidirectional_range V, typename Regex>
             requires std::ranges::view<V>

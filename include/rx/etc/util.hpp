@@ -143,7 +143,7 @@ namespace rx::detail
     struct terminal_object
     {
         template<typename... Ts>
-        constexpr explicit terminal_object(Ts&&...) {}
+        constexpr explicit(false) terminal_object(Ts&&...) {}
     };
 
     template<bool Enabled, typename T>
