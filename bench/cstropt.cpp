@@ -72,7 +72,7 @@ TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))"_rx);
 TEST(R"(Tom.{10,25}river|river.{10,25}Tom)"_rx);
 TEST(R"([a-zA-Z]+ing)"_rx);
 TEST(R"(\s[a-zA-Z]{0,12}ing\s)"_rx);
-TEST(R"(([A-Za-z]awyer|[A-Za-z]inn)\s)"_rx);
+TEST(R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)");
 TEST(R"(["'][^"']{0,30}[?!\.][\"'])"_rx);
 
 BENCHMARK_MAIN();

@@ -1,7 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <ctre.hpp>
 #include <rx/regex.hpp>
-#include <pcre2.h>
 
 
 static const char8_t data[] = {
@@ -82,7 +81,7 @@ TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))");
 TEST_NO_FAST(R"(Tom.{10,25}river|river.{10,25}Tom)");
 TEST(R"([a-zA-Z]+ing)");
 TEST(R"(\s[a-zA-Z]{0,12}ing\s)");
-TEST(R"(([A-Za-z]awyer|[A-Za-z]inn)\s)");
+TEST(R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)");
 TEST(R"(["'][^"']{0,30}[?!\.][\"'])");
 
 BENCHMARK_MAIN();
