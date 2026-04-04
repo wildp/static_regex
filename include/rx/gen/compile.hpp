@@ -175,7 +175,7 @@ namespace rx::detail
         }
 
     public:
-        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
+        explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa, const std::pair<std::size_t, std::size_t>& mml)
             : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
             , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
             , continue_nodes{ dfa.continue_nodes() }
@@ -186,7 +186,8 @@ namespace rx::detail
             , register_count{ dfa.reg_count() }
             , match_start{ dfa.match_start }
             , captures{ dfa.get_capture_info() }
-            , outer_transitions{ make_continue_info(dfa, nfa) } {}
+            , outer_transitions{ make_continue_info(dfa, nfa) }
+            , min_max_lengths{ mml } {}
 
         [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
         {
@@ -210,6 +211,7 @@ namespace rx::detail
         final_capture_info captures;
 
         static_span<static_transition<char_type>> outer_transitions;
+        std::pair<std::size_t, std::size_t> min_max_lengths;
     };
 
 
@@ -228,11 +230,12 @@ namespace rx::detail
         if (f.is_search)
             ast.insert_search_prefix();
         ast.optimise_tags();
+        const auto mml = ast.min_max_length();
 
         /* convert to tnfa */
         tagged_nfa nfa{ ast, f };
         nfa.rewrite_assertions();
-        if (f.maybe_no_empty and ast.empty_match_possible())
+        if (f.maybe_no_empty and mml.first == 0)
             nfa.add_non_empty_match_pathway();
 
         /* convert to tdfa */
@@ -245,7 +248,7 @@ namespace rx::detail
         dfa.minimise_transition_edges();
         dfa.de_default_edges();
 
-        return tdfa_info{ dfa, nfa };
+        return tdfa_info{ dfa, nfa, mml };
     }
 
 

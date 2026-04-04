@@ -24,9 +24,12 @@ namespace rx::detail
     /* observer for non empty match */
 
     template<typename CharT>
-    constexpr bool expr_tree<CharT>::empty_match_possible() const
+    constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length() const
     {
-        std::vector<bool> never_possible(expressions_.size(), false);
+        using min_max_t = std::pair<std::size_t, std::size_t>;
+
+        static constexpr auto no_upper_bound = std::numeric_limits<min_max_t::second_type>::max();
+        std::vector<min_max_t> lengths(expressions_.size());
 
         using stack_elem_t = std::pair<std::size_t, std::size_t>;
 
@@ -42,22 +45,22 @@ namespace rx::detail
             {
             case ast_index<assertion>:
             case ast_index<tag>:
-                never_possible.at(idx) = false;
+                lengths.at(idx) = { 0, 0 };
                 stack.pop_back();
                 break;
 
             case ast_index<char_str>:
-                never_possible.at(idx) = (not get<char_str>(entry).data.empty());
+                lengths.at(idx) = [](const auto c) -> min_max_t { return { c, c }; }(get<char_str>(entry).data.size());
                 stack.pop_back();
                 break;
 
             case ast_index<char_class>:
-                never_possible.at(idx) = true;
+                lengths.at(idx) = { 1, 1 }; /* TODO: determine maximum character length for utf8 and utf16 */
                 stack.pop_back();
                 break;
 
             case ast_index<backref>:
-                never_possible.at(idx) = false; /* syntactic approximation */
+                lengths.at(idx) = min_max_t{ 0, no_upper_bound }; /* syntactic approximation */
                 stack.pop_back();
                 break;
 
@@ -67,8 +70,14 @@ namespace rx::detail
 
                 if (pos == cat.idxs.size())
                 {
-                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); });
-                    never_possible.at(idx) = std::ranges::contains(tmp, true);
+                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i) { return lengths.at(i); });
+                    lengths.at(idx) = std::ranges::fold_left(tmp, min_max_t{ 0, 0 }, [](const min_max_t& x, const min_max_t& y) -> min_max_t {
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                        return { std::saturating_add(x.first, y.first), std::saturating_add(x.second, y.second) };
+#else
+                        return { std::add_sat(x.first, y.first), std::add_sat(x.second, y.second) };
+#endif
+                    });
                     stack.pop_back();
                 }
                 else
@@ -85,8 +94,13 @@ namespace rx::detail
 
                 if (pos == atl.idxs.size())
                 {
-                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i) { return never_possible.at(i); });
-                    never_possible.at(idx) = (not std::ranges::empty(tmp) and std::ranges::all_of(tmp, std::identity{}));
+                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i) { return lengths.at(i); });
+
+                    if (std::ranges::empty(tmp))
+                        lengths.at(idx) = { 0, no_upper_bound };
+                    else
+                        lengths.at(idx) = { std::ranges::min(tmp, {}, &min_max_t::first).first, std::ranges::max(tmp, {}, &min_max_t::second).second };
+
                     stack.pop_back();
                 }
                 else
@@ -103,7 +117,21 @@ namespace rx::detail
 
                 if (pos == 1)
                 {
-                    never_possible.at(idx) = (rep.min > 0) ? never_possible.at(rep.idx) : false;
+                    const auto& [min, max] = lengths.at(rep.idx);
+
+                    if (rep.min > rep.max) /* unbounded repetition */
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                        lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(min, rep.min), no_upper_bound };
+#else
+                        lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(min, rep.min), no_upper_bound };
+#endif
+                    else
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                        lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(min, rep.min), std::saturating_mul<min_max_t::second_type>(max, rep.max) };
+#else
+                        lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(min, rep.min), std::mul_sat<min_max_t::second_type>(max, rep.max) };
+#endif
+
                     stack.pop_back();
                 }
                 else
@@ -119,7 +147,13 @@ namespace rx::detail
             }
         }
 
-        return (not never_possible.at(root_idx_));
+        return lengths.at(root_idx_);
+    }
+
+    template<typename CharT>
+    constexpr bool expr_tree<CharT>::empty_match_possible() const
+    {
+        return min_max_length().first == 0;
     }
 
     /* helper for tagged nfa conversion */

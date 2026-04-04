@@ -124,7 +124,9 @@ namespace rx::detail
         [[nodiscard]] constexpr const auto& get_all_exprs() const noexcept { return expressions_; }
         [[nodiscard]] constexpr const auto& get_capture_info() const noexcept { return capture_info_; }
 
+        [[nodiscard]] constexpr std::pair<std::size_t, std::size_t> min_max_length() const;
         [[nodiscard]] constexpr bool empty_match_possible() const;
+
         constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
         constexpr void optimise_tags();
         constexpr void insert_search_prefix();
