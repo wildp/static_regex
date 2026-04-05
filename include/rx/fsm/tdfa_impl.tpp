@@ -1630,3 +1630,490 @@ namespace rx::detail
         compact_regop_blocks();
     }
 }
+// Copyright (C) 2026 Peter Wild
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+#pragma once
+
+#include "tdfa.hpp"
+
+#include <algorithm>
+#include <iterator>
+#include <optional>
+#include <ranges>
+#include <vector>
+
+#include "rx/etc/util.hpp"
+#include "rx/etc/vec_bool_adaptor.hpp"
+
+namespace rx::detail::tdfa
+{
+    template<typename CharT>
+    class min
+    {
+    public:
+        using char_type = CharT;
+        using tdfa_t = tagged_dfa<CharT>;
+
+        static constexpr void operator()(tdfa_t& dfa);
+        static constexpr std::vector<std::vector<std::size_t>> dry_run(const tdfa_t& dfa);
+
+    private:
+        // TODO: maybe switch to using unordered_set or flat_set?
+        using partition_t = std::vector<bitset_t>;
+
+        static constexpr partition_t init_hopcroft_partition(const tdfa_t& dfa);
+        static constexpr partition_t hopcroft(const tdfa_t& dfa);
+    };
+
+    template<typename CharT>
+    constexpr auto min<CharT>::init_hopcroft_partition(const tdfa_t& dfa) -> partition_t
+    {
+        const std::size_t bitset_size{ dfa.node_count() };
+
+        partition_t partitions;
+
+        /* add single partition for all non-final states */
+
+        partitions.emplace_back(bitset_size, false);
+        for (const std::size_t state : dfa.final_nodes().keys())
+            partitions.back().at(state) = true;
+
+        partitions.back().flip();
+
+        /* add separate partitions of final states for each different regops block */
+
+        using key_type = std::pair<final_node_info, std::optional<fallback_node_info>>;
+        std::flat_map<key_type, bitset_t> final_node_map;
+
+        for (const auto& [state, fni] : dfa.final_nodes_)
+        {
+            key_type key{ fni, std::nullopt };
+
+            /* assume fallback states are a subset of final states */
+            if (const auto it = dfa.fallback_nodes_.find(state); it != dfa.fallback_nodes_.end())
+                key.second = it->second;
+
+            auto [it, _] = final_node_map.try_emplace(std::move(key), bitset_size, false);
+            it->second[state] = true;
+        }
+
+        partitions.append_range(final_node_map.values());
+
+        /* we keep partitions sorted with the set containing 0 first */
+
+        std::ranges::sort(partitions, std::ranges::greater{});
+
+        return partitions;
+    }
+
+    template<typename CharT>
+    constexpr auto min<CharT>::hopcroft(const tdfa_t& dfa) -> partition_t
+    {
+        // Adapted from https://en.wikipedia.org/wiki/DFA_minimization#Hopcroft's_algorithm
+        // WARNING: this function is extremely slow
+
+        const std::size_t bitset_size{ dfa.node_count() };
+
+        /* set initial partitions; let work = partition  */
+        partition_t partitions{ init_hopcroft_partition(dfa) };
+        partition_t work(partitions);
+
+        while (not work.empty())
+        {
+            const bitset_t transitions_to{ std::move(work.back()) };
+
+            work.pop_back();
+
+            // is this better as a flat_map or as a vector?
+            // std::vector<std::vector<partition_entry<char_type, std::size_t>>> symbol_pairs_map(tdfa.reg);
+            std::flat_map<std::size_t, std::vector<std::pair<std::reference_wrapper<const charset_t<CharT>>, std::size_t>>> symbol_pairs_map;
+
+            for (std::size_t i{ 0 }, i_end{ dfa.nodes_.size() }; i < i_end; ++i)
+                for (const auto& tr : dfa.nodes_[i].tr)
+                    if (transitions_to[tr.next])
+                        symbol_pairs_map[tr.op_index].emplace_back(std::cref(tr.cs), i);
+
+            for (auto smit = symbol_pairs_map.begin(), end{ symbol_pairs_map.end() }; smit != end; ++smit)
+            {
+                for (const auto& states : charset_t<CharT>::partition_contents(smit->second))
+                {
+                    bitset_t transitions_from(bitset_size, false);
+
+                    for (const std::size_t s : states)
+                        transitions_from[s] = true;
+
+                    for (std::size_t p{ 0 }; p < partitions.size(); ++p)
+                    {
+                        bitset_t intersection{ partitions[p] & transitions_from };
+                        bitset_t rel_complement{ partitions[p] - transitions_from };
+
+                        const auto i_count = intersection.count();
+                        const auto c_count = rel_complement.count();
+
+                        using gt = std::ranges::greater;
+
+                        if (i_count > 0 and c_count > 0)
+                        {
+                            if (std::ranges::contains(work, partitions[p]))
+                            {
+                                if (const auto it = std::ranges::lower_bound(work, intersection, gt{}); it == work.end() or *it != intersection)
+                                    work.emplace(it, intersection);
+
+                                if (const auto it = std::ranges::lower_bound(work, rel_complement, gt{}); it == work.end() or *it != rel_complement)
+                                    work.emplace(it, rel_complement);
+                            }
+                            else if (i_count <= c_count)
+                            {
+                                if (const auto it = std::ranges::lower_bound(work, intersection, gt{}); it == work.end() or *it != intersection)
+                                    work.emplace(it, intersection);
+                            }
+                            else
+                            {
+                                if (const auto it = std::ranges::lower_bound(work, rel_complement, gt{}); it == work.end() or *it != rel_complement)
+                                    work.emplace(it, rel_complement);
+                            }
+
+                            partitions.erase(partitions.begin() + static_cast<std::ptrdiff_t>(p));
+
+                            if (const auto it = std::ranges::lower_bound(partitions, intersection, gt{}); it == partitions.end() or *it != intersection)
+                                partitions.emplace(it, std::move(intersection));
+
+                            if (const auto it = std::ranges::lower_bound(partitions, rel_complement, gt{}); it == partitions.end() or *it != rel_complement)
+                                partitions.emplace(it, std::move(rel_complement));
+                        }
+                    }
+                }
+            }
+        }
+
+        /* note: the initial state must be in the first partition */
+
+        /* if we change the type partition_t, we either need to reorder the
+           partitions or keep track of the start state in tagged dfas separately */
+
+        return partitions;
+    }
+
+    template<typename CharT>
+    constexpr void min<CharT>::operator()(tdfa_t& dfa)
+    {
+        const partition_t partitions{ hopcroft(dfa) };
+
+        /* create map for node remapping */
+
+        std::vector<std::size_t> state_remap(dfa.node_count(), -1);
+
+        for (std::size_t i{ 0 }, i_end{ partitions.size() }; i < i_end; ++i)
+        {
+            const auto& part = partitions[i];
+            for (std::size_t j{ 0 }, j_end{ part.size() }; j < j_end; ++j)
+                if (part[j])
+                    state_remap[j] = i;
+        }
+
+        /* remap unneeded nodes */
+
+        typename tdfa_t::data_t new_nodes(partitions.size());
+        final_nodes_t new_final_nodes;
+        fallback_nodes_t new_fallback_nodes;
+
+        bitset_t new_states_visited(partitions.size(), false);
+
+        for (std::size_t i{ 0 }, i_end{ state_remap.size() }; i < i_end; ++i)
+        {
+            std::size_t remapped_state{ state_remap[i] };
+            if (not new_states_visited.at(remapped_state))
+            {
+                new_states_visited.at(remapped_state) = true;
+
+                new_nodes.at(remapped_state) = std::move(dfa.nodes_.at(i));
+
+                for (auto& tr : new_nodes[remapped_state].tr)
+                    tr.next = state_remap.at(tr.next);
+
+                if (const auto it = dfa.final_nodes_.find(i); it != dfa.final_nodes_.end())
+                    new_final_nodes.try_emplace(remapped_state, it->second);
+
+                if (const auto it = dfa.fallback_nodes_.find(i); it != dfa.fallback_nodes_.end())
+                    new_fallback_nodes.try_emplace(remapped_state, it->second);
+            }
+        }
+
+        dfa.nodes_ = std::move(new_nodes);
+        dfa.final_nodes_ = std::move(new_final_nodes);
+        dfa.fallback_nodes_ = std::move(new_fallback_nodes);
+    }
+
+    template<typename CharT>
+    constexpr std::vector<std::vector<std::size_t>> min<CharT>::dry_run(const tdfa_t& dfa)
+    {
+        /* perform a dry run of hopcroft, but don't make changes to the dfa */
+        const partition_t partitions{ hopcroft(dfa) };
+        std::vector<std::vector<std::size_t>> result(partitions.size());
+        for (std::size_t i{ 0 }, i_end{ partitions.size() }; i < i_end; ++i)
+            for (std::size_t j{ 0 }, j_end{ partitions[i].size() }; j < j_end; ++j)
+                if (partitions[i][j])
+                    result[i].emplace_back(j);
+        return result;
+    }
+
+    template<std::input_iterator I, std::sentinel_for<I> S, typename T>
+    constexpr std::size_t hash_node(I first, const S last, const std::optional<T>& opt)
+    {
+        std::size_t hash{ hash::init() };
+        for (; first != last; ++first)
+            hash::append(hash, *first);
+        if (opt.has_value())
+            hash::append(hash, *opt);
+        return hash;
+    }
+}
+
+namespace rx::detail
+{
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::compact_regop_blocks()
+    {
+        std::vector<std::size_t> regop_block_map(regops_.size());
+        std::flat_map<tdfa::regops_t, std::size_t> regop_map;
+        regop_data_t new_regops;
+
+        for (std::size_t i{ 0 }, i_end{ regops_.size() }; i < i_end; ++i)
+        {
+            auto [it, inserted] = regop_map.try_emplace(regops_[i], new_regops.size());
+
+            if (inserted)
+                new_regops.emplace_back(regops_[i]);
+
+            regop_block_map[i] = it->second;
+        }
+
+        /* remap regop block indicies in dfa */
+
+        for (auto& node : nodes_)
+            for (auto& tr : node.tr)
+                tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : tdfa::no_transition_regops;
+
+        for (auto it = final_nodes_.begin(), last{ final_nodes_.end() }; it != last; ++it)
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
+
+        for (auto it = fallback_nodes_.begin(), last{ fallback_nodes_.end() }; it != last; ++it)
+            it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
+
+        regops_ = std::move(new_regops);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::minimise_states()
+    {
+        tdfa::min<char_type> minimise{};
+        minimise(*this);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::minimise_transition_edges()
+    {
+        /* mutually exclusive with make_default_transitions */
+
+        /* Note: this function relaxes the requirement for a character to appear at most once in any
+                 transition edge, and requires the transitions to be checked in the provided order */
+
+        /* DO NOT USE THIS WITH A TABLE OR SWITCH BASED MATCHER */
+
+        using tr_type = tdfa::transition<char_type>;
+
+        for (auto& node : nodes_)
+        {
+            if (node.tr.empty())
+                continue;
+
+            const auto sizes = node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) | std::ranges::to<std::vector>();
+            const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
+
+            // TODO: switch to using views::enumerate when supported by clang
+            auto scored_pairs = std::views::zip(std::views::iota(0uz),
+                                                node.tr
+                                                | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
+                                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
+                                | std::ranges::to<std::vector>();
+
+            std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
+            scored_pairs.emplace_back(largest_index, 0 /* unimportant */);
+
+            std::vector<tr_type> new_tr;
+            std::vector<tdfa::charset_t<char_type>> dont_cares;
+            tdfa::charset_t<char_type> acc;
+
+            for (const auto& [i, _] : scored_pairs)
+            {
+                auto& tr = node.tr.at(i);
+                dont_cares.emplace_back(acc);
+                acc |= tr.cs;
+                new_tr.emplace_back(std::move(tr));
+            }
+
+            if (acc.full())
+            {
+                const auto& largest = new_tr.back();
+                node.default_tr = { .next = largest.next, .op_index = largest.op_index };
+                new_tr.pop_back();
+            }
+
+            /* fill gaps where possible */
+
+            // TODO: improve optimisations to be bit-aware
+            // e.g. [A-Zc-z] with don't cares of [ab] should become [A-Za-z],
+            //      which can be optimised to perform half the number of comparions
+
+            for (const auto& [tr_ref, dont_cares] : std::views::zip(std::ranges::ref_view(new_tr), dont_cares))
+            {
+                tr_type& tr{ tr_ref };
+
+                using interval_t = tdfa::charset_t<char_type>::char_interval;
+                std::vector<interval_t> to_insert;
+
+                std::ranges::set_intersection((~tr.cs).get_intervals(), dont_cares.get_intervals(), std::back_inserter(to_insert));
+
+                for (const auto& [beg, end] : to_insert)
+                {
+                    if (beg == end)
+                        tr.cs.insert(beg);
+                    else
+                        tr.cs.insert(beg, end);
+                }
+            }
+
+            node.tr = std::move(new_tr);
+        }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::make_default_transitions()
+    {
+        /* mutually exclusive with minimise_transition_edges */
+
+        using tr_type = tdfa::transition<char_type>;
+
+        for (auto& node : nodes_)
+        {
+            if (node.tr.empty())
+                continue;
+
+            const auto sizes = node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) | std::ranges::to<std::vector>();
+            const auto largest_index = static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin());
+
+            auto& largest = node.tr[largest_index];
+            tdfa::charset_t<char_type> largest_cs{ largest.cs };
+            std::vector<tr_type> new_tr;
+
+            for (std::size_t i{ 0 }, i_end{ node.tr.size() }; i < i_end; ++i)
+            {
+                if (i == largest_index)
+                    continue;
+
+                largest_cs |= node.tr[i].cs;
+                new_tr.emplace_back(std::move(node.tr[i]));
+            }
+
+            if (largest_cs.full())
+                node.default_tr = { .next = largest.next, .op_index = largest.op_index };
+            else
+                new_tr.emplace_back(std::move(largest));
+
+            node.tr = std::move(new_tr);
+        }
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::make_shared_transitions()
+    {
+        using node_type = tdfa::node<char_type>;
+
+        auto keys = nodes_
+                    | std::views::transform([](const node_type& n) {
+                        return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr);
+                    })
+                    | std::ranges::to<std::vector>();
+
+        auto values = std::views::iota(0uz, nodes_.size())
+                    | std::ranges::to<std::vector>();
+
+        // TODO: switch to using std::flat_multimap instead when constexpr is supported
+        //       (but an unordered flat set would be much better)
+        // const std::flat_multimap map{ std::move(keys), std::move(values) };
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; // TODO: remove
+        std::ranges::sort(std::views::zip(keys, values), {}, key_proj); // TODO: remove
+
+        data_t new_nodes{};
+        new_nodes.reserve(nodes_.size());
+
+        for (std::size_t current_index{ 0 }, node_count{ nodes_.size() }; current_index < node_count; ++current_index)
+        {
+            const auto& current = nodes_[current_index];
+
+            const auto beg = current.tr.begin();
+            const auto end = current.tr.end();
+
+            bool inserted{ false };
+
+            const auto zv = std::views::zip(keys, values); // TODO: remove
+
+            for (auto it = beg; it != end; ++it)
+            {
+                const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
+
+                // for (auto [fst, snd] = map.equal_range(keys); fst != snd; ++fst)
+                for (auto [fst, snd] = std::ranges::equal_range(zv, hash, {}, key_proj); fst != snd; ++fst)  // TODO: remove
+                {
+                    auto [_, index] = *fst;
+
+                    if (index == current_index)
+                        break; /* prevent replacement with self */
+
+
+                    if (const auto& other = nodes_.at(index);
+                        not (std::ranges::equal(it, end, other.tr.begin(), other.tr.end())
+                        and current.default_tr == other.default_tr))
+                    {
+                        continue;
+                    }
+
+                    new_nodes.emplace_back(
+                        std::vector<tdfa::transition<char_type>>(beg, it),
+                        tdfa::default_transition{ .next = index, .op_index = tdfa::default_transition_is_not_state }
+                    );
+
+                    inserted = true;
+                    break;
+                }
+
+                if (inserted)
+                    break;
+            }
+
+            if (inserted)
+                continue;
+
+            new_nodes.emplace_back(current);
+        }
+
+        nodes_ = std::move(new_nodes);
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::de_default_edges()
+    {
+        for (auto& node : nodes_)
+        {
+            if (node.default_tr.has_value())
+            {
+                node.tr.emplace_back(node.default_tr->next, node.default_tr->op_index, ~(tdfa::charset_t<char_type>{}));
+                node.default_tr.reset();
+            }
+        }
+    }
+}
