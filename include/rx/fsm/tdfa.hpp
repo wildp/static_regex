@@ -92,8 +92,6 @@ namespace rx::detail::tdfa
     inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
     inline constexpr std::size_t   default_transition_is_not_state{ std::numeric_limits<std::size_t>::max() - 1 };
 
-    constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
-
     template<typename CharT>
     struct transition
     {
@@ -181,5 +179,3 @@ namespace rx::detail
 }
 
 #include "tdfa.tpp"
-#include "regoptimise.tpp"
-#include "minimise.tpp"

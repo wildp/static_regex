@@ -12,16 +12,19 @@
 #include <functional>
 #include <iterator>
 #include <numeric>
+#include <optional>
 #include <ranges>
 #include <utility>
-#include <variant>
 
+#include "rx/etc/util.hpp"
 #include "rx/api/regex_error.hpp"
 #include "rx/etc/vec_bool_adaptor.hpp"
 
 
 namespace rx::detail::tdfa
 {
+    constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
+
     /* tnfa -> tdfa conversion */
 
     using tag_t = int;
@@ -762,41 +765,9 @@ namespace rx::detail::tdfa
         if (flags_.enable_fallback)
             fallback_regops(result);
     }
-}
 
-namespace rx::detail
-{
-    template<typename CharT>
-    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
-        : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
-    {
-        tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
-    }
-}
-// Copyright (C) 2026 Peter Wild
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+    // TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
 
-#pragma once
-
-#include "tdfa.hpp"
-
-#include <algorithm>
-#include <functional>
-#include <iterator>
-#include <ranges>
-#include <utility>
-#include <variant>
-
-#include "rx/etc/vec_bool_adaptor.hpp"
-
-
-// TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
-
-namespace rx::detail::tdfa
-{
     /* regops sorting */
 
     constexpr bool toposort_regops(const regops_t::iterator beg, const regops_t::iterator end, const reg_t regcount)
@@ -1618,39 +1589,10 @@ namespace rx::detail::tdfa
             normalise(dfa);
         }
     }
-}
 
-namespace rx::detail
-{
-    template<typename CharT>
-    constexpr void tagged_dfa<CharT>::optimise_registers()
-    {
-        tdfa::opt<char_type> regoptimise;
-        regoptimise(*this);
-        compact_regop_blocks();
-    }
-}
-// Copyright (C) 2026 Peter Wild
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#pragma once
+    /* tdfa minimisation */
 
-#include "tdfa.hpp"
-
-#include <algorithm>
-#include <iterator>
-#include <optional>
-#include <ranges>
-#include <vector>
-
-#include "rx/etc/util.hpp"
-#include "rx/etc/vec_bool_adaptor.hpp"
-
-namespace rx::detail::tdfa
-{
     template<typename CharT>
     class min
     {
@@ -1875,6 +1817,23 @@ namespace rx::detail::tdfa
 
 namespace rx::detail
 {
+    /* tdfa constructor and member functions */
+
+    template<typename CharT>
+    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
+        : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
+    {
+        tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::optimise_registers()
+    {
+        tdfa::opt<char_type> regoptimise;
+        regoptimise(*this);
+        compact_regop_blocks();
+    }
+
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::compact_regop_blocks()
     {

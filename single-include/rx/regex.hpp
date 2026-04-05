@@ -8000,8 +8000,6 @@ namespace rx::detail::tdfa
     inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
     inline constexpr std::size_t   default_transition_is_not_state{ std::numeric_limits<std::size_t>::max() - 1 };
 
-    constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
-
     template<typename CharT>
     struct transition
     {
@@ -8090,6 +8088,8 @@ namespace rx::detail
 
 namespace rx::detail::tdfa
 {
+    constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
+
     /* tnfa -> tdfa conversion */
 
     using tag_t = int;
@@ -8827,20 +8827,7 @@ namespace rx::detail::tdfa
         if (flags_.enable_fallback)
             fallback_regops(result);
     }
-}
 
-namespace rx::detail
-{
-    template<typename CharT>
-    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
-        : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
-    {
-        tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
-    }
-}
-
-namespace rx::detail::tdfa
-{
     /* regops sorting */
 
     constexpr bool toposort_regops(const regops_t::iterator beg, const regops_t::iterator end, const reg_t regcount)
@@ -9650,21 +9637,9 @@ namespace rx::detail::tdfa
             normalise(dfa);
         }
     }
-}
 
-namespace rx::detail
-{
-    template<typename CharT>
-    constexpr void tagged_dfa<CharT>::optimise_registers()
-    {
-        tdfa::opt<char_type> regoptimise;
-        regoptimise(*this);
-        compact_regop_blocks();
-    }
-}
+    /* tdfa minimisation */
 
-namespace rx::detail::tdfa
-{
     template<typename CharT>
     class min
     {
@@ -9885,6 +9860,23 @@ namespace rx::detail::tdfa
 
 namespace rx::detail
 {
+    /* tdfa constructor and member functions */
+
+    template<typename CharT>
+    constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
+        : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
+    {
+        tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
+    }
+
+    template<typename CharT>
+    constexpr void tagged_dfa<CharT>::optimise_registers()
+    {
+        tdfa::opt<char_type> regoptimise;
+        regoptimise(*this);
+        compact_regop_blocks();
+    }
+
     template<typename CharT>
     constexpr void tagged_dfa<CharT>::compact_regop_blocks()
     {
