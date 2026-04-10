@@ -37,12 +37,13 @@ endif()
 add_subdirectory(tests/)
 add_subdirectory(bench/ EXCLUDE_FROM_ALL)
 add_subdirectory(trace/ EXCLUDE_FROM_ALL)
+add_subdirectory(tools/ EXCLUDE_FROM_ALL)
 
 add_custom_command(
     OUTPUT
         single-include/rx/regex.hpp
     COMMAND
-        ${CMAKE_CURRENT_SOURCE_DIR}/make-single-include.sh
+       amalgamate include/ include/rx/regex.hpp single-include/rx/regex.hpp LICENSE
     WORKING_DIRECTORY
         ${PROJECT_SOURCE_DIR}
 )

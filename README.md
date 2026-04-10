@@ -6,7 +6,7 @@ wildp/regex is an experimental compile-time regular expression library for C++26
 
 See [syntax.md](./docs/syntax.md) and [synopsis.md](./docs/synopsis.md) for documentation.
 
-This library is also available as a single header file, which can be regenerated using [make-single-include.sh](./make-single-include.sh).
+This library is also available as a single header file, which can be regenerated using [amalgamate.cpp](./tools/amalgamate.cpp).
 
 Currently the only compiler supported is the [Clang P2996 fork](https://github.com/bloomberg/clang-p2996/tree/p2996).
 For most patterns it is necessary to to increase the constexpr evaluation step limit (e.g. `-fconstexpr-steps=4294967295` on clang-p2996).

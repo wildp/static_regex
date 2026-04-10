@@ -2881,7 +2881,6 @@ namespace rx::detail
         text_end,
         line_start,
         line_end,
-
         ascii_word_boundary,
         not_ascii_word_boundary,
     };
@@ -2955,14 +2954,12 @@ namespace rx::detail
                 }
                 else
                 {
-
                     throw pattern_error("Multibyte characters are unimplemented");
                 }
             }
 
             [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
             {
-
                 if (data.size() == 1)
                     return data.front();
                 return {};
@@ -3050,7 +3047,6 @@ namespace rx::detail
             /* standard escape sequences */
 
             case 'a': return char_str{ '\a' };
-
             case 'f': return char_str{ '\f' };
             case 't': return char_str{ '\t' };
             case 'n': return char_str{ '\n' };
@@ -5688,7 +5684,6 @@ namespace rx::detail::parser
 
                 if constexpr (char_is_multibyte<char_type>)
                 {
-
                     throw tree_error("Caseless flag on multibyte strings not implemented");
                 }
 
@@ -6284,7 +6279,6 @@ namespace rx::detail::tnfa
                                              , normal_tr<CharT>, epsilon_tr
                                              , eof_anchor_tr, sof_anchor_tr
                                              , lookahead_1_tr<CharT>, lookbehind_1_tr<CharT>
-
         >;
 
         state_t         src, dst;
@@ -6617,12 +6611,10 @@ namespace rx::detail
 
                 if constexpr (char_is_utf8<char_type>)
                 {
-
                     throw tnfa_error("UTF8 character classes are unimplemented");
                 }
                 else if constexpr (char_is_utf16<char_type>)
                 {
-
                     throw tnfa_error("UTF16 character classes are unimplemented");
                 }
                 else if constexpr (std::same_as<charset_type, typename ast_t::char_class::impl_type::underlying_type>)
@@ -6631,7 +6623,6 @@ namespace rx::detail
                 }
                 else
                 {
-
                     throw tnfa_error("Cannot convert character class to representation used by tnfa");
                 }
                 break;
@@ -6785,7 +6776,6 @@ namespace rx::detail
 
                         break;
                     }
-
                     else
                     {
                         throw tnfa_error("Invalid repeater in tree");
@@ -8526,7 +8516,6 @@ namespace rx::detail::tdfa
 
         /* different precedences also imply differing sets of states (for now at least);
          * we ensure tnfa states have the same tag sequences later                       */
-
         if (not std::ranges::equal(state.config, mapped_state_info.config, {}, &configuration::tnfa_state, &configuration::tnfa_state))
             return false;
 
@@ -9651,7 +9640,6 @@ namespace rx::detail::tdfa
         static constexpr std::vector<std::vector<std::size_t>> dry_run(const tdfa_t& dfa);
 
     private:
-
         using partition_t = std::vector<bitset_t>;
 
         static constexpr partition_t init_hopcroft_partition(const tdfa_t& dfa);
@@ -10210,7 +10198,6 @@ namespace rx::detail
 
             if (not vec.empty())
             {
-
                 auto scored_pairs = std::views::zip(std::views::iota(0uz),
                                                     vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
                                     | std::ranges::to<std::vector>();
@@ -11128,7 +11115,6 @@ namespace rx::detail
                     const auto& [...mems] = e;
                     return { .value{ .repeat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
                 }
-
             });
 #undef INDEX_CAST
         }
@@ -11180,7 +11166,6 @@ namespace rx::detail
     template<static_span Intervals, typename CharT>
     [[gnu::always_inline]] constexpr bool cs_possible(CharT c)
     {
-
         template for (constexpr auto pair : Intervals)
         {
             if (pair.first <= c and c <= pair.second)
@@ -11622,7 +11607,6 @@ namespace rx::detail
             template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
             {
-
                 if (check_impl(first, last, it))
                     [[clang::musttail]] return state<Fwd, Cont...>::operator()(res, si, first, last, it);
 
@@ -11993,7 +11977,6 @@ namespace rx::detail
     template<static_transition Tr, typename CharT>
     [[gnu::always_inline]] constexpr bool tr_possible(CharT c)
     {
-
         template for (constexpr auto pair : Tr.cs)
         {
             if (pair.first <= c and c <= pair.second)
