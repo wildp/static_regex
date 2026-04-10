@@ -132,7 +132,7 @@ namespace rx
             if (not parent_->cached_result_.has_value())
                 return *this;
 
-            const auto& [mfirst, mlast] = force_get<0>(parent_->cached_result_);
+            const auto& [mfirst, mlast] = parent_->cached_result_.template force_get<0>();
             current_ = mlast;
 
             if constexpr (not matcher_type::never_empty)
@@ -775,7 +775,7 @@ namespace rx
                 {
                     if constexpr (result_type::has_continue)
                         cached_begin_continue_at_ = result.continue_at_;
-                    auto [mfirst, mlast] = force_get<0>(result);
+                    auto [mfirst, mlast] = result.template force_get<0>();
                     cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
                 }
                 else
@@ -903,7 +903,7 @@ namespace rx
                     {
                         if constexpr (result_type::has_continue)
                             continue_at_ = result.continue_at_;
-                        auto [mfirst, mlast] = force_get<0>(result);
+                        auto [mfirst, mlast] = result.template force_get<0>();
                         next_ = { std::move(mfirst), std::move(mlast) };
                     }
                     else

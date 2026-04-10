@@ -26,6 +26,9 @@ static void BM_rx_match(benchmark::State& state, Matcher m, const std::string_vi
 using namespace rx::literals;
 using namespace ctre::literals;
 
+template<rx::string_literal Pattern>
+consteval rx::static_regex<Pattern, rx::mode::backtrack> operator ""_rxn() { return {}; }
+
 #define TEST(NAME, PATTERN, INPUT)                             \
 BENCHMARK_CAPTURE(BM_rx_match, NAME, PATTERN ## _rx, INPUT);   \
 BENCHMARK_CAPTURE(BM_rx_match, NAME, PATTERN ## _rxn, INPUT);  \

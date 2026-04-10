@@ -46,7 +46,7 @@ namespace rx::detail
 
         template<typename... Args>
             requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
-        constexpr explicit bitcharset(Args... args)
+        constexpr explicit bitcharset(Args... args) noexcept
         {
             template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
             {

@@ -35,7 +35,7 @@ static void BM_rx(benchmark::State& state, rx::static_regex<Pattern> m)
 }
 
 template<rx::string_literal Pattern>
-static void BM_rxf(benchmark::State& state, rx::static_regex<Pattern, rx::mode::fast> m)
+static void BM_rxf(benchmark::State& state, rx::static_regex<Pattern, rx::mode::linear> m)
 {
     for (auto _ : state)
     {
@@ -46,7 +46,7 @@ static void BM_rxf(benchmark::State& state, rx::static_regex<Pattern, rx::mode::
 }
 
 template<rx::string_literal Pattern>
-static void BM_rxn(benchmark::State& state, rx::static_regex<Pattern, rx::mode::naive> m)
+static void BM_rxn(benchmark::State& state, rx::static_regex<Pattern, rx::mode::backtrack> m)
 {
     for (auto _ : state)
     {
@@ -58,6 +58,12 @@ static void BM_rxn(benchmark::State& state, rx::static_regex<Pattern, rx::mode::
 
 using namespace ctre::literals;
 using namespace rx::literals;
+
+template<rx::string_literal Pattern>
+consteval rx::static_regex<Pattern, rx::mode::linear> operator ""_rxf() { return {}; }
+
+template<rx::string_literal Pattern>
+consteval rx::static_regex<Pattern, rx::mode::backtrack> operator ""_rxn() { return {}; }
 
 #define TEST(PATTERN)                                  \
 BENCHMARK_CAPTURE(BM_rx, PATTERN, PATTERN ## _rx);     \

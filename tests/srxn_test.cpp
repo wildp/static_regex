@@ -46,43 +46,43 @@ namespace
     }
 
     template<rx::string_literal S>
-    consteval bool match(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str)
+    consteval bool match(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str)
     {
         return pattern.is_match(str);
     }
 
     template<rx::string_literal S>
-    consteval bool match(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str, const std::vector<std::size_t>& captures)
+    consteval bool match(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str, const std::vector<std::size_t>& captures)
     {
         return submatch_check(pattern.match(str), captures, str.begin(), 1);
     }
 
     template<rx::string_literal S>
-    consteval bool prefix_match(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str)
+    consteval bool prefix_match(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str)
     {
        return pattern.starts_with_match(str);
     }
 
     template<rx::string_literal S>
-    consteval bool prefix_match(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str, const std::vector<std::size_t>& captures)
+    consteval bool prefix_match(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str, const std::vector<std::size_t>& captures)
     {
         return submatch_check(pattern.prefix_match(str), captures, str.begin());
     }
 
     template<rx::string_literal S>
-    consteval bool search(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str)
+    consteval bool search(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str)
     {
        return pattern.contains_match(str);
     }
 
     template<rx::string_literal S>
-    consteval bool search(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str, const std::vector<std::size_t>& captures)
+    consteval bool search(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str, const std::vector<std::size_t>& captures)
     {
         return submatch_check(pattern.search(str), captures, str.begin());
     }
 
     template<rx::string_literal S>
-    consteval bool search_all(rx::static_regex<S, rx::mode::naive> pattern, std::string_view str, const std::vector<std::vector<std::size_t>>& captures)
+    consteval bool search_all(rx::static_regex<S, rx::mode::backtrack> pattern, std::string_view str, const std::vector<std::vector<std::size_t>>& captures)
     {
         for (const auto& [match, caps] : std::views::zip(pattern.range(str), captures))
         {
@@ -91,10 +91,12 @@ namespace
         }
         return true;
     }
+
+    template<rx::string_literal Pattern>
+    consteval rx::static_regex<Pattern, rx::mode::backtrack> operator ""_rxn() { return {}; }
 }
 
 using rx::detail::no_tag;
-using namespace rx::literals;
 
 /* basic tests */
 static_assert(match(""_rxn, ""));

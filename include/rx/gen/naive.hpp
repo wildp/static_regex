@@ -722,7 +722,7 @@ namespace rx::detail
             {
                 static_assert(bref.number < result<I>::submatch_count, "Backreference to non-existent submatch");
 
-                const auto submatch = force_get<bref.number>(res);
+                const auto submatch = res.template force_get<bref.number>();
 
                 if (not submatch.matched())
                     return false;

@@ -125,7 +125,7 @@ namespace rx
 
         template<std::size_t N>
             requires (N < 2)
-        [[nodiscard]] friend constexpr const auto& get(const submatch& s)
+        [[nodiscard]] friend constexpr const auto& get(const submatch& s) noexcept
         {
             if constexpr (N == 0)
                 return s.first_;
@@ -135,7 +135,7 @@ namespace rx
 
         template<std::size_t N>
             requires (N < 2)
-        [[nodiscard]] friend constexpr auto&& get(submatch&& s)
+        [[nodiscard]] friend constexpr auto&& get(submatch&& s) noexcept
         {
             if constexpr (N == 0)
                 return std::move(s).first_;
@@ -232,7 +232,7 @@ namespace rx
         static constexpr bool use_bool{ not std::contiguous_iterator<I> };
         using maybe_bool = detail::maybe_type_t<use_bool, bool>;
 
-        constexpr submatch(I first, I last)
+        constexpr submatch(I first, I last) noexcept(std::is_nothrow_move_constructible_v<I>)
             : first_{ std::move(first) }, last_{ std::move(last) }, match_{ true } {}
 
         friend class detail::submatch_factory<I>;
@@ -266,6 +266,12 @@ inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::str
 static_assert(std::formattable<rx::submatch<const char*>, char>);
 
 
+/* range correctness for submatch */
+
+template<std::bidirectional_iterator I>
+constexpr bool std::ranges::disable_sized_range<rx::submatch<I>> = not std::sized_sentinel_for<I, I>;
+
+
 /* submatch factory implementation */
 
 namespace rx::detail
@@ -275,6 +281,7 @@ namespace rx::detail
     {
     public:
         [[nodiscard]] static constexpr submatch<I> make_submatch(I first, I last)
+            noexcept(std::is_nothrow_move_constructible_v<I>)
         {
             return { first, last };
         }

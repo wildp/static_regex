@@ -62,7 +62,7 @@ namespace rx
                 if (not result_.has_value())
                     return *this;
 
-                const auto& [prev_start, current] = force_get<0>(result_);
+                const auto& [prev_start, current] = result_.template force_get<0>();
 
                 if constexpr (not matcher_type::never_empty)
                 {

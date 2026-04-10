@@ -46,19 +46,19 @@ namespace
     }
 
     template<rx::string_literal S>
-    consteval bool search(rx::static_regex<S, rx::mode::fast> pattern, std::string_view str)
+    consteval bool search(rx::static_regex<S, rx::mode::linear> pattern, std::string_view str)
     {
        return pattern.contains_match(str);
     }
 
     template<rx::string_literal S>
-    consteval bool search(rx::static_regex<S, rx::mode::fast> pattern, std::string_view str, const std::vector<std::size_t>& captures)
+    consteval bool search(rx::static_regex<S, rx::mode::linear> pattern, std::string_view str, const std::vector<std::size_t>& captures)
     {
         return submatch_check(pattern.search(str), captures, str.begin());
     }
 
     template<rx::string_literal S>
-    consteval bool search_all(rx::static_regex<S, rx::mode::fast> pattern, std::string_view str, const std::vector<std::vector<std::size_t>>& captures)
+    consteval bool search_all(rx::static_regex<S, rx::mode::linear> pattern, std::string_view str, const std::vector<std::vector<std::size_t>>& captures)
     {
         for (const auto& [match, caps] : std::views::zip(pattern.range(str), captures))
         {
@@ -67,10 +67,12 @@ namespace
         }
         return true;
     }
+
+    template<rx::string_literal Pattern>
+    consteval rx::static_regex<Pattern, rx::mode::linear> operator ""_rxf() { return {}; }
 }
 
 using rx::detail::no_tag;
-using namespace rx::literals;
 
 /* these tests have been copied from srx_1 */
 

@@ -24,15 +24,15 @@ namespace rx
     enum class mode : unsigned char
     {
         standard,
-        fast,
-        naive
+        linear,
+        backtrack
     };
 
     namespace detail
     {
         consteval auto get_matcher_refl(mode i, bool is_search = false)
         {
-            if (i == mode::naive)
+            if (i == mode::backtrack)
                 return ^^detail::naive_matcher_adaptor;
             else if (i == mode::standard and is_search)
                 return ^^detail::p1306_searcher;
@@ -224,34 +224,92 @@ namespace rx
     }
 
 
+    namespace detail
+    {
+        template<string_literal Pattern, mode Mode>
+        struct static_match_impl
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(I first, S last)
+            {
+                return static_regex<Pattern, Mode>::match(first, last);
+            }
+
+            template<std::ranges::bidirectional_range R>
+                requires std::ranges::borrowed_range<R>
+            static constexpr auto operator()(R&& r)
+            {
+                return static_regex<Pattern, Mode>::match(std::forward<R>(r));
+            }
+
+            template<typename CharT>
+            static constexpr auto operator()(const CharT* cstr)
+            {
+                return static_regex<Pattern, Mode>::match(cstr);
+            }
+        };
+
+        template<string_literal Pattern, mode Mode>
+        struct static_prefix_match_impl
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(I first, S last)
+            {
+                return static_regex<Pattern, Mode>::prefix_match(first, last);
+            }
+
+            template<std::ranges::bidirectional_range R>
+                requires std::ranges::borrowed_range<R>
+            static constexpr auto operator()(R&& r)
+            {
+                return static_regex<Pattern, Mode>::prefix_match(std::forward<R>(r));
+            }
+
+            template<typename CharT>
+            static constexpr auto operator()(const CharT* cstr)
+            {
+                return static_regex<Pattern, Mode>::prefix_match(cstr);
+            }
+        };
+
+        template<string_literal Pattern, mode Mode>
+        struct static_search_impl
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(I first, S last)
+            {
+                return static_regex<Pattern, Mode>::search(first, last);
+            }
+
+            template<std::ranges::bidirectional_range R>
+                requires std::ranges::borrowed_range<R>
+            static constexpr auto operator()(R&& r)
+            {
+                return static_regex<Pattern, Mode>::search(std::forward<R>(r));
+            }
+
+            template<typename CharT>
+            static constexpr auto operator()(const CharT* cstr)
+            {
+                return static_regex<Pattern, Mode>::search(cstr);
+            }
+        };
+    }
+
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr detail::static_match_impl<Pattern, Mode> static_regex_match;
+
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr detail::static_prefix_match_impl<Pattern, Mode> static_regex_prefix_match;
+
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr detail::static_search_impl<Pattern, Mode> static_regex_search;
+
+
     namespace literals
     {
         template<string_literal Pattern>
         consteval static_regex<Pattern> operator ""_rx()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::fast> operator ""_rxf()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::fast> operator ""_rx_fast()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::naive> operator ""_rxn()
-        {
-            return {};
-        }
-
-        template<string_literal Pattern>
-        consteval static_regex<Pattern, mode::naive> operator ""_rx_naive()
         {
             return {};
         }

@@ -39,7 +39,6 @@ namespace rx::detail
 namespace rx
 {
     template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
-        requires std::default_initializable<I> and std::copyable<I>
     class static_regex_match_result
     {
         using factory = detail::submatch_factory<I>;
@@ -58,7 +57,7 @@ namespace rx
 
         static constexpr size_type submatch_count{ Captures.fci.capture_count() };
 
-        constexpr static_regex_match_result() noexcept
+        constexpr static_regex_match_result() noexcept(std::is_nothrow_default_constructible_v<I>)
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
@@ -66,7 +65,7 @@ namespace rx
 
         /* observers */
 
-        [[nodiscard]] constexpr bool has_value() const
+        [[nodiscard]] constexpr bool has_value() const noexcept
         {
             if constexpr (std::contiguous_iterator<I>)
                 return std::to_address(match_end_) != std::to_address(I{});
@@ -74,12 +73,12 @@ namespace rx
                 return match_success_;
         }
 
-        [[nodiscard]] constexpr explicit(false) operator bool() const
+        [[nodiscard]] constexpr explicit(false) operator bool() const noexcept
         {
             return this->has_value();
         }
 
-        [[nodiscard]] constexpr size_type size() const
+        [[nodiscard]] constexpr size_type size() const noexcept
         {
             return (this->has_value()) ? submatch_count : 0;
         }
@@ -89,10 +88,8 @@ namespace rx
         [[nodiscard]] constexpr submatch_type operator[](size_type n) const noexcept
         {
             template for (constexpr size_type N : std::views::iota(0uz, submatch_count))
-            {
                 if (n == N)
                     return get<N>(*this);
-            }
             std::unreachable();
         }
 
@@ -104,46 +101,46 @@ namespace rx
 
         /* iterator support */
 
-        [[nodiscard]] constexpr iterator begin() const
+        [[nodiscard]] constexpr iterator begin() const noexcept
         {
             return this->has_value()
                    ? iterator{ this, 0 }
                    : this->end();
         }
 
-        [[nodiscard]] constexpr iterator end() const
+        [[nodiscard]] constexpr iterator end() const noexcept
         {
             return { this, this->size() };
         }
 
-        [[nodiscard]] constexpr reverse_iterator rbegin() const
+        [[nodiscard]] constexpr reverse_iterator rbegin() const noexcept
         {
             return std::make_reverse_iterator(this->end());
         }
 
-        [[nodiscard]] constexpr reverse_iterator rend() const
+        [[nodiscard]] constexpr reverse_iterator rend() const noexcept
         {
             return std::make_reverse_iterator(this->begin());
         }
 
-        [[nodiscard]] constexpr const_iterator cbegin() const
+        [[nodiscard]] constexpr const_iterator cbegin() const noexcept
         {
             return this->has_value()
                    ? const_iterator{ this, 0 }
                    : this->end();
         }
 
-        [[nodiscard]] constexpr const_iterator cend() const
+        [[nodiscard]] constexpr const_iterator cend() const noexcept
         {
             return { this, this->size() };
         }
 
-        [[nodiscard]] constexpr const_reverse_iterator crbegin() const
+        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
         {
             return std::make_reverse_iterator(this->cend());
         }
 
-        [[nodiscard]] constexpr const_reverse_iterator crend() const
+        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept
         {
             return std::make_reverse_iterator(this->cbegin());
         }
@@ -155,7 +152,7 @@ namespace rx
         [[nodiscard]] friend constexpr submatch_type get(const static_regex_match_result& r) noexcept
         {
             if (r.has_value())
-                return force_get<N>(r);
+                return r.template force_get<N>();
             return {};
         }
 
@@ -189,13 +186,14 @@ namespace rx
         static constexpr bool continue_from_it{ Captures.continue_from_it };
 
         explicit constexpr static_regex_match_result(I start)
+            noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
             : match_start_{ std::move(start) }
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
         }
 
-        constexpr void clear_match()
+        constexpr void clear_match() noexcept(std::is_nothrow_default_constructible_v<I>)
         {
             if constexpr (std::contiguous_iterator<I>)
                 match_end_ = I{};
@@ -204,7 +202,7 @@ namespace rx
         }
 
         template<detail::tag_number_t N>
-        [[nodiscard]] constexpr bool tag_enabled() const
+        [[nodiscard]] constexpr bool tag_enabled() const noexcept
         {
             if constexpr (N == detail::start_of_input_tag or N == detail::end_of_input_tag)
                 return true;
@@ -215,7 +213,7 @@ namespace rx
         }
 
         template<detail::tag_number_t N>
-        [[nodiscard]] constexpr I get_tag() const
+        [[nodiscard]] constexpr I get_tag() const noexcept
         {
             if constexpr (N == detail::start_of_input_tag)
                 return match_start_;
@@ -227,27 +225,27 @@ namespace rx
 
         template<size_type N>
             requires (N < submatch_count)
-        [[nodiscard]] friend constexpr submatch_type force_get(const static_regex_match_result& r) noexcept
+        [[nodiscard]] constexpr submatch_type force_get() const noexcept
         {
             static constexpr auto current = Captures.fci.captures[N];
 
             if constexpr (current.first.tag_number == current.second.tag_number)
             {
-                if (r.tag_enabled<current.first.tag_number>())
+                if (tag_enabled<current.first.tag_number>())
                 {
                     return factory::make_submatch(
-                        std::ranges::next(r.get_tag<current.first.tag_number>(), current.first.offset),
-                        std::ranges::next(r.get_tag<current.second.tag_number>(), current.second.offset)
+                        std::ranges::next(get_tag<current.first.tag_number>(), current.first.offset),
+                        std::ranges::next(get_tag<current.second.tag_number>(), current.second.offset)
                     );
                 }
             }
             else
             {
-                if (r.tag_enabled<current.first.tag_number>() and r.tag_enabled<current.second.tag_number>())
+                if (tag_enabled<current.first.tag_number>() and tag_enabled<current.second.tag_number>())
                 {
                     return factory::make_submatch(
-                        std::ranges::next(r.get_tag<current.first.tag_number>(), current.first.offset),
-                        std::ranges::next(r.get_tag<current.second.tag_number>(), current.second.offset)
+                        std::ranges::next(get_tag<current.first.tag_number>(), current.first.offset),
+                        std::ranges::next(get_tag<current.second.tag_number>(), current.second.offset)
                     );
                 }
             }
@@ -282,7 +280,6 @@ namespace rx
     /* iterator implementation */
 
     template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
-        requires std::default_initializable<I> and std::copyable<I>
     template<bool Const>
     class static_regex_match_result<I, Captures>::proxy_iterator
     {
@@ -298,55 +295,55 @@ namespace rx
 
         proxy_iterator() = default;
 
-        constexpr proxy_iterator(const static_regex_match_result* ptr, size_type pos)
+        constexpr proxy_iterator(const static_regex_match_result* ptr, size_type pos) noexcept
             : ptr_{ ptr }, pos_{ pos } {}
 
-        constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) requires Const
+        constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) noexcept requires Const
             : ptr_{ i.ptr_ }, pos_{ i.pos_ } {}
 
-        constexpr value_type operator*() const
+        constexpr value_type operator*() const noexcept
         {
             return (*ptr_)[pos_];
         }
 
-        constexpr value_type operator[](difference_type n) const
+        constexpr value_type operator[](difference_type n) const noexcept
         {
             return (*ptr_)[pos_ + n];
         }
 
-        constexpr proxy_iterator& operator++()
+        constexpr proxy_iterator& operator++() noexcept
         {
             ++pos_;
             return *this;
         }
 
-        constexpr proxy_iterator operator++(int)
+        constexpr proxy_iterator operator++(int) noexcept
         {
             auto tmp = *this;
             ++*this;
             return tmp;
         }
 
-        constexpr proxy_iterator& operator--()
+        constexpr proxy_iterator& operator--() noexcept
         {
             --pos_;
             return *this;
         }
 
-        constexpr proxy_iterator operator--(int)
+        constexpr proxy_iterator operator--(int) noexcept
         {
             auto tmp = *this;
             --*this;
             return tmp;
         }
 
-        constexpr proxy_iterator& operator+=(difference_type n)
+        constexpr proxy_iterator& operator+=(difference_type n) noexcept
         {
             pos_ += n;
             return *this;
         }
 
-        constexpr proxy_iterator& operator-=(difference_type n)
+        constexpr proxy_iterator& operator-=(difference_type n) noexcept
         {
             pos_ -= n;
             return *this;
@@ -356,22 +353,22 @@ namespace rx
 
         friend constexpr auto operator<=>(const proxy_iterator&, const proxy_iterator&) = default;
 
-        friend constexpr proxy_iterator operator+(const proxy_iterator& i, difference_type n)
+        friend constexpr proxy_iterator operator+(const proxy_iterator& i, difference_type n) noexcept
         {
             return { i.ptr_, i.pos_ + n };
         }
 
-        friend constexpr proxy_iterator operator+(difference_type n, const proxy_iterator& i)
+        friend constexpr proxy_iterator operator+(difference_type n, const proxy_iterator& i) noexcept
         {
             return { i.ptr_, n + i.pos_ };
         }
 
-        friend constexpr proxy_iterator operator-(const proxy_iterator& i, difference_type n)
+        friend constexpr proxy_iterator operator-(const proxy_iterator& i, difference_type n) noexcept
         {
             return { i.ptr_, i.pos_ - n };
         }
 
-        friend constexpr difference_type operator-(const proxy_iterator& x, const proxy_iterator& y)
+        friend constexpr difference_type operator-(const proxy_iterator& x, const proxy_iterator& y) noexcept
         {
             return y.pos_ - x.pos_;
         }

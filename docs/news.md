@@ -1,5 +1,9 @@
 # News
 
+### Version 0.1.4
+
+Renamed `mode::fast` to `mode::linear` and `mode::naive` to `mode::backtrack`.
+
 ### Version 0.1.3
 
 Added `regex_split_view` and `replace_view`.
