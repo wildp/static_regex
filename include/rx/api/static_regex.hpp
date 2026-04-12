@@ -294,6 +294,28 @@ namespace rx
                 return static_regex<Pattern, Mode>::search(cstr);
             }
         };
+
+        template<string_literal Pattern, mode Mode>
+        struct static_search_all_impl
+        {
+            template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+            static constexpr auto operator()(I first, S last)
+            {
+                return static_regex<Pattern, Mode>::range(first, last);
+            }
+
+            template<std::ranges::bidirectional_range R>
+            static constexpr auto operator()(R&& r)
+            {
+                return static_regex<Pattern, Mode>::range(std::forward<R>(r));
+            }
+
+            template<typename CharT>
+            static constexpr auto operator()(const CharT* cstr)
+            {
+                return static_regex<Pattern, Mode>::range(cstr);
+            }
+        };
     }
 
     template<string_literal Pattern, mode Mode = mode::standard>
@@ -305,6 +327,8 @@ namespace rx
     template<string_literal Pattern, mode Mode = mode::standard>
     inline constexpr detail::static_search_impl<Pattern, Mode> static_regex_search;
 
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr detail::static_search_all_impl<Pattern, Mode> static_regex_search_all;
 
     namespace literals
     {

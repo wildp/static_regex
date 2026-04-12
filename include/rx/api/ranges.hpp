@@ -1184,11 +1184,17 @@ namespace rx
         inline constexpr detail::replace_adaptor replace;
         inline constexpr detail::regex_split_adaptor regex_split;
 
+        template<string_literal Pattern, mode Mode = mode::standard>
+        inline constexpr detail::static_regex_match_adaptor_closure<static_regex<Pattern, Mode>> static_regex_match;
+
         template<int... Submatches> requires (sizeof...(Submatches) > 0)
         inline constexpr detail::static_submatches_adaptor_closure<Submatches...> static_submatches;
 
         template<string_literal Fmt>
         inline constexpr detail::static_replace_adaptor_closure<Fmt> static_replace;
+
+        template<string_literal Pattern, mode Mode = mode::standard>
+        inline constexpr detail::static_regex_split_adaptor_closure<static_regex<Pattern, Mode>> static_regex_split;
     }
 
 

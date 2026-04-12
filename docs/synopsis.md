@@ -16,6 +16,18 @@ namespace rx {
   template<string_literal Pattern, mode Mode>
   struct static_regex;
 
+  template<string_literal Pattern, mode Mode>
+  constexpr auto static_regex_match(/* 3 overloads */);
+
+  template<string_literal Pattern, mode Mode>
+  constexpr auto static_regex_prefix_match(/* 3 overloads */);
+
+  template<string_literal Pattern, mode Mode>
+  constexpr auto static_regex_search(/* 3 overloads */);
+
+  template<string_literal Pattern, mode Mode>
+  constexpr auto static_regex_search_all(/* 3 overloads */);
+
   template<std::bidirectional_iterator I, /* implementation details */>
   class static_regex_match_result;
 
@@ -44,12 +56,18 @@ namespace rx {
     inline constexpr /* range-adaptor */ replace;
     inline constexpr /* range-adaptor */ regex_split;
 
+    template<string_literal Pattern, mode Mode>
+    inline constexpr /* range-adaptor */ static_regex_match;
+
     template<int... Submatches>
       requires (sizeof...(Submatches) > 0)
     inline constexpr /* range-adaptor */ static_submatches;
 
     template<string_literal Fmt>
     inline constexpr /* range-adaptor */ static_replace;
+
+    template<string_literal Pattern, mode Mode>
+    inline constexpr /* range-adaptor */ static_regex_split;
   }
 
   namespace literals {
@@ -63,7 +81,7 @@ namespace rx {
   template<class I, class O>
   using regex_replace_result = std::ranges::in_out_result<I, O>;
 
-  constexpr auto regex_replace(/* 10 overloads: see documentation */);
+  constexpr auto regex_replace(/* 10 overloads */);
 } // namespace rx
 ```
 
@@ -188,6 +206,26 @@ namespace rx {
   } // namespace literals
 } // namespace rx;
 ```
+
+The following free functions (implemented as algorithm function objects) provide an alternative API for matching:
+
+```cpp
+namespace rx {
+  template<string_literal Pattern, mode Mode = mode::standard>
+  constexpr auto static_regex_match(/* args */);
+
+  template<string_literal Pattern, mode Mode = mode::standard>
+  constexpr auto static_regex_prefix_match(/* args */);
+
+  template<string_literal Pattern, mode Mode = mode::standard>
+  constexpr auto static_regex_search(/* args */);
+
+  template<string_literal Pattern, mode Mode = mode::standard>
+  constexpr auto static_regex_search_all(/* args */);
+} // namespace rx;
+```
+
+Each invocation of `static_regex_foo<Pattern, Mode>()` is equivalent to calling `static_regex<Pattern, Mode>.foo()` with the same arguments, except for `search_all` which instead calls `range()`.
 
 
 ## Class template `rx::static_regex_match_result`
@@ -374,6 +412,9 @@ namespace rx {
 
   namespace views {
     inline constexpr /* range-adaptor */ regex_match;
+
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr /* range-adaptor */ static_regex_match;
   }
 } // namespace rx
 ```
@@ -381,6 +422,7 @@ namespace rx {
 `regex_match_view` is always an input range.
 Its range value is an instantiation of `static_regex_match_result`.
 
+`views::static_regex_match<Pattern>` is equivalent to `views::regex_match(static_regex<Pattern>{})`.
 
 ## Class template `rx::submatches_view`
 
@@ -548,6 +590,9 @@ namespace rx {
 
   namespace views {
     inline constexpr /* range-adaptor */ regex_split;
+
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr /* range-adaptor */ static_regex_split;
   }
 } // namespace rx
 ```
@@ -557,6 +602,8 @@ However, `regex_split_view` is a forward range, while the alternative results in
 Additionally, the range value of `regex_split_view` is a common `std::ranges::subrange` of iterators to `r`, whereas `views::submatches` produces `submatch` objects.
 
 The iterator for `submatches_view` is a proxy iterator.
+
+`views::static_regex_split<Pattern>` is equivalent to `views::regex_split(static_regex<Pattern>{})`.
 
 
 ## Algorithm function object `rx::regex_replace`
