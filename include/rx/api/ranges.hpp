@@ -468,7 +468,7 @@ namespace rx
             : current_{ std::move(current) }, end_{ std::move(end) }
             , subrange_{ std::in_place_index<base_subrange_index>, current_.base(), get<0>(*current_).begin() }
         {
-            if (subrange_.visit(detail::overloads([](const auto& sub) { return sub.empty(); })))
+            if (subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } }))
                 find_next();
         }
 
@@ -484,12 +484,12 @@ namespace rx
 
         constexpr value_type operator*() const
         {
-            return subrange_.visit(detail::overloads([](const auto& sub) { return *sub.begin(); }));
+            return subrange_.visit(detail::overloads{ [](const auto& sub) { return *sub.begin(); } });
         }
 
         constexpr iterator& operator++()
         {
-            if (subrange_.visit(detail::overloads([](auto& sub) { sub.advance(1); return sub.empty(); })))
+            if (subrange_.visit(detail::overloads{ [](auto& sub) { sub.advance(1); return sub.empty(); } }))
                 find_next();
 
             return *this;
@@ -502,7 +502,7 @@ namespace rx
 
         friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
-            return x.subrange_.visit(detail::overloads([](const auto& sub) { return sub.empty(); }));
+            return x.subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } });
         }
 
     private:
@@ -642,7 +642,7 @@ namespace rx
             : parent_{ std::addressof(parent) }, current_{ std::move(current) }, end_{ std::move(end) }
             , subrange_{ std::in_place_index<base_subrange_index>, current_.base(), get<0>(*current_).begin() }
         {
-            if (subrange_.visit(detail::overloads([](const auto& sub) { return sub.empty(); })))
+            if (subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } }))
                 find_next();
         }
 
@@ -658,12 +658,12 @@ namespace rx
 
         constexpr value_type operator*() const
         {
-            return subrange_.visit(detail::overloads([](const auto& sub) { return *sub.begin(); }));
+            return subrange_.visit(detail::overloads{ [](const auto& sub) { return *sub.begin(); } });
         }
 
         constexpr iterator& operator++()
         {
-            if (subrange_.visit(detail::overloads([](auto& sub) { sub.advance(1); return sub.empty(); })))
+            if (subrange_.visit(detail::overloads{ [](auto& sub) { sub.advance(1); return sub.empty(); } }))
                 find_next();
 
             return *this;
@@ -676,7 +676,7 @@ namespace rx
 
         friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
-            return x.subrange_.visit(detail::overloads([](const auto& sub) { return sub.empty(); }));
+            return x.subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } });
         }
 
     private:

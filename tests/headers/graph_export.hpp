@@ -96,7 +96,7 @@ namespace rx::testing
             const std::size_t current_idx{ to_visit.front() };
             to_visit.pop_front();
 
-            std::string label = ast.get_expr(current_idx).visit(detail::overloads{
+            const auto label = ast.get_expr(current_idx).visit(detail::overloads{
                 [&](const ast_t::assertion& asr) -> std::string {
                     switch (asr.type)
                     {
@@ -211,15 +211,14 @@ namespace rx::testing
             if (holds_alternative<std::monostate>(tr.type))
                 continue;
 
-            std::string label{
-                tr.type.visit(detail::overloads(
-                [](std::monostate) {
-                    return std::string{};
+            const auto label = tr.type.visit(detail::overloads{
+                [](std::monostate) -> std::string {
+                    return {};
                 },
-                [](const tnfa::normal_tr<CharT>& t) {
+                [](const tnfa::normal_tr<CharT>& t) -> std::string {
                     return make_pretty_charset_string(t.cs);
                 },
-                [](const tnfa::epsilon_tr& t) {
+                [](const tnfa::epsilon_tr& t) -> std::string {
                     if (t.tag == 0)
                         return std::format("{}/ϵ", t.priority);
                     else if (t.tag > 0)
@@ -227,20 +226,19 @@ namespace rx::testing
                     else
                         return std::format("{}/-t{}", t.priority, -t.tag);
                 },
-                [](const tnfa::sof_anchor_tr&) {
-                    return std::string{ "^" };
+                [](const tnfa::sof_anchor_tr&) -> std::string {
+                    return "^";
                 },
-                [](const tnfa::eof_anchor_tr&) {
-                    return std::string{ "$" };
+                [](const tnfa::eof_anchor_tr&) -> std::string {
+                    return "$";
                 },
-                [](const tnfa::lookahead_1_tr<CharT>& t) {
+                [](const tnfa::lookahead_1_tr<CharT>& t) -> std::string {
                     return std::format("(?={})", make_pretty_charset_string(t.cs));
                 },
-                [](const tnfa::lookbehind_1_tr<CharT>& t) {
+                [](const tnfa::lookbehind_1_tr<CharT>& t) -> std::string {
                     return std::format("(?<={})", make_pretty_charset_string(t.cs));
                 }
-               ))
-            };
+            });
 
             std::println(target, "    q{} -> q{} [label={:?}];", tr.src, tr.dst, label);
         }
