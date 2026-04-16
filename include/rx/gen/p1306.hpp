@@ -553,7 +553,11 @@ namespace rx::detail
                 if (i == continue_at)
                 {
                     initial_state<DFA.continue_nodes[i]>(result_t{ res }, first, last);
+#ifndef __GNUC_MINOR__
                     break;
+#else
+                    return res; // temporary workaround for possible GCC bug
+#endif
                 }
             }
 
@@ -588,7 +592,11 @@ namespace rx::detail
                         initial_state<DFA.continue_nodes[i]>(result_t{ res }, first, last);
                     else
                         initial_state<DFA.additional_continue_nodes[i]>(result_t{ res }, first, last);
+#ifndef __GNUC_MINOR__
                     break;
+#else
+                    return res; // temporary workaround for possible GCC bug
+#endif
                 }
             }
 
@@ -636,7 +644,12 @@ namespace rx::detail
                 if (i == continue_at)
                 {
                     outer_state<DFA.continue_nodes[i]>(result_t{ res, gen }, first, last);
+#ifndef __GNUC_MINOR__
                     break;
+#else
+                    clean_generations(res, gen);
+                    return res; // temporary workaround for possible GCC bug
+#endif
                 }
             }
 
@@ -677,7 +690,12 @@ namespace rx::detail
                         outer_state<DFA.continue_nodes[i]>(result_t{ res, gen }, first, last);
                     else
                         outer_state<DFA.additional_continue_nodes[i]>(result_t{ res, gen }, first, last);
+#ifndef __GNUC_MINOR__
                     break;
+#else
+                    clean_generations(res, gen);
+                    return res; // temporary workaround for possible GCC bug
+#endif
                 }
             }
 
