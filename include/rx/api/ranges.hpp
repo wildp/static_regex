@@ -1118,14 +1118,14 @@ namespace rx
             struct replace_adaptor
             {
                 template<std::ranges::viewable_range Range, typename Fmt>
-                    requires detail::can_submatches_view<Range, Fmt>
+                    requires detail::can_replace_view<Range, Fmt>
                 [[nodiscard]] constexpr auto operator()(Range&& r, Fmt&& fmt) const
                 {
                     return replace_view(std::forward<Range>(r), std::forward<Fmt>(fmt));
                 }
 
                 template<std::ranges::viewable_range Range, typename CharT>
-                    requires detail::can_submatches_view<Range, std::ranges::subrange<const CharT*, rx::detail::cstr_sentinel_t>>
+                    requires detail::can_replace_view<Range, std::ranges::subrange<const CharT*, rx::detail::cstr_sentinel_t>>
                 [[nodiscard]] constexpr auto operator()(Range&& r, const CharT* fmtstr) const
                 {
                     return replace_view(std::forward<Range>(r), std::ranges::subrange(fmtstr, rx::detail::cstr_sentinel));
