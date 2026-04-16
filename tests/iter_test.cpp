@@ -139,21 +139,23 @@ static_assert(std::ranges::common_range<range_category_test_9>);
 static_assert(std::ranges::bidirectional_range<range_category_test_9_inner>);
 static_assert(std::ranges::common_range<range_category_test_9_inner>);
 
-/* static_regex_match_result iterator type tests */ // TODO: fix transform view iterators
+/* static_regex_match_result iterator type tests */
 static_assert(test<1>("Hello"));
 static_assert(test<1>("Hello"sv));
 static_assert(test<1>("Hello World"sv | std::views::take(5)));
 static_assert(test<2>("Hello World"sv | std::views::drop(6)));
 static_assert(owning_test<2>("World"s));
 static_assert(owning_test<2>(std::vector<char>{ 'W', 'o', 'r', 'l', 'd' }));
+#if __cpp_lib_constexpr_list >= 202502L
 static_assert(owning_test<1>(std::list<char>{ 'H', 'e', 'l', 'l', 'o' }));
+#endif
 #if __cpp_lib_constexpr_deque >= 202502L
 static_assert(owning_test<2>(std::deque<char>{ 'W', 'o', 'r', 'l', 'd' }));
 #endif
-// static_assert(owning_test<2>("Vnqkc"sv | std::views::transform([](char c) { return static_cast<char>(c + 1); })));
-// static_assert(owning_test<2>(std::vector<char>{ 'V', 'n', 'q', 'k', 'c' } | std::views::transform([](char c) -> char { return c + 1; })));
+static_assert(owning_test<2>("Vnqkc"sv | std::views::transform([](char c) { return static_cast<char>(c + 1); })));
+static_assert(owning_test<2>(std::vector<char>{ 'V', 'n', 'q', 'k', 'c' } | std::views::transform([](char c) -> char { return c + 1; })));
 static_assert(owning_test<1>("H e l l o"s | std::views::filter([](char c) { return c != ' '; })));
-// static_assert(owning_test<1>("Gdkkn"sv | std::views::transform([](char c) { return static_cast<char>(c + 1); })));
+static_assert(owning_test<1>("Gdkkn"sv | std::views::transform([](char c) { return static_cast<char>(c + 1); })));
 static_assert(owning_test<1>("Hello World"s | std::views::take(5)));
 static_assert(owning_test<2>("Hello World"s | std::views::drop(6)));
 static_assert(owning_test<1>("Hello World"sv | std::views::take_while([](char c) { return c != ' '; })));

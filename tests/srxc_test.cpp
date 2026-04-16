@@ -297,6 +297,7 @@ static_assert(prefix_match("(?m)(\n$)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)(^\n$)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)($\n^)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)(^a\n)+"_rx, "a\na\na", { 0, 4, 2, 4 }));
+static_assert(search_all("(?m)^a"_rx, "a\na\na", { { 0, 1 }, { 2, 3 }, { 4, 5 } }));
 
 /* word boundary tests */
 static_assert(not search(R"(\b)"_rx, ""));
@@ -309,7 +310,3 @@ static_assert(search(R"(a\b)"_rx, "a.", { 0, 1 }));
 static_assert(not search(R"(a\b)"_rx, "a_"));
 static_assert(search_all(R"(\b|abc)"_rx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
 static_assert(search_all(R"(\b|^abc)"_rx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
-
-
-/* other tests */
-// "R(est)|(Res)T" -> hopcroft

@@ -119,6 +119,7 @@ static_assert(search("(?m:^\n*?$)"_rxf, "\n\n\n\n", { 0, 0 }));
 static_assert(search("(?m)(^\n$)+"_rxf, "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)($\n^)+"_rxf, "\n\n\n\n", { 0, 4, 3, 4 }));
 static_assert(search("(?m)(^a\n)+"_rxf, "a\na\na", { 0, 4, 2, 4 }));
+static_assert(search_all("(?m)^a"_rxf, "a\na\na", { { 0, 1 }, { 2, 3 }, { 4, 5 } }));
 
 /* word boundary tests */
 static_assert(not search(R"(\b)"_rxf, ""));
