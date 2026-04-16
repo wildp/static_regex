@@ -25,7 +25,7 @@ namespace rx::detail::parser
         };
 
         flag_value caseless  : 2;
-        flag_value multiline : 2; /* not fully implemented -> need to implement in matcher */
+        flag_value multiline : 2;
         flag_value dotall    : 2;
         flag_value ungreedy  : 2;
     };

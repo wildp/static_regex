@@ -129,7 +129,7 @@ namespace rx::testing
                 };
 
                 const rc result = this->get_expr(pos).visit(detail::overloads{
-                    [&](const tree_matcher::assertion& asr) -> rc {
+                    [&](const typename tree_matcher::assertion& asr) -> rc {
                         using detail::assert_type;
                         switch (asr.type)
                         {
@@ -179,11 +179,11 @@ namespace rx::testing
                         }
                         return rc::match_failure;
                     },
-                    [&](const tree_matcher::concat& cat) -> rc {
+                    [&](const typename tree_matcher::concat& cat) -> rc {
                         s.cont.append_range(cat.idxs | std::views::reverse);
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::alt& alt) -> rc {
+                    [&](const typename tree_matcher::alt& alt) -> rc {
                         if (alt.idxs.empty())
                             return rc::match_failure;
 
@@ -202,12 +202,12 @@ namespace rx::testing
                         s.cont.push_back(alt.idxs.back());
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::tag& tag) -> rc {
+                    [&](const typename tree_matcher::tag& tag) -> rc {
                         s.tags.at(tag.number) = s.it;
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::backref& bref) -> rc {
+                    [&](const typename tree_matcher::backref& bref) -> rc {
                         if (bref.number >= capture_count)
                             throw pattern_error("Backreference to non-existent submatch");
 
@@ -245,7 +245,7 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::repeat& rep) -> rc {
+                    [&](const typename tree_matcher::repeat& rep) -> rc {
                         using detail::repeater_mode;
 
                         if (rep.min == rep.max)
@@ -322,7 +322,7 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::char_str& lit) -> rc {
+                    [&](const typename tree_matcher::char_str& lit) -> rc {
                         for (const auto c : lit.data)
                         {
                             if (s.it == last or *s.it != c)
@@ -332,7 +332,7 @@ namespace rx::testing
 
                         return rc::match_continue;
                     },
-                    [&](const tree_matcher::char_class& cla) -> rc {
+                    [&](const typename tree_matcher::char_class& cla) -> rc {
                         if (s.it == last)
                             return rc::match_failure;
 

@@ -50,7 +50,11 @@ namespace rx
         using size_type              = std::size_t;
         using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
         using submatch_type          = submatch<I>;
+#if __cpp_lib_ranges_as_const >= 202311L
+        using iterator               = proxy_iterator<std::same_as<I, std::const_iterator<I>>>;
+#else
         using iterator               = proxy_iterator<false>;
+#endif
         using reverse_iterator       = std::reverse_iterator<iterator>;
         using const_iterator         = proxy_iterator<true>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
@@ -103,9 +107,7 @@ namespace rx
 
         [[nodiscard]] constexpr iterator begin() const noexcept
         {
-            return this->has_value()
-                   ? iterator{ this, 0 }
-                   : this->end();
+            return { this, 0 };
         }
 
         [[nodiscard]] constexpr iterator end() const noexcept
@@ -125,14 +127,12 @@ namespace rx
 
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept
         {
-            return this->has_value()
-                   ? const_iterator{ this, 0 }
-                   : this->end();
+            return this->begin();
         }
 
         [[nodiscard]] constexpr const_iterator cend() const noexcept
         {
-            return { this, this->size() };
+            return this->end();
         }
 
         [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
@@ -370,8 +370,10 @@ namespace rx
 
         friend constexpr difference_type operator-(const proxy_iterator& x, const proxy_iterator& y) noexcept
         {
-            return y.pos_ - x.pos_;
+            return x.pos_ - y.pos_;
         }
+
+        friend class proxy_iterator<not Const>;
 
     private:
         const static_regex_match_result* ptr_{ nullptr };

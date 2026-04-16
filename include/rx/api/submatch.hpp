@@ -10,7 +10,6 @@
 #include <format>
 #include <iosfwd>
 #include <iterator>
-#include <numeric>
 #include <string>
 #include <string_view>
 
@@ -227,6 +226,11 @@ namespace rx
             std::ranges::swap(x.first_, y.first_);
             std::ranges::swap(x.last_, y.last_);
         }
+
+#if __cpp_lib_ranges_as_const >= 202311L
+        template<std::bidirectional_iterator OtherI>
+        friend class submatch;
+#endif
 
     private:
         static constexpr bool use_bool{ not std::contiguous_iterator<I> };

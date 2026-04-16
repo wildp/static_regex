@@ -247,9 +247,6 @@ namespace rx
                 return captures_;
             }
 
-            template<typename CharT>
-            friend class static_replace_fmt;
-
         private:
             std::vector<subrange_type> subranges_;
             std::vector<std::size_t> captures_;
@@ -266,8 +263,8 @@ namespace rx
             explicit consteval static_replace_fmt(std::basic_string_view<CharT> sv)
             {
                 replace_fmt tmp{ sv.begin(), sv.end() };
-                subranges_ = static_span(tmp.subranges_ | std::views::transform(make_subrange));
-                captures_ = static_span(tmp.captures_);
+                subranges_ = static_span(tmp.subranges() | std::views::transform(make_subrange));
+                captures_ = static_span(tmp.captures());
             }
 
             constexpr auto zipped() const

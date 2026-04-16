@@ -2371,7 +2371,7 @@ namespace rx::detail
 
         template<typename R>
             requires (std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, value_type> and not std::same_as<R, static_span>)
-        consteval static_span(R&& r) noexcept
+        consteval static_span(R&& r)
             : static_span(std::define_static_array(std::forward<R>(r))) {}
 
         template<std::contiguous_iterator I, std::sentinel_for<I> S>
@@ -4806,7 +4806,7 @@ namespace rx::detail::parser
         };
 
         flag_value caseless  : 2;
-        flag_value multiline : 2; /* not fully implemented -> need to implement in matcher */
+        flag_value multiline : 2;
         flag_value dotall    : 2;
         flag_value ungreedy  : 2;
     };
@@ -10540,6 +10540,11 @@ namespace rx
             std::ranges::swap(x.last_, y.last_);
         }
 
+#if __cpp_lib_ranges_as_const >= 202311L
+        template<std::bidirectional_iterator OtherI>
+        friend class submatch;
+#endif
+
     private:
         static constexpr bool use_bool{ not std::contiguous_iterator<I> };
         using maybe_bool = detail::maybe_type_t<use_bool, bool>;
@@ -10632,7 +10637,11 @@ namespace rx
         using size_type              = std::size_t;
         using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
         using submatch_type          = submatch<I>;
+#if __cpp_lib_ranges_as_const >= 202311L
+        using iterator               = proxy_iterator<std::same_as<I, std::const_iterator<I>>>;
+#else
         using iterator               = proxy_iterator<false>;
+#endif
         using reverse_iterator       = std::reverse_iterator<iterator>;
         using const_iterator         = proxy_iterator<true>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
@@ -10685,9 +10694,7 @@ namespace rx
 
         [[nodiscard]] constexpr iterator begin() const noexcept
         {
-            return this->has_value()
-                   ? iterator{ this, 0 }
-                   : this->end();
+            return { this, 0 };
         }
 
         [[nodiscard]] constexpr iterator end() const noexcept
@@ -10707,14 +10714,12 @@ namespace rx
 
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept
         {
-            return this->has_value()
-                   ? const_iterator{ this, 0 }
-                   : this->end();
+            return this->begin();
         }
 
         [[nodiscard]] constexpr const_iterator cend() const noexcept
         {
-            return { this, this->size() };
+            return this->end();
         }
 
         [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
@@ -10950,8 +10955,10 @@ namespace rx
 
         friend constexpr difference_type operator-(const proxy_iterator& x, const proxy_iterator& y) noexcept
         {
-            return y.pos_ - x.pos_;
+            return x.pos_ - y.pos_;
         }
+
+        friend class proxy_iterator<not Const>;
 
     private:
         const static_regex_match_result* ptr_{ nullptr };
@@ -13130,9 +13137,6 @@ namespace rx
                 return captures_;
             }
 
-            template<typename CharT>
-            friend class static_replace_fmt;
-
         private:
             std::vector<subrange_type> subranges_;
             std::vector<std::size_t> captures_;
@@ -13148,8 +13152,8 @@ namespace rx
             explicit consteval static_replace_fmt(std::basic_string_view<CharT> sv)
             {
                 replace_fmt tmp{ sv.begin(), sv.end() };
-                subranges_ = static_span(tmp.subranges_ | std::views::transform(make_subrange));
-                captures_ = static_span(tmp.captures_);
+                subranges_ = static_span(tmp.subranges() | std::views::transform(make_subrange));
+                captures_ = static_span(tmp.captures());
             }
 
             constexpr auto zipped() const

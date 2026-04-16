@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <variant>
 #include <vector>
 
