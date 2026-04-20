@@ -239,10 +239,10 @@ namespace rx::detail
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
         {
-            static constexpr auto* FinalN = DFA.final_nodes.at_if(DFAState);
-            static constexpr auto* FallbackN = DFA.fallback_nodes.at_if(DFAState);
+            static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
+            static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
 
-            if constexpr (Flags.enable_fallback and FallbackN != nullptr)
+            if constexpr (Flags.enable_fallback and fallback_node != nullptr)
             {
                 fallback.state = DFAState;
                 if constexpr (has_fallback_it)
@@ -260,25 +260,25 @@ namespace rx::detail
                     }
                 }
 
-                if constexpr (FinalN != nullptr and Flags.enable_fallback and FallbackN != nullptr)
+                if constexpr (final_node != nullptr and Flags.enable_fallback and fallback_node != nullptr)
                 {
-                    set_fallback_info<FinalN->op_index, FinalN->final_offset, FallbackN->continue_at>(result, it);
+                    set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
                     return true;
                 }
             }
             else
             {
-                if constexpr (FinalN != nullptr)
+                if constexpr (final_node != nullptr)
                 {
-                    if constexpr (Flags.enable_fallback and FallbackN != nullptr)
-                        set_fallback_info<FinalN->op_index, FinalN->final_offset, FallbackN->continue_at>(result, it);
+                    if constexpr (Flags.enable_fallback and fallback_node != nullptr)
+                        set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
                     else
-                        set_final_info<FinalN->op_index, FinalN->final_offset>(result, it);
+                        set_final_info<final_node->op_index, final_node->final_offset>(result, it);
                     return true;
                 }
             }
 
-            if constexpr (Flags.enable_fallback and FallbackN == nullptr)
+            if constexpr (Flags.enable_fallback and fallback_node == nullptr)
                 [[clang::musttail]] return fallback_state(result, it, last, fallback);
             return false;
         }
@@ -286,10 +286,10 @@ namespace rx::detail
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I>
         static constexpr bool state(Result result, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
         {
-            static constexpr auto* FinalN = DFA.final_nodes.at_if(DFAState);
-            static constexpr auto* FallbackN = DFA.fallback_nodes.at_if(DFAState);
+            static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
+            static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
 
-            if constexpr (Flags.enable_fallback and FallbackN != nullptr)
+            if constexpr (Flags.enable_fallback and fallback_node != nullptr)
             {
                 fallback.state = DFAState;
                 if constexpr (has_fallback_it)
@@ -305,24 +305,24 @@ namespace rx::detail
                 }
             }
 
-            if constexpr (FinalN != nullptr)
+            if constexpr (final_node != nullptr)
             {
-                if constexpr (Flags.enable_fallback and FallbackN != nullptr)
+                if constexpr (Flags.enable_fallback and fallback_node != nullptr)
                 {
-                    set_fallback_info<FinalN->op_index, FinalN->final_offset, FallbackN->continue_at>(result, it);
+                    set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
                     return true;
                 }
                 else
                 {
                     if (it == last) [[likely]]
                     {
-                        set_final_info<FinalN->op_index, FinalN->final_offset>(result, it);
+                        set_final_info<final_node->op_index, final_node->final_offset>(result, it);
                         return true;
                     }
                 }
             }
 
-            if constexpr (Flags.enable_fallback and FallbackN == nullptr)
+            if constexpr (Flags.enable_fallback and fallback_node == nullptr)
                 [[clang::musttail]] return fallback_state(result, it, last, fallback);
             return false;
         }
@@ -349,41 +349,36 @@ namespace rx::detail
             }
         }
 
-        template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-        static constexpr bool initial_state(Result result, I it, const S last)
-        {
-            if constexpr (fixed_length)
-            {
-                static constexpr std::ptrdiff_t Size{ static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first) };
-
-                if constexpr (Flags.enable_fallback)
-                {
-                    if (std::ranges::distance(it, last) >= Size)
-                        return unchecked_state<DFAState, Size>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
-                    return false;
-                }
-                else
-                {
-                    if (std::ranges::distance(it, last) == Size)
-                        return unchecked_state<DFAState, Size>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
-                    return false;
-                }
-            }
-            else
-            {
-                return state<DFAState>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
-            }
-        }
-
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-            requires (not std::sized_sentinel_for<S, I>)
         static constexpr bool initial_state(Result result, I it, const S last)
         {
             return state<DFAState>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
         }
 
+        template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool initial_state(Result result, I it, const S last)
+            requires (fixed_length and not Flags.enable_fallback)
+        {
+            static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+
+            if (std::ranges::distance(it, last) == length)
+                return unchecked_state<DFAState, length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
+            return false;
+        }
+
+        template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool initial_state(Result result, I it, const S last)
+            requires (Flags.enable_fallback or not fixed_length)
+        {
+            static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+
+            if (std::ranges::distance(it, last) >= min_length)
+                return unchecked_state<DFAState, min_length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
+            return false;
+        }
+
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool outer_state(Result result, I it, const S last)
+        static constexpr bool linear_outer_state(Result result, I it, const S last)
         {
             if constexpr (DFA.register_count > 0)
                 ++result.gen.current;
@@ -399,9 +394,9 @@ namespace rx::detail
             }
             else
             {
-                if constexpr (static constexpr auto* FinalN = DFA.final_nodes.at_if(DFAState); FinalN != nullptr)
+                if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
                 {
-                    set_final_info<FinalN->op_index, FinalN->final_offset>(result, it);
+                    set_final_info<final_node->op_index, final_node->final_offset>(result, it);
                     if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                         result.res.match_start_ = it;
                     return true;
@@ -412,31 +407,64 @@ namespace rx::detail
             template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
             {
                 if (tr_possible<tr>(*it))
-                    [[clang::musttail]] return outer_state<tr.next>(result, ++it, last);
+                    [[clang::musttail]] return linear_outer_state<tr.next>(result, ++it, last);
             }
 
             return false;
         }
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-        static constexpr bool outer_state(Result result, I it, const S last)
-            requires (fixed_length and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
+        static constexpr bool linear_outer_state(Result result, I it, const S last)
+            requires (DFA.continue_nodes.size() > 1 and (Flags.enable_fallback or not fixed_length))
         {
-            static constexpr auto Size{ static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first) };
+            if constexpr (DFA.register_count > 0)
+                ++result.gen.current;
 
-            static constexpr auto pred = [](std::ptrdiff_t x) -> bool {
-                if constexpr (Flags.enable_fallback)
-                    return x >= Size;
-                else
-                    return x == Size;
-            };
+            static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
-            while (pred(std::distance(it, last)))
+            if (std::ranges::distance(it, last) >= min_length)
+            {
+                if (unchecked_state<DFAState, min_length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled }))
+                {
+                    if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
+                        result.res.match_start_ = it;
+                    return true;
+                }
+            }
+            else
+            {
+                if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
+                {
+                    set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                    if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
+                        result.res.match_start_ = it;
+                    return true;
+                }
+                return false;
+            }
+
+            template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
+            {
+                if (tr_possible<tr>(*it))
+                    [[clang::musttail]] return linear_outer_state<tr.next>(result, ++it, last);
+            }
+
+            return false;
+        }
+
+        template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool linear_outer_state(Result result, I it, const S last)
+            requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
+                      and (Flags.enable_fallback or not fixed_length))
+        {
+            static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+
+            while (std::ranges::distance(it, last) >= min_length)
             {
                 if constexpr (DFA.register_count > 0)
                     ++result.gen.current;
 
-                if (unchecked_state<DFAState, Size>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled }))
+                if (unchecked_state<DFAState, min_length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled }))
                 {
                     if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                         result.res.match_start_ = it;
@@ -446,15 +474,41 @@ namespace rx::detail
                 ++it;
             }
 
-            if constexpr (static constexpr auto* FinalN = DFA.final_nodes.at_if(DFAState); FinalN != nullptr)
-            {
-                set_final_info<FinalN->op_index, FinalN->final_offset>(result, it);
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
-                return true;
-            }
+            /* since the DFA is never empty, we can skip assigning final node information */
+            static_assert(DFA.final_nodes.at_if(DFAState) == nullptr);
 
             return false;
+        }
+
+        template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool linear_outer_state(Result result, I it, const S last)
+            requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
+                      and (/* degenerate case */ fixed_length and not Flags.enable_fallback))
+        {
+            static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+
+            if (const auto input_size = std::ranges::distance(it, last); input_size >= length)
+            {
+                std::ranges::advance(it, input_size - length);
+
+                if (unchecked_state<DFAState, length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled }))
+                {
+                    if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
+                        result.res.match_start_ = it;
+                    return true;
+                }
+            }
+
+            /* since the DFA is never empty, we can skip assigning final node information */
+            static_assert(DFA.final_nodes.at_if(DFAState) == nullptr);
+
+            return false;
+        }
+
+        template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
+        static constexpr bool outer_state(Result result, I it, const S last)
+        {
+            return linear_outer_state<DFAState>(result, it, last);
         }
 
     public:
