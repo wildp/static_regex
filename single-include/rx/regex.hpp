@@ -2341,9 +2341,6 @@ namespace rx::detail
 
 namespace rx::detail
 {
-    struct non_owning_tag_t {};
-    inline constexpr non_owning_tag_t non_owning_tag;
-
     template<typename T>
     class static_span
     {
@@ -2373,10 +2370,6 @@ namespace rx::detail
             requires (std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, value_type> and not std::same_as<R, static_span>)
         consteval static_span(R&& r)
             : static_span(std::define_static_array(std::forward<R>(r))) {}
-
-        template<std::contiguous_iterator I, std::sentinel_for<I> S>
-        constexpr static_span(non_owning_tag_t, I first, S last)
-            : data_{ first }, size_{ static_cast<std::size_t>(std::ranges::distance(first, last)) } {}
 
         /* size observers */
         [[nodiscard]] constexpr size_type size() const noexcept { return size_; }
@@ -13204,11 +13197,7 @@ namespace rx
             using subrange_type = detail::static_span<char_type>;
 
             explicit consteval static_replace_fmt(std::basic_string_view<CharT> sv)
-            {
-                replace_fmt tmp{ sv.begin(), sv.end() };
-                subranges_ = static_span(tmp.subranges() | std::views::transform(make_subrange));
-                captures_ = static_span(tmp.captures());
-            }
+                : static_replace_fmt(replace_fmt{ sv.begin(), sv.end() }) {}
 
             constexpr auto zipped() const
             {
@@ -13237,10 +13226,13 @@ namespace rx
             }
 
         private:
+            explicit consteval static_replace_fmt(const replace_fmt<const char_type*>& fmt)
+                : subranges_{ fmt.subranges() | std::views::transform(make_subrange) }
+                , captures_{ fmt.captures() } {}
+
             static consteval subrange_type make_subrange(const std::ranges::subrange<const char_type*>& s)
             {
-                const auto& [first, last] = s;
-                return { detail::non_owning_tag, first, last };
+                return s;
             }
 
             detail::static_span<subrange_type> subranges_;

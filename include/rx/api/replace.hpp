@@ -261,11 +261,7 @@ namespace rx
             using subrange_type = detail::static_span<char_type>;
 
             explicit consteval static_replace_fmt(std::basic_string_view<CharT> sv)
-            {
-                replace_fmt tmp{ sv.begin(), sv.end() };
-                subranges_ = static_span(tmp.subranges() | std::views::transform(make_subrange));
-                captures_ = static_span(tmp.captures());
-            }
+                : static_replace_fmt(replace_fmt{ sv.begin(), sv.end() }) {}
 
             constexpr auto zipped() const
             {
@@ -294,10 +290,13 @@ namespace rx
             }
 
         private:
+            explicit consteval static_replace_fmt(const replace_fmt<const char_type*>& fmt)
+                : subranges_{ fmt.subranges() | std::views::transform(make_subrange) }
+                , captures_{ fmt.captures() } {}
+
             static consteval subrange_type make_subrange(const std::ranges::subrange<const char_type*>& s)
             {
-                const auto& [first, last] = s;
-                return { detail::non_owning_tag, first, last };
+                return s;
             }
 
             detail::static_span<subrange_type> subranges_;
