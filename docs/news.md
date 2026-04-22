@@ -2,6 +2,8 @@
 
 ### Version 0.1.4
 
+Fixed compilation on GCC.
+Improved performance when searching sized contiguous ranges.
 Renamed `mode::fast` to `mode::linear` and `mode::naive` to `mode::backtrack`.
 
 ### Version 0.1.3
