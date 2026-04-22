@@ -623,6 +623,9 @@ namespace rx::detail::parser
             }
         }
 
+        if (not holds_alternative<tok::end_of_input>(token))
+            throw pattern_error("Parse Error");
+
         if (not semstack.empty())
             root_idx() = get<std::size_t>(semstack.pop());
     }
@@ -639,20 +642,18 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_dot()
     {
+        static constexpr auto newline = []() consteval {
+            if constexpr (char_class::impl_type::is_narrow())
+                return '\n';
+            else
+                return U'\n';
+        }();
+
         /* depending on flags, insert true wildcard instead of [^\n] */
         if (capstack_.dotall())
-        {
-            char_class result{ true };
-            result.data.normalise();
-            return new_expression<char_class>(std::move(result));
-        }
+            return new_expression<char_class>(char_class{ negated_cc_tag });
         else
-        {
-            char_class result{ true };
-            result.data.insert('\n');
-            result.data.normalise();
-            return new_expression<char_class>(std::move(result));
-        }
+            return new_expression<char_class>(char_class{ newline, negated_cc_tag });
     }
 
     template<typename CharT>

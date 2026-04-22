@@ -42,7 +42,7 @@ namespace rx::detail
         using char_type = CharT;
         using char_interval = std::pair<char_type, char_type>;
 
-        consteval bitcharset() noexcept = default;
+        bitcharset() = default;
 
         template<typename... Args>
             requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)

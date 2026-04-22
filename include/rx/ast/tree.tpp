@@ -475,9 +475,7 @@ namespace rx::detail
     {
         /* make true wildcard */
         const std::size_t wildcard_idx{ expressions_.size() };
-        char_class cc{ true };
-        cc.data.normalise();
-        expressions_.emplace_back(std::in_place_type<char_class>, std::move(cc));
+        expressions_.emplace_back(std::in_place_type<char_class>, char_class{ negated_cc_tag });
 
         /* make lazy repeater of wildcard */
         const std::size_t repeater_idx{ expressions_.size() };

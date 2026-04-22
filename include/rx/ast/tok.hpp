@@ -221,11 +221,11 @@ namespace rx::detail
             /* perl character classes */
 
             case 'd': return char_class{ ncc::digits };
-            case 'D': return char_class{ ncc::digits, true };
+            case 'D': return char_class{ ncc::digits, negated_cc_tag };
             case 's': return char_class{ ncc::perl_whitespace };
-            case 'S': return char_class{ ncc::perl_whitespace, true };
+            case 'S': return char_class{ ncc::perl_whitespace, negated_cc_tag };
             case 'w': return char_class{ ncc::word };
-            case 'W': return char_class{ ncc::word, true };
+            case 'W': return char_class{ ncc::word, negated_cc_tag };
 
             /* octal escape sequences and backreferences */
 
@@ -530,6 +530,9 @@ namespace rx::detail
             }
             else if (c == '}')
             {
+                if (rep.min == -1)
+                    throw pattern_error("Repeater is empty");
+
                 parse_min = false;
 
                 /* skip parsing max */
@@ -555,7 +558,7 @@ namespace rx::detail
                     rep.max = c - '0';
                 else
 #if __cpp_lib_saturation_arithmetic >= 202603L
-                    rep.max = std::saturating_add(std::saturating_mul(rep.min, base), static_cast<int>(c - '0'));
+                    rep.max = std::saturating_add(std::saturating_mul(rep.max, base), static_cast<int>(c - '0'));
 #else
                     rep.max = std::add_sat(std::mul_sat(rep.max, base), static_cast<int>(c - '0'));
 #endif
@@ -659,7 +662,7 @@ namespace rx::detail
         if (is_negated)
             ++it_;
 
-        char_class result{ is_negated };
+        char_class result{};
 
         std::optional<underlying_char_t> c{};
         bool is_range{ false };
@@ -766,7 +769,7 @@ namespace rx::detail
                 if (selected_cc->second)
                 {
                     /* insert negated char class */
-                    typename char_class::impl_type tmp{ selected_cc->first, true };
+                    typename char_class::impl_type tmp{ selected_cc->first, negated_cc_tag };
                     result.data.insert(tmp);
                 }
                 else
@@ -811,10 +814,11 @@ namespace rx::detail
             }
         }
 
-        result.data.normalise();
+        if (is_negated)
+            result.data.negate();
+
         return result;
     }
-
 
     template<typename CharT>
     constexpr named_character_class lexer<CharT>::parse_posix_char_class()

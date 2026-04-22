@@ -39,6 +39,9 @@ namespace rx::detail
 
     /* class definitions */
 
+    struct negated_cc_tag_t {};
+    inline constexpr negated_cc_tag_t negated_cc_tag;
+
     template<bool IsNarrow>
     class char_class_impl
     {
@@ -46,11 +49,12 @@ namespace rx::detail
         using char_type = std::conditional_t<IsNarrow, char, char32_t>;
         using underlying_type = std::conditional_t<IsNarrow, bitcharset<char_type>, charset<char_type>>;
 
-        constexpr explicit char_class_impl(named_character_class ncc, bool negate = false) noexcept :
-            negated_{ negate }, orig_negated_{ negate } { insert(ncc); normalise(); }
-
-        constexpr explicit char_class_impl(bool negate = false) noexcept :
-            negated_{ negate }, orig_negated_{ negate } {}
+        char_class_impl() = default;
+        constexpr explicit char_class_impl(negated_cc_tag_t) noexcept(IsNarrow) { negate(); }
+        constexpr explicit char_class_impl(named_character_class ncc) noexcept(IsNarrow) { insert(ncc); }
+        constexpr explicit char_class_impl(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow) { insert(ncc); negate(); }
+        constexpr explicit char_class_impl(char_type c) noexcept(IsNarrow) { insert(c); }
+        constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) { insert(c); negate(); }
 
         constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
         constexpr void insert(char_type first, char_type last) noexcept(IsNarrow) { data_.insert(first, last); }
@@ -59,19 +63,16 @@ namespace rx::detail
 
         [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
         [[nodiscard]] constexpr std::size_t count() const noexcept { return data_.count(); }
-        [[nodiscard]] constexpr bool is_negated() const noexcept { return negated_; }
         [[nodiscard]] constexpr auto intervals() const noexcept(not IsNarrow) { return data_.get_intervals(); }
         [[nodiscard]] constexpr const auto& get() const noexcept { return data_; }
 
-        constexpr void normalise() noexcept { if (negated_) { data_.negate(); negated_ = false; } }
+        constexpr void negate() noexcept(IsNarrow) { data_.negate(); }
         constexpr void make_caseless() noexcept(IsNarrow);
 
-        [[nodiscard]] constexpr char_class_impl denormalise() const noexcept(IsNarrow);
+        static consteval bool is_narrow() noexcept { return IsNarrow; }
 
     private:
         underlying_type data_;
-        bool            negated_;
-        bool            orig_negated_;
     };
 
 
@@ -154,16 +155,5 @@ namespace rx::detail
         case named_character_class::word:             data_ |= word;   break;
         case named_character_class::hexdigits:        data_ |= xdigit; break;
         }
-    }
-
-    template<bool IsNarrow>
-    constexpr auto char_class_impl<IsNarrow>::denormalise() const noexcept(IsNarrow) -> char_class_impl
-    {
-        char_class_impl result{ orig_negated_ };
-        if (negated_ == false and orig_negated_ == true)
-            result.data_ = ~data_;
-        else
-            result.data_ = data_;
-        return result;
     }
 }

@@ -861,7 +861,7 @@ namespace rx::detail
         using char_type = CharT;
         using char_interval = std::pair<char_type, char_type>;
 
-        consteval bitcharset() noexcept = default;
+        bitcharset() = default;
 
         template<typename... Args>
             requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
@@ -1410,7 +1410,7 @@ namespace rx::detail
         using char_type = CharT;
         using char_interval = std::pair<char_type, char_type>;
 
-        consteval charset() noexcept = default;
+        charset() = default;
 
         template<typename... Args>
             requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
@@ -2733,6 +2733,9 @@ namespace rx::detail
 
     /* class definitions */
 
+    struct negated_cc_tag_t {};
+    inline constexpr negated_cc_tag_t negated_cc_tag;
+
     template<bool IsNarrow>
     class char_class_impl
     {
@@ -2740,11 +2743,12 @@ namespace rx::detail
         using char_type = std::conditional_t<IsNarrow, char, char32_t>;
         using underlying_type = std::conditional_t<IsNarrow, bitcharset<char_type>, charset<char_type>>;
 
-        constexpr explicit char_class_impl(named_character_class ncc, bool negate = false) noexcept :
-            negated_{ negate }, orig_negated_{ negate } { insert(ncc); normalise(); }
-
-        constexpr explicit char_class_impl(bool negate = false) noexcept :
-            negated_{ negate }, orig_negated_{ negate } {}
+        char_class_impl() = default;
+        constexpr explicit char_class_impl(negated_cc_tag_t) noexcept(IsNarrow) { negate(); }
+        constexpr explicit char_class_impl(named_character_class ncc) noexcept(IsNarrow) { insert(ncc); }
+        constexpr explicit char_class_impl(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow) { insert(ncc); negate(); }
+        constexpr explicit char_class_impl(char_type c) noexcept(IsNarrow) { insert(c); }
+        constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) { insert(c); negate(); }
 
         constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
         constexpr void insert(char_type first, char_type last) noexcept(IsNarrow) { data_.insert(first, last); }
@@ -2753,19 +2757,16 @@ namespace rx::detail
 
         [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
         [[nodiscard]] constexpr std::size_t count() const noexcept { return data_.count(); }
-        [[nodiscard]] constexpr bool is_negated() const noexcept { return negated_; }
         [[nodiscard]] constexpr auto intervals() const noexcept(not IsNarrow) { return data_.get_intervals(); }
         [[nodiscard]] constexpr const auto& get() const noexcept { return data_; }
 
-        constexpr void normalise() noexcept { if (negated_) { data_.negate(); negated_ = false; } }
+        constexpr void negate() noexcept(IsNarrow) { data_.negate(); }
         constexpr void make_caseless() noexcept(IsNarrow);
 
-        [[nodiscard]] constexpr char_class_impl denormalise() const noexcept(IsNarrow);
+        static consteval bool is_narrow() noexcept { return IsNarrow; }
 
     private:
         underlying_type data_;
-        bool            negated_;
-        bool            orig_negated_;
     };
 
     /* member function definitions */
@@ -2847,17 +2848,6 @@ namespace rx::detail
         case named_character_class::word:             data_ |= word;   break;
         case named_character_class::hexdigits:        data_ |= xdigit; break;
         }
-    }
-
-    template<bool IsNarrow>
-    constexpr auto char_class_impl<IsNarrow>::denormalise() const noexcept(IsNarrow) -> char_class_impl
-    {
-        char_class_impl result{ orig_negated_ };
-        if (negated_ == false and orig_negated_ == true)
-            result.data_ = ~data_;
-        else
-            result.data_ = data_;
-        return result;
     }
 }
 
@@ -3056,11 +3046,11 @@ namespace rx::detail
             /* perl character classes */
 
             case 'd': return char_class{ ncc::digits };
-            case 'D': return char_class{ ncc::digits, true };
+            case 'D': return char_class{ ncc::digits, negated_cc_tag };
             case 's': return char_class{ ncc::perl_whitespace };
-            case 'S': return char_class{ ncc::perl_whitespace, true };
+            case 'S': return char_class{ ncc::perl_whitespace, negated_cc_tag };
             case 'w': return char_class{ ncc::word };
-            case 'W': return char_class{ ncc::word, true };
+            case 'W': return char_class{ ncc::word, negated_cc_tag };
 
             /* octal escape sequences and backreferences */
 
@@ -3362,6 +3352,9 @@ namespace rx::detail
             }
             else if (c == '}')
             {
+                if (rep.min == -1)
+                    throw pattern_error("Repeater is empty");
+
                 parse_min = false;
 
                 /* skip parsing max */
@@ -3387,7 +3380,7 @@ namespace rx::detail
                     rep.max = c - '0';
                 else
 #if __cpp_lib_saturation_arithmetic >= 202603L
-                    rep.max = std::saturating_add(std::saturating_mul(rep.min, base), static_cast<int>(c - '0'));
+                    rep.max = std::saturating_add(std::saturating_mul(rep.max, base), static_cast<int>(c - '0'));
 #else
                     rep.max = std::add_sat(std::mul_sat(rep.max, base), static_cast<int>(c - '0'));
 #endif
@@ -3491,7 +3484,7 @@ namespace rx::detail
         if (is_negated)
             ++it_;
 
-        char_class result{ is_negated };
+        char_class result{};
 
         std::optional<underlying_char_t> c{};
         bool is_range{ false };
@@ -3597,7 +3590,7 @@ namespace rx::detail
                 if (selected_cc->second)
                 {
                     /* insert negated char class */
-                    typename char_class::impl_type tmp{ selected_cc->first, true };
+                    typename char_class::impl_type tmp{ selected_cc->first, negated_cc_tag };
                     result.data.insert(tmp);
                 }
                 else
@@ -3642,7 +3635,9 @@ namespace rx::detail
             }
         }
 
-        result.data.normalise();
+        if (is_negated)
+            result.data.negate();
+
         return result;
     }
 
@@ -4556,9 +4551,7 @@ namespace rx::detail
     {
         /* make true wildcard */
         const std::size_t wildcard_idx{ expressions_.size() };
-        char_class cc{ true };
-        cc.data.normalise();
-        expressions_.emplace_back(std::in_place_type<char_class>, std::move(cc));
+        expressions_.emplace_back(std::in_place_type<char_class>, char_class{ negated_cc_tag });
 
         /* make lazy repeater of wildcard */
         const std::size_t repeater_idx{ expressions_.size() };
@@ -5592,6 +5585,9 @@ namespace rx::detail::parser
             }
         }
 
+        if (not holds_alternative<tok::end_of_input>(token))
+            throw pattern_error("Parse Error");
+
         if (not semstack.empty())
             root_idx() = get<std::size_t>(semstack.pop());
     }
@@ -5607,20 +5603,18 @@ namespace rx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_dot()
     {
+        static constexpr auto newline = []() consteval {
+            if constexpr (char_class::impl_type::is_narrow())
+                return '\n';
+            else
+                return U'\n';
+        }();
+
         /* depending on flags, insert true wildcard instead of [^\n] */
         if (capstack_.dotall())
-        {
-            char_class result{ true };
-            result.data.normalise();
-            return new_expression<char_class>(std::move(result));
-        }
+            return new_expression<char_class>(char_class{ negated_cc_tag });
         else
-        {
-            char_class result{ true };
-            result.data.insert('\n');
-            result.data.normalise();
-            return new_expression<char_class>(std::move(result));
-        }
+            return new_expression<char_class>(char_class{ newline, negated_cc_tag });
     }
 
     template<typename CharT>
