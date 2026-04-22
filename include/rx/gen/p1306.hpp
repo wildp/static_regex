@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <bit>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -23,16 +24,110 @@
 
 namespace rx::detail
 {
+    template<typename CharT>
+    struct optimised_tr_edge
+    {
+        using value_type = std::make_unsigned_t<CharT>;
+
+        value_type sub;
+        value_type rng;
+        value_type msk;
+    };
+
+    template<typename CharT>
+    consteval auto make_optimised_edges(const static_transition<CharT>& tr)
+    {
+        using ote = optimised_tr_edge<CharT>;
+        using uchar_type = typename ote::value_type;
+        std::vector<ote> result;
+
+        for (const auto& [first, last] : tr.cs)
+            result.emplace_back(static_cast<uchar_type>(first),
+                                static_cast<uchar_type>(static_cast<CharT>(last - first)),
+                                static_cast<uchar_type>(~0u));
+
+        std::vector<ote> input;
+
+        while (result.size() != input.size())
+        {
+            std::swap(result, input);
+            result.clear();
+
+            std::vector<bool> visited(input.size(), false);
+
+            for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
+            {
+                if (visited.at(i))
+                    continue;
+
+                visited.at(i) = true;
+                const auto& [sub1, rng1, msk1] = input.at(i);
+
+                bool inserted{ false };
+
+                for (std::size_t j{ i + 1 }; j < i_end; ++j)
+                {
+                    if (visited.at(j))
+                        continue;
+
+                    const auto& [sub2, rng2, msk2] = input.at(j);
+
+                    if (rng1 != rng2 or msk1 != msk2)
+                        continue;
+
+                    const uchar_type masked_bit{ static_cast<uchar_type>(sub1 ^ sub2) };
+
+                    if (not std::has_single_bit(masked_bit) or (masked_bit | msk1) != msk1)
+                        continue;
+
+                    visited.at(j) = true;
+                    inserted = true;
+                    result.emplace_back(std::ranges::min(sub1, sub2), rng1, static_cast<uchar_type>(msk1 - masked_bit));
+                    break;
+                }
+
+                if (not inserted)
+                    result.emplace_back(sub1, rng1, msk1);
+            }
+        }
+
+        return result;
+    }
+
     template<static_transition Tr, typename CharT>
     [[gnu::always_inline]] constexpr bool tr_possible(CharT c)
     {
+#ifdef __clang_major__
         // TODO: change to use structured binding when supported
         template for (constexpr auto pair : Tr.cs)
         {
             if (pair.first <= c and c <= pair.second)
                 return true;
         }
+#else
+        using uchar_type = std::make_unsigned_t<CharT>;
+        const uchar_type d{ static_cast<uchar_type>(c) };
 
+        template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Tr)))
+        {
+            uchar_type e{ d };
+
+            if constexpr (ote.msk != ~0)
+                e &= ote.msk;
+
+            if constexpr (ote.rng == 0)
+            {
+                if (e == ote.sub)
+                    return true;
+            }
+            else
+            {
+                e -= ote.sub;
+                if (e <= ote.rng)
+                    return true;
+            }
+        }
+#endif
         return false;
     }
 
