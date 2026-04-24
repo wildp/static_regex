@@ -13,6 +13,7 @@
 
 #include "rx/api/regex_error.hpp"
 #include "rx/ast/tree.hpp"
+#include "rx/etc/static_charset.hpp"
 #include "rx/etc/static_span.hpp"
 #include "rx/etc/string_literal.hpp"
 #include "rx/fsm/flags.hpp"
@@ -70,7 +71,7 @@ namespace rx::detail
     {
         std::size_t next;
         std::size_t op_index;
-        static_span<std::pair<CharT, CharT>> cs;
+        static_charset<CharT> cs;
     };
 
     template<typename CharT>
@@ -81,12 +82,12 @@ namespace rx::detail
     private:
         static consteval auto make_static_transition(const tdfa::transition<char_type>& tr)
         {
-            return static_transition{ tr.next, tr.op_index, static_span{ tr.cs.get_intervals() } };
+            return static_transition{ tr.next, tr.op_index, static_charset{ tr.cs } };
         }
 
         static consteval auto make_static_outer_transition(const std::pair<std::size_t, tnfa::charset_t<char_type>>& otr)
         {
-            return static_transition{ otr.first, tdfa::no_transition_regops, static_span{ otr.second.get_intervals() } };
+            return static_transition{ otr.first, tdfa::no_transition_regops, static_charset{ otr.second } };
         }
 
         static consteval auto make_node_transitions(const tdfa::node<char_type>& n)

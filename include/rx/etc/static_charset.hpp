@@ -10,6 +10,7 @@
 #include <limits>
 #include <meta>
 #include <ranges>
+#include <type_traits>
 
 #include "rx/etc/bitcharset.hpp"
 #include "rx/etc/charset.hpp"
@@ -38,6 +39,10 @@ namespace rx::detail
         consteval explicit static_charset(const charset_type& cs)
             : data_{ cs.data_ } {}
 
+        consteval explicit static_charset(const bitcharset<CharT>& bcs)
+            requires (sizeof(CharT) == 1)
+            : data_{ bcs.get_intervals() } {}
+
         template<typename... Args>
             requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
         constexpr explicit static_charset(Args... args)
@@ -53,6 +58,35 @@ namespace rx::detail
             }
 
             data_ = static_span{ tmp.data_ };
+        }
+
+        constexpr auto make_unsigned() const noexcept requires std::signed_integral<CharT>
+        {
+            using uchar_type = std::make_unsigned_t<char_type>;
+            charset<uchar_type> result;
+
+            static constexpr uchar_type umin{ std::numeric_limits<uchar_type>::min() };
+            static constexpr uchar_type umax{ std::numeric_limits<uchar_type>::max() };
+            static constexpr char_type threshold{ static_cast<char_type>(umin) };
+
+            for (const auto& [first, last] : data_)
+            {
+                if (first == last)
+                {
+                    result.insert(static_cast<uchar_type>(first));
+                }
+                else if (first < threshold and last >= threshold)
+                {
+                    result.insert(static_cast<uchar_type>(first), umax);
+                    result.insert(umin, static_cast<uchar_type>(last));
+                }
+                else
+                {
+                    result.insert(static_cast<uchar_type>(first), static_cast<uchar_type>(last));
+                }
+            }
+
+            return result;
         }
 
 
@@ -74,7 +108,7 @@ namespace rx::detail
         {
             std::size_t result{ 0 };
             for (const auto [first, second] : data_)
-                result += (first + 1 - second);
+                result += (second + 1 - first);
             return result;
         }
 
@@ -104,6 +138,14 @@ namespace rx::detail
             }
 
             return score;
+        }
+
+        [[nodiscard]] constexpr bool should_invert() const noexcept
+        {
+            /* an extremely simple heuristic (this could probably be improved?) */
+            return data_.size() > 0
+                   and data_.front().first == std::numeric_limits<CharT>::min()
+                   and data_.back().second == std::numeric_limits<CharT>::max();
         }
 
         [[nodiscard]] constexpr bool contains(char_type c) const
@@ -189,7 +231,6 @@ namespace rx::detail
             return lhs;
         }
 
-    private:
         static_span<char_interval> data_;
     };
 

@@ -67,7 +67,7 @@ namespace rx::detail
         {
             std::size_t result{ 0 };
             for (const auto& [first, second] : data_)
-                result += (first + 1 - second);
+                result += (second + 1 - first);
             return result;
         }
 

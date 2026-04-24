@@ -165,8 +165,10 @@ static_assert(owning_test<2>(std::vector{ "Wo"sv, "ld"sv} | std::views::join_wit
 /* match result count tests */
 static_assert(match_count<"">("abcdefg") == 8);
 static_assert(match_count<".">("abcdefg") == 7);
+static_assert(match_count<"a">("aaaaaaa") == 7);
 static_assert(match_count<"">("abcdefg"sv) == 8);
 static_assert(match_count<".">("abcdefg"sv) == 7);
+static_assert(match_count<"a">("aaaaaaa"sv) == 7);
 static_assert(match_count<"()|abc">("abc"sv) == 3);
 static_assert(match_count<"()|abc">("abcabc"sv) == 5);
 static_assert(match_count<"\\b|abc">("abc"sv) == 3);

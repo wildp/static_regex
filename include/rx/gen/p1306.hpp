@@ -14,6 +14,11 @@
 #include <meta>
 #include <type_traits>
 
+#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+    #include <simd>
+#endif
+
+#include "rx/etc/static_charset.hpp"
 #include "rx/etc/string_literal.hpp"
 #include "rx/etc/util.hpp"
 #include "rx/fsm/flags.hpp"
@@ -35,16 +40,27 @@ namespace rx::detail
     };
 
     template<typename CharT>
-    consteval auto make_optimised_edges(const static_transition<CharT>& tr)
+    consteval auto make_optimised_edges(const static_charset<CharT>& sc, bool inverted = false)
     {
         using ote = optimised_tr_edge<CharT>;
         using uchar_type = typename ote::value_type;
         std::vector<ote> result;
 
-        for (const auto& [first, last] : tr.cs)
-            result.emplace_back(static_cast<uchar_type>(first),
-                                static_cast<uchar_type>(static_cast<CharT>(last - first)),
-                                static_cast<uchar_type>(~0u));
+        if (inverted)
+        {
+            for (const auto& [first, last] : (~sc).get_intervals())
+                result.emplace_back(static_cast<uchar_type>(first),
+                                    static_cast<uchar_type>(static_cast<CharT>(last - first)),
+                                    static_cast<uchar_type>(~0u));
+        }
+        else
+        {
+            for (const auto& [first, last] : sc.get_intervals())
+                result.emplace_back(static_cast<uchar_type>(first),
+                                    static_cast<uchar_type>(static_cast<CharT>(last - first)),
+                                    static_cast<uchar_type>(~0u));
+        }
+
 
         std::vector<ote> input;
 
@@ -94,55 +110,150 @@ namespace rx::detail
         return result;
     }
 
-    template<static_transition Tr, typename CharT>
-    [[gnu::always_inline]] constexpr bool tr_possible(CharT c)
+    template<typename CharT>
+    consteval auto get_flattened_states(const tdfa_info<CharT>& dfa, std::size_t state)
+    {
+        std::vector<std::size_t> result;
+
+        while (true)
+        {
+            if (dfa.final_nodes.contains(state))
+                break;
+
+            /* assume fallback_nodes is subset of final_nodes */
+            // if (dfa.fallback_nodes.contains(state))
+            //     break;
+
+            if (dfa.nodes.at(state).size() != 1)
+                break;
+
+            const auto& tr = dfa.nodes.at(state).front();
+            result.emplace_back(state);
+            state = tr.next;
+        }
+
+        return result;
+    }
+
+    template<static_charset Sc>
+    [[gnu::always_inline]] constexpr bool tr_possible(const typename decltype(Sc)::char_type c)
     {
 #ifdef __clang_major__
         // TODO: change to use structured binding when supported
-        template for (constexpr auto pair : Tr.cs)
+        template for (constexpr auto pair : Sc.get_intervals())
         {
             if (pair.first <= c and c <= pair.second)
                 return true;
         }
+        return false;
 #else
-        using uchar_type = std::make_unsigned_t<CharT>;
-        const uchar_type d{ static_cast<uchar_type>(c) };
+        using char_type = decltype(Sc)::char_type;
+        using uchar_type = std::make_unsigned_t<char_type>;
 
-        template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Tr)))
+        if constexpr (std::signed_integral<char_type>)
         {
-            uchar_type e{ d };
+            static constexpr static_charset usc{ Sc.make_unsigned() };
+            return tr_possible<usc>(static_cast<uchar_type>(c));
+        }
+        else
+        {
+            static constexpr bool inverted{ false /* Sc.should_invert() */ };
 
-            if constexpr (ote.msk != ~0)
-                e &= ote.msk;
+            template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Sc, inverted)))
+            {
+                uchar_type d{ c };
 
-            if constexpr (ote.rng == 0)
-            {
-                if (e == ote.sub)
-                    return true;
+                if constexpr (ote.msk != ~0)
+                    d &= ote.msk;
+
+                if constexpr (ote.rng == 0)
+                {
+                    if (d == ote.sub)
+                        return not inverted;
+                }
+                else
+                {
+                    d -= ote.sub;
+                    if (d <= ote.rng)
+                        return not inverted;
+                }
             }
-            else
-            {
-                e -= ote.sub;
-                if (e <= ote.rng)
-                    return true;
-            }
+            return inverted;
         }
 #endif
-        return false;
     }
 
-    template<static_transition Tr, typename CharT>
-    [[gnu::always_inline]] constexpr bool tr_possible_exclude_null(CharT c)
+    template<static_charset Sc>
+    [[gnu::always_inline]] constexpr bool tr_possible_exclude_null(const typename decltype(Sc)::char_type c)
     {
-        if constexpr (tr_possible<Tr>(CharT{}))
+        using char_type = decltype(Sc)::char_type;
+
+        if constexpr (tr_possible<Sc>(char_type{}))
         {
-            if (c == CharT{})
+            if (c == char_type{})
                 return false;
         }
 
-        return tr_possible<Tr>(c);
+        return tr_possible<Sc>(c);
     }
 
+#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+    template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
+    [[gnu::always_inline]] constexpr auto vector_tr_find(const std::simd::basic_vec<UCharT, Abi>& c_vec)
+    {
+        using char_type = decltype(Sc)::char_type;
+
+        if constexpr (std::signed_integral<char_type>)
+        {
+            static_assert(std::same_as<UCharT, std::make_unsigned_t<char_type>>);
+            static constexpr static_charset usc{ Sc.make_unsigned() };
+            return vector_tr_find<usc>(c_vec);
+        }
+        else
+        {
+            static_assert(std::same_as<UCharT, char_type>);
+            using vec_type = std::simd::basic_vec<UCharT, Abi>;
+            using mask_type = vec_type::mask_type;
+
+            static constexpr bool inverted{ Sc.should_invert() };
+            mask_type result{ inverted };
+
+            template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Sc, inverted)))
+            {
+                auto d_vec{ c_vec };
+
+                if constexpr (ote.msk != ~0)
+                {
+                    static constexpr vec_type mask_vec{ ote.msk };
+                    d_vec &= mask_vec;
+                }
+
+                if constexpr (ote.rng == 0)
+                {
+                    static constexpr vec_type cmp_vec{ ote.sub };
+
+                    if constexpr (inverted)
+                        result &= (d_vec != cmp_vec);
+                    else
+                        result |= (d_vec == cmp_vec);
+                }
+                else
+                {
+                    static constexpr vec_type sub_vec{ ote.sub };
+                    static constexpr vec_type lte_vec{ ote.rng };
+                    d_vec -= sub_vec;
+
+                    if constexpr (inverted)
+                        result &= (d_vec > lte_vec);
+                    else
+                        result |= (d_vec <= lte_vec);
+                }
+            }
+
+            return result;
+        }
+    }
+#endif
 
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306dfa
@@ -153,12 +264,14 @@ namespace rx::detail
         static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
         static constexpr bool fixed_length{ DFA.min_max_lengths.first != std::numeric_limits<std::size_t>::max()
                                             and DFA.min_max_lengths.first == DFA.min_max_lengths.second };
+        static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
 
         template<typename I>
         using result = static_regex_match_result<I, DFA.make_match_result_info(Flags.is_iterator)>;
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+        static constexpr std::size_t avoid_simd_threshold{ (1uz << (std::numeric_limits<std::make_unsigned_t<char_type>>::digits - 1)) / 2 };
 
         struct generation
         {
@@ -233,7 +346,7 @@ namespace rx::detail
             {
                 static_assert(DFA.register_count > 0);
 
-                template for (constexpr register_operation op : DFA.regops.at(Blk))
+                template for (constexpr register_operation op : DFA.regops[Blk])
                 {
                     if constexpr (op.is_copy)
                         result.res.reg_[op.dst] = result.res.reg_[op.cpy_src];
@@ -241,7 +354,7 @@ namespace rx::detail
                         result.res.reg_[op.dst] = it;
                 }
 
-                template for (constexpr register_operation op : DFA.regops.at(Blk))
+                template for (constexpr register_operation op : DFA.regops[Blk])
                 {
                     if constexpr (op.is_copy)
                         result.gen.reg[op.dst] = result.gen.reg[op.cpy_src];
@@ -258,7 +371,7 @@ namespace rx::detail
         {
             if constexpr (Blk != tdfa::no_transition_regops)
             {
-                template for (constexpr register_operation op : DFA.regops.at(Blk))
+                template for (constexpr register_operation op : DFA.regops[Blk])
                 {
                     if constexpr (op.is_copy)
                         result.res.reg_[op.dst] = result.res.reg_[op.cpy_src];
@@ -346,9 +459,9 @@ namespace rx::detail
 
             if (it != last)
             {
-                template for (constexpr static_transition<char_type> tr : DFA.nodes.at(DFAState))
+                template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
                 {
-                    if (tr_possible<tr>(*it))
+                    if (tr_possible<tr.cs>(*it))
                     {
                         register_operations<tr.op_index>(result, it);
                         [[clang::musttail]] return state<tr.next>(result, ++it, last, fallback);
@@ -391,9 +504,9 @@ namespace rx::detail
                     fallback.it = it;
             }
 
-            template for (constexpr static_transition<char_type> tr : DFA.nodes.at(DFAState))
+            template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
             {
-                if (tr_possible_exclude_null<tr>(*it))
+                if (tr_possible_exclude_null<tr.cs>(*it))
                 {
                     register_operations<tr.op_index>(result, it);
                     [[clang::musttail]] return state<tr.next>(result, ++it, last, fallback);
@@ -431,9 +544,9 @@ namespace rx::detail
             }
             else
             {
-                template for (constexpr static_transition<char_type> tr : DFA.nodes.at(DFAState))
+                template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
                 {
-                    if (tr_possible<tr>(*it))
+                    if (tr_possible<tr.cs>(*it))
                     {
                         register_operations<tr.op_index>(result, it);
                         [[clang::musttail]] return unchecked_state<tr.next, Count - 1>(result, ++it, last, fallback);
@@ -473,7 +586,7 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr bool linear_outer_state(Result result, I it, const S last)
+        static constexpr bool scalar_outer_state(Result result, I it, const S last)
         {
             if constexpr (DFA.register_count > 0)
                 ++result.gen.current;
@@ -501,15 +614,15 @@ namespace rx::detail
 
             template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
             {
-                if (tr_possible<tr>(*it))
-                    [[clang::musttail]] return linear_outer_state<tr.next>(result, ++it, last);
+                if (tr_possible<tr.cs>(*it))
+                    [[clang::musttail]] return scalar_outer_state<tr.next>(result, ++it, last);
             }
 
             return false;
         }
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-        static constexpr bool linear_outer_state(Result result, I it, const S last)
+        static constexpr bool scalar_outer_state(Result result, I it, const S last)
             requires (DFA.continue_nodes.size() > 1 and (Flags.enable_fallback or not fixed_length))
         {
             if constexpr (DFA.register_count > 0)
@@ -540,15 +653,15 @@ namespace rx::detail
 
             template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
             {
-                if (tr_possible<tr>(*it))
-                    [[clang::musttail]] return linear_outer_state<tr.next>(result, ++it, last);
+                if (tr_possible<tr.cs>(*it))
+                    [[clang::musttail]] return scalar_outer_state<tr.next>(result, ++it, last);
             }
 
             return false;
         }
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-        static constexpr bool linear_outer_state(Result result, I it, const S last)
+        static constexpr bool scalar_outer_state(Result result, I it, const S last)
             requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                       and (Flags.enable_fallback or not fixed_length))
         {
@@ -576,7 +689,7 @@ namespace rx::detail
         }
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-        static constexpr bool linear_outer_state(Result result, I it, const S last)
+        static constexpr bool scalar_outer_state(Result result, I it, const S last)
             requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                       and (/* degenerate case */ fixed_length and not Flags.enable_fallback))
         {
@@ -600,10 +713,198 @@ namespace rx::detail
             return false;
         }
 
+#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+        template<std::size_t DFAState, std::size_t Count, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+        [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
+            requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
+        {
+            while (mask != 0)
+            {
+                const auto offset = std::countr_zero(mask);
+
+                // TODO: implement simd-based checking
+                if (unchecked_state<DFAState, Count>(result, it + offset, last, maybe_fallback_t<I>{ it + offset, fallback_disabled }))
+                {
+                    if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
+                        result.res.match_start_ = it + offset;
+                    return true;
+                }
+                else
+                {
+                    if constexpr (DFA.register_count > 0)
+                        ++result.gen.current;
+                }
+
+                mask &= (mask - 1);
+            }
+
+            return false;
+        }
+
+        template<std::size_t DFAState, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool vector_outer_state(Result result, I it, const S last)
+            requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
+                      and fixed_length and branch_free)
+        {
+            static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+            static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState));
+
+            using uchar_type = std::make_unsigned_t<char_type>;
+            using vec_type = std::simd::vec<uchar_type>;
+            using mask_type = vec_type::mask_type;
+
+            constexpr auto flags = []() consteval {
+                if constexpr (not std::same_as<char_type, uchar_type>)
+                    return std::simd::flag_convert;
+                else
+                    return std::simd::flag_default;
+            }();
+
+            static constexpr std::size_t position1{ 0 };
+            static constexpr std::size_t position2{ states.size() - 1 };
+
+            static constexpr bool avoid_simd = []() consteval {
+                std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
+                std::size_t count2{ DFA.nodes[states[position2]].front().cs.count() };
+#if __cpp_lib_saturation_arithmetic >= 202603L
+                return std::saturating_mul(count1, count2)  > std::saturating_mul(avoid_simd_threshold, avoid_simd_threshold);
+#else
+                return std::mul_sat(count1, count2)  > std::mul_sat(avoid_simd_threshold, avoid_simd_threshold);
+#endif
+            }();
+
+            if constexpr (avoid_simd)
+            {
+                /* using simd in this case is likely a pessimisation; resort to non-vectorised implementation instead */
+                return scalar_outer_state<DFAState>(result, it, last);
+            }
+            else
+            {
+                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (length - 1 + vec_type::size()) };
+
+                for (std::ptrdiff_t i{ 0 }; i < max; i += vec_type::size())
+                {
+                    const auto block1 = std::simd::unchecked_load<vec_type>(it + position1, last, flags);
+                    const auto block2 = std::simd::unchecked_load<vec_type>(it + position2, last, flags);
+
+                    const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
+                    const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
+
+                    if (vector_candidate_check<DFAState, length>(result, it, last, (mask1 & mask2).to_ullong()))
+                        return true;
+
+                    it += vec_type::size();
+                }
+
+                if (const std::ptrdiff_t epi_size{ std::ranges::distance(it, last) - (length - 1) }; epi_size > 0)
+                {
+                    const mask_type epi_mask{ ~0uz >> (std::numeric_limits<std::size_t>::digits - epi_size) };
+
+                    const auto block1 = std::simd::partial_load<vec_type>(it + position1, last, epi_mask, flags);
+                    const auto block2 = std::simd::partial_load<vec_type>(it + position2, last, epi_mask, flags);
+
+                    const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
+                    const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
+
+                    if (vector_candidate_check<DFAState, length>(result, it, last, (mask1 & mask2 & epi_mask).to_ullong()))
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
+        template<std::size_t DFAState, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool vector_outer_state(Result result, I it, const S last)
+            requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
+                      and (not fixed_length or not branch_free))
+        {
+            static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+
+            using uchar_type = std::make_unsigned_t<char_type>;
+            using vec_type = std::simd::basic_vec<uchar_type>;
+            using mask_type = vec_type::mask_type;
+
+            constexpr auto flags = []() {
+                if constexpr (not std::same_as<char_type, uchar_type>)
+                    return std::simd::flag_convert;
+                else
+                    return std::simd::flag_default;
+            }();
+
+            static constexpr bool avoid_simd = []() {
+                charset<char_type> acc;
+                for (const auto& tr : DFA.nodes[DFAState])
+                    acc |= tr.cs;
+                return acc.count() > avoid_simd_threshold;
+            }();
+
+            if constexpr (avoid_simd)
+            {
+                /* using simd in this case is likely a pessimisation; resort to non-vectorised implementation instead */
+                return scalar_outer_state<DFAState>(result, it, last);
+            }
+            else
+            {
+                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (min_length - 1 + vec_type::size()) };
+
+                for (std::ptrdiff_t i{ 0 }; i < max; i += vec_type::size())
+                {
+                    const auto block = std::simd::unchecked_load<vec_type>(it, last, flags);
+
+                    mask_type mask{};
+
+#ifdef __GNUC_MINOR__
+                    [&](){ /* NB: This is a workaround for a name mangling bug */
+#endif
+                    template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
+                        mask |= vector_tr_find<tr.cs>(block);
+#ifdef __GNUC_MINOR__
+                    }();
+#endif
+
+                    if (vector_candidate_check<DFAState, min_length>(result, it, last, mask.to_ullong()))
+                        return true;
+
+                    it += vec_type::size();
+                }
+
+                if (const std::ptrdiff_t epi_size{ std::ranges::distance(it, last) - (min_length - 1) }; epi_size > 0)
+                {
+                    const mask_type epi_mask{ ~0uz >> (std::numeric_limits<std::size_t>::digits - epi_size) };
+
+                    const auto block = std::simd::partial_load<vec_type>(it, last, epi_mask, flags);
+
+                    mask_type mask{};
+
+#ifdef __GNUC_MINOR__
+                    [&](){ /* NB: This is a workaround for a name mangling bug */
+#endif
+                    template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
+                        mask |= vector_tr_find<tr.cs>(block);
+#ifdef __GNUC_MINOR__
+                    }();
+#endif
+
+                    if (vector_candidate_check<DFAState, min_length>(result, it, last, (mask & epi_mask).to_ullong()))
+                        return true;
+                }
+
+                return false;
+            }
+        }
+#endif
+
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool outer_state(Result result, I it, const S last)
         {
-            return linear_outer_state<DFAState>(result, it, last);
+#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+            if constexpr (std::contiguous_iterator<I> and std::sized_sentinel_for<S, I>
+                          and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
+                return vector_outer_state<DFAState>(result, it, last);
+            else
+#endif
+                return scalar_outer_state<DFAState>(result, it, last);
         }
 
     public:
