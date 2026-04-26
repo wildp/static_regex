@@ -253,7 +253,7 @@ namespace rx::detail
             return result;
         }
     }
-#endif
+#endif // __cpp_lib_simd >= 202411L
 
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306dfa
@@ -271,7 +271,7 @@ namespace rx::detail
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
-        static constexpr std::size_t avoid_simd_threshold{ (1uz << (std::numeric_limits<std::make_unsigned_t<char_type>>::digits - 1)) / 2 };
+        static constexpr std::size_t avoid_simd_threshold{ (1uz << std::numeric_limits<std::make_unsigned_t<char_type>>::digits) / 2 };
 
         struct generation
         {
@@ -780,9 +780,10 @@ namespace rx::detail
             }
             else
             {
-                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (length - 1 + vec_type::size()) };
+                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (length - 1) };
 
-                for (std::ptrdiff_t i{ 0 }; i < max; i += vec_type::size())
+                std::ptrdiff_t i{ 0 };
+                for (; i + vec_type::size() < max; i += vec_type::size())
                 {
                     const auto block1 = std::simd::unchecked_load<vec_type>(it + position1, last, flags);
                     const auto block2 = std::simd::unchecked_load<vec_type>(it + position2, last, flags);
@@ -796,12 +797,13 @@ namespace rx::detail
                     it += vec_type::size();
                 }
 
-                if (const std::ptrdiff_t epi_size{ std::ranges::distance(it, last) - (length - 1) }; epi_size > 0)
+                if (i < max)
                 {
-                    const mask_type epi_mask{ ~0uz >> (std::numeric_limits<std::size_t>::digits - epi_size) };
+                    const auto epi_size = max - i;
+                    const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
-                    const auto block1 = std::simd::partial_load<vec_type>(it + position1, last, epi_mask, flags);
-                    const auto block2 = std::simd::partial_load<vec_type>(it + position2, last, epi_mask, flags);
+                    const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, flags);
+                    const auto block2 = std::simd::partial_load<vec_type>(it + position2, epi_size, flags);
 
                     const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                     const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
@@ -822,7 +824,7 @@ namespace rx::detail
             static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
             using uchar_type = std::make_unsigned_t<char_type>;
-            using vec_type = std::simd::basic_vec<uchar_type>;
+            using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
             constexpr auto flags = []() {
@@ -846,9 +848,10 @@ namespace rx::detail
             }
             else
             {
-                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (min_length - 1 + vec_type::size()) };
+                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (min_length - 1) };
 
-                for (std::ptrdiff_t i{ 0 }; i < max; i += vec_type::size())
+                std::ptrdiff_t i{ 0 };
+                for (; i + vec_type::size() < max; i += vec_type::size())
                 {
                     const auto block = std::simd::unchecked_load<vec_type>(it, last, flags);
 
@@ -869,9 +872,10 @@ namespace rx::detail
                     it += vec_type::size();
                 }
 
-                if (const std::ptrdiff_t epi_size{ std::ranges::distance(it, last) - (min_length - 1) }; epi_size > 0)
+                if (i < max)
                 {
-                    const mask_type epi_mask{ ~0uz >> (std::numeric_limits<std::size_t>::digits - epi_size) };
+                    const auto epi_size = max - i;
+                    const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
                     const auto block = std::simd::partial_load<vec_type>(it, last, epi_mask, flags);
 
@@ -893,7 +897,7 @@ namespace rx::detail
                 return false;
             }
         }
-#endif
+#endif // __cpp_lib_simd >= 202411L
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool outer_state(Result result, I it, const S last)
@@ -903,7 +907,7 @@ namespace rx::detail
                           and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
                 return vector_outer_state<DFAState>(result, it, last);
             else
-#endif
+#endif // __cpp_lib_simd >= 202411L
                 return scalar_outer_state<DFAState>(result, it, last);
         }
 

@@ -101,8 +101,8 @@ namespace
 
     private:
         static constexpr auto pattern = rx::static_regex<
-            R"--((?m:^#include "(.*?)"$\n?|^(#include <.*?>)$\n?|^(#pragma once)$\n?|^(// *?(?i:copyright \(c\)).*?)$|^ *?//.*?$\n?|//.*?$))--"
-            , rx::mode::linear>{};
+            R"--((?m:^#include "(.*?)"$\n?|^(#include <.*?>)$\n?|^(#pragma once)$\n?|^(// *?(?i:copyright \(c\)).*?)$|^ *?//.*?$\n?| *?//.*?$))--"
+            , rx::mode::standard>{};
 
         [[nodiscard]] path find_path(const path& next, const path& current_dir) const
         {

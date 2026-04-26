@@ -1273,7 +1273,7 @@ namespace rx::detail
         /* remove last element, which corresponds to intersection of all complements */
         partitions.pop_back();
 
-        std::ranges::reverse(partitions); 
+        std::ranges::reverse(partitions);
 
         return partitions;
     }
@@ -4422,7 +4422,7 @@ namespace rx::detail
                 break;
 
             case ast_index<char_class>:
-                const_len.at(idx) = 1; 
+                const_len.at(idx) = 1;
                 stack.pop_back();
                 break;
 
@@ -6343,7 +6343,7 @@ namespace rx::detail::tnfa
 
         state_t value;
 
-        charset_t<CharT> cs;  
+        charset_t<CharT> cs;
     };
 
     /* predicates for variations of e-closure */
@@ -8333,7 +8333,7 @@ namespace rx::detail::tdfa
     constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> std::size_t
     {
         static constexpr std::size_t map_usage_threshold{ 128 };
-        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; 
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); };
 
         node_info current_info{ .config{ c | std::views::transform(closure_entry::next_config) | std::ranges::to<std::vector>() } };
         std::size_t new_state{ state_info_.size() };
@@ -9479,7 +9479,7 @@ namespace rx::detail::tdfa
 
         remap_t remap_result(dfa.register_count_, no_register);
         remap_t representative_map(dfa.register_count_, no_register);
-        std::vector<std::vector<reg_t>> equivalence_classes(dfa.register_count_); 
+        std::vector<std::vector<reg_t>> equivalence_classes(dfa.register_count_);
 
         for (const auto& block : dfa.regops_)
         {
@@ -10054,8 +10054,8 @@ namespace rx::detail
         auto values = std::views::iota(0uz, nodes_.size())
                     | std::ranges::to<std::vector>();
 
-        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; 
-        std::ranges::sort(std::views::zip(keys, values), {}, key_proj); 
+        static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); };
+        std::ranges::sort(std::views::zip(keys, values), {}, key_proj);
 
         data_t new_nodes{};
         new_nodes.reserve(nodes_.size());
@@ -10069,13 +10069,13 @@ namespace rx::detail
 
             bool inserted{ false };
 
-            const auto zv = std::views::zip(keys, values); 
+            const auto zv = std::views::zip(keys, values);
 
             for (auto it = beg; it != end; ++it)
             {
                 const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
 
-                for (auto [fst, snd] = std::ranges::equal_range(zv, hash, {}, key_proj); fst != snd; ++fst)  
+                for (auto [fst, snd] = std::ranges::equal_range(zv, hash, {}, key_proj); fst != snd; ++fst)
                 {
                     auto [_, index] = *fst;
 
@@ -12250,7 +12250,7 @@ namespace rx::detail
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
-        static constexpr std::size_t avoid_simd_threshold{ (1uz << (std::numeric_limits<std::make_unsigned_t<char_type>>::digits - 1)) / 2 };
+        static constexpr std::size_t avoid_simd_threshold{ (1uz << std::numeric_limits<std::make_unsigned_t<char_type>>::digits) / 2 };
 
         struct generation
         {
@@ -12756,9 +12756,10 @@ namespace rx::detail
             }
             else
             {
-                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (length - 1 + vec_type::size()) };
+                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (length - 1) };
 
-                for (std::ptrdiff_t i{ 0 }; i < max; i += vec_type::size())
+                std::ptrdiff_t i{ 0 };
+                for (; i + vec_type::size() < max; i += vec_type::size())
                 {
                     const auto block1 = std::simd::unchecked_load<vec_type>(it + position1, last, flags);
                     const auto block2 = std::simd::unchecked_load<vec_type>(it + position2, last, flags);
@@ -12772,12 +12773,13 @@ namespace rx::detail
                     it += vec_type::size();
                 }
 
-                if (const std::ptrdiff_t epi_size{ std::ranges::distance(it, last) - (length - 1) }; epi_size > 0)
+                if (i < max)
                 {
-                    const mask_type epi_mask{ ~0uz >> (std::numeric_limits<std::size_t>::digits - epi_size) };
+                    const auto epi_size = max - i;
+                    const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
-                    const auto block1 = std::simd::partial_load<vec_type>(it + position1, last, epi_mask, flags);
-                    const auto block2 = std::simd::partial_load<vec_type>(it + position2, last, epi_mask, flags);
+                    const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, flags);
+                    const auto block2 = std::simd::partial_load<vec_type>(it + position2, epi_size, flags);
 
                     const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                     const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
@@ -12798,7 +12800,7 @@ namespace rx::detail
             static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
             using uchar_type = std::make_unsigned_t<char_type>;
-            using vec_type = std::simd::basic_vec<uchar_type>;
+            using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
             constexpr auto flags = []() {
@@ -12822,9 +12824,10 @@ namespace rx::detail
             }
             else
             {
-                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (min_length - 1 + vec_type::size()) };
+                const std::ptrdiff_t max{ std::ranges::distance(it, last) - (min_length - 1) };
 
-                for (std::ptrdiff_t i{ 0 }; i < max; i += vec_type::size())
+                std::ptrdiff_t i{ 0 };
+                for (; i + vec_type::size() < max; i += vec_type::size())
                 {
                     const auto block = std::simd::unchecked_load<vec_type>(it, last, flags);
 
@@ -12845,9 +12848,10 @@ namespace rx::detail
                     it += vec_type::size();
                 }
 
-                if (const std::ptrdiff_t epi_size{ std::ranges::distance(it, last) - (min_length - 1) }; epi_size > 0)
+                if (i < max)
                 {
-                    const mask_type epi_mask{ ~0uz >> (std::numeric_limits<std::size_t>::digits - epi_size) };
+                    const auto epi_size = max - i;
+                    const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
                     const auto block = std::simd::partial_load<vec_type>(it, last, epi_mask, flags);
 
@@ -12928,7 +12932,7 @@ namespace rx::detail
 #ifndef __GNUC_MINOR__
                     break;
 #else
-                    return res; 
+                    return res;
 #endif
                 }
             }
@@ -12967,7 +12971,7 @@ namespace rx::detail
 #ifndef __GNUC_MINOR__
                     break;
 #else
-                    return res; 
+                    return res;
 #endif
                 }
             }
@@ -13020,7 +13024,7 @@ namespace rx::detail
                     break;
 #else
                     clean_generations(res, gen);
-                    return res; 
+                    return res;
 #endif
                 }
             }
@@ -13066,7 +13070,7 @@ namespace rx::detail
                     break;
 #else
                     clean_generations(res, gen);
-                    return res; 
+                    return res;
 #endif
                 }
             }
@@ -13283,7 +13287,7 @@ namespace rx
         concept typed_static_regex_like = static_regex_like<Regex> and std::same_as<CharT, typename Regex::char_type>;
 
         template<typename Regex, typename CharT>
-        concept typed_regex_like = typed_static_regex_like<Regex, CharT> ; 
+        concept typed_regex_like = typed_static_regex_like<Regex, CharT> ;
     }
 
     namespace detail
@@ -13698,11 +13702,10 @@ namespace rx
         {
         private:
             template<typename CharT, std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<CharT> O,
-                     /* std::sentinel_for<O> OutS, */ string_literal Pattern, mode Mode, std::bidirectional_iterator F, std::sentinel_for<F> FmtS>
+                     string_literal Pattern, mode Mode, std::bidirectional_iterator F, std::sentinel_for<F> FmtS>
             static constexpr regex_replace_result<I, O>
-            impl(I first, const S last, O result, /* const OutS result_last, */ static_regex<Pattern, Mode> /* regex */, F fmt_first, FmtS fmt_last)
+            impl(I first, const S last, O result, static_regex<Pattern, Mode> /* regex */, F fmt_first, FmtS fmt_last)
             {
-
                 using iterator_type = stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>;
                 using sentinel_type = std::default_sentinel_t;
                 using result_type = iterator_type::value_type;
@@ -13733,11 +13736,10 @@ namespace rx
             }
 
             template<typename CharT, std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<CharT> O,
-                     /* std::sentinel_for<O> OutS, */ string_literal Pattern, mode Mode, string_literal Fmt>
+                     string_literal Pattern, mode Mode, string_literal Fmt>
             static constexpr regex_replace_result<I, O>
-            impl(I first, const S last, O result, /* const OutS result_last, */ static_regex<Pattern, Mode> /* regex */, fmt_t<Fmt>)
+            impl(I first, const S last, O result, static_regex<Pattern, Mode> /* regex */, fmt_t<Fmt>)
             {
-
                 using iterator_type = stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>;
                 using sentinel_type = std::default_sentinel_t;
                 using result_type = iterator_type::value_type;

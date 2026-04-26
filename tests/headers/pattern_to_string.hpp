@@ -231,7 +231,7 @@ namespace rx::testing
                 const auto& cla = std::get<typename ast_t::char_class>(entry);
 
                 using pair_t = typename ast_t::char_class::impl_type::underlying_type::char_interval;
-                static constexpr std::size_t threshold{ (1uz << (std::numeric_limits<std::make_unsigned_t<char_type>>::digits - 1)) / 2 };
+                static constexpr std::size_t threshold{ (1uz << std::numeric_limits<std::make_unsigned_t<char_type>>::digits) / 2 };
 
                 auto underlying = cla.data.get();
                 const bool negated{ underlying.count() > threshold };

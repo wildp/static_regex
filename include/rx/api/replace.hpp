@@ -322,12 +322,10 @@ namespace rx
         {
         private:
             template<typename CharT, std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<CharT> O,
-                     /* std::sentinel_for<O> OutS, */ string_literal Pattern, mode Mode, std::bidirectional_iterator F, std::sentinel_for<F> FmtS>
+                     string_literal Pattern, mode Mode, std::bidirectional_iterator F, std::sentinel_for<F> FmtS>
             static constexpr regex_replace_result<I, O>
-            impl(I first, const S last, O result, /* const OutS result_last, */ static_regex<Pattern, Mode> /* regex */, F fmt_first, FmtS fmt_last)
+            impl(I first, const S last, O result, static_regex<Pattern, Mode> /* regex */, F fmt_first, FmtS fmt_last)
             {
-                // TODO: revisit in future C++ version with output sentinel versions of algorithms?
-
                 using iterator_type = stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>;
                 using sentinel_type = std::default_sentinel_t;
                 using result_type = iterator_type::value_type;
@@ -358,12 +356,10 @@ namespace rx
             }
 
             template<typename CharT, std::bidirectional_iterator I, std::sentinel_for<I> S, std::output_iterator<CharT> O,
-                     /* std::sentinel_for<O> OutS, */ string_literal Pattern, mode Mode, string_literal Fmt>
+                     string_literal Pattern, mode Mode, string_literal Fmt>
             static constexpr regex_replace_result<I, O>
-            impl(I first, const S last, O result, /* const OutS result_last, */ static_regex<Pattern, Mode> /* regex */, fmt_t<Fmt>)
+            impl(I first, const S last, O result, static_regex<Pattern, Mode> /* regex */, fmt_t<Fmt>)
             {
-                // TODO: revisit in future C++ version with output sentinel versions of algorithms?
-
                 using iterator_type = stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>;
                 using sentinel_type = std::default_sentinel_t;
                 using result_type = iterator_type::value_type;
