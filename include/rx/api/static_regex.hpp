@@ -11,15 +11,15 @@
 #include <iterator>
 #include <ranges>
 
-#include "rx/etc/string_literal.hpp"
-#include "rx/etc/util.hpp"
-#include "rx/fsm/flags.hpp"
-#include "rx/gen/naive.hpp"
-#include "rx/gen/p1306.hpp"
-#include "rx/gen/result.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/fsm/flags.hpp"
+#include "srx/gen/naive.hpp"
+#include "srx/gen/p1306.hpp"
+#include "srx/gen/result.hpp"
 
 
-namespace rx
+namespace srx
 {
     enum class mode : unsigned char
     {
@@ -333,7 +333,7 @@ namespace rx
     namespace literals
     {
         template<string_literal Pattern>
-        consteval static_regex<Pattern> operator ""_rx()
+        consteval static_regex<Pattern> operator ""_srx()
         {
             return {};
         }

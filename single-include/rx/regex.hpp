@@ -408,7 +408,7 @@
 #include <vector>
 
 
-namespace rx
+namespace srx
 {
     template<typename CharT, std::size_t N>
     struct string_literal
@@ -430,7 +430,7 @@ namespace rx
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<class... Ts>
     struct overloads : Ts... { using Ts::operator()...; };
@@ -564,7 +564,7 @@ namespace rx::detail
     using maybe_const_t = std::conditional_t<Const, const T, T>;
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     struct fsm_flags
     {
@@ -641,7 +641,7 @@ namespace rx::detail
     }
 }
 
-namespace rx
+namespace srx
 {
     class regex_error : public std::runtime_error
     {
@@ -674,13 +674,13 @@ namespace rx
     };
 }
 
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
     #include <boost/dynamic_bitset.hpp>
 #endif
 
-namespace rx::detail
+namespace srx::detail
 {
-#ifndef RX_USE_BOOST_DYNAMIC_BITSET
+#ifndef SRX_USE_BOOST_DYNAMIC_BITSET
     class vec_bool_adaptor
     {
     public:
@@ -833,14 +833,14 @@ namespace rx::detail
     };
 #endif
 
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
     using bitset_t = boost::dynamic_bitset<std::size_t>;
 #else
     using bitset_t = vec_bool_adaptor;
 #endif
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     class bitcharset
@@ -1397,7 +1397,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename T, typename CharT>
     concept charset_interval_range = std::ranges::contiguous_range<T>
@@ -2234,7 +2234,7 @@ namespace rx::detail
         for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
 #else
             mask[input.size() - i - 1] = true;
@@ -2264,7 +2264,7 @@ namespace rx::detail
         for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
 #else
             mask[input.size() - i - 1] = true;
@@ -2283,7 +2283,7 @@ namespace rx::detail
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
             for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
 #else
                 if (it->first.at(input.size() - i - 1))
@@ -2308,7 +2308,7 @@ namespace rx::detail
         for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
 #else
             mask[input.size() - i - 1] = true;
@@ -2327,7 +2327,7 @@ namespace rx::detail
         {
             result.emplace_back();
             for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
 #else
                 if (it->first.at(input.size() - i - 1))
@@ -2339,7 +2339,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename T>
     class static_span
@@ -2512,7 +2512,7 @@ namespace rx::detail
     static_map(const std::flat_map<const K, V, C, KeyCont, MappedCont>& mapped_cont) -> static_map<const K, V, C>;
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     class static_charset;
@@ -2750,7 +2750,7 @@ namespace rx::detail
     using nontransient_constexpr_version_of_t = nontransient_constexpr_version_of<T>::type;
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     enum class named_character_class : unsigned char
     {
@@ -2893,7 +2893,7 @@ namespace rx::detail
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
-namespace rx::detail
+namespace srx::detail
 {
     /* RE2 limits counted repetitions to 1000 - we do the same here */
     inline constexpr int counted_repetition_limit{ 1000 };
@@ -3800,7 +3800,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     using tag_number_t = int; /* note: tags must be non-negative */
     inline constexpr tag_number_t start_of_input_tag{ std::numeric_limits<tag_number_t>::min() };
@@ -3999,7 +3999,7 @@ namespace rx::detail
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     namespace parser
     {
@@ -4137,7 +4137,7 @@ namespace rx::detail
     expr_tree(const CharT*, parser_flags) -> expr_tree<CharT>;
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     /* observer for non empty match */
 
@@ -4820,7 +4820,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail::parser
+namespace srx::detail::parser
 {
     struct capture_flags
     {
@@ -5018,7 +5018,7 @@ namespace rx::detail::parser
     };
 }
 
-namespace rx::detail::parser
+namespace srx::detail::parser
 {
     template<typename CharT>
     class ll1
@@ -6236,7 +6236,7 @@ namespace rx::detail::parser
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     /* constructor for tree */
 
@@ -6248,7 +6248,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail::tnfa
+namespace srx::detail::tnfa
 {
     using state_t = std::size_t;
     using tr_index = std::size_t;
@@ -6369,7 +6369,7 @@ namespace rx::detail::tnfa
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     /* tnfa class */
 
@@ -6483,7 +6483,7 @@ namespace rx::detail
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     struct stack_elem
     {
@@ -7945,7 +7945,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail::tdfa
+namespace srx::detail::tdfa
 {
     template<typename CharT>
     using charset_t = tnfa::charset_t<CharT>;
@@ -8045,7 +8045,7 @@ namespace rx::detail::tdfa
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     class tagged_dfa
@@ -8103,7 +8103,7 @@ namespace rx::detail
     };
 }
 
-namespace rx::detail::tdfa
+namespace srx::detail::tdfa
 {
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
 
@@ -9873,7 +9873,7 @@ namespace rx::detail::tdfa
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     /* tdfa constructor and member functions */
 
@@ -10125,7 +10125,7 @@ namespace rx::detail
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     struct final_capture_info
     {
@@ -10357,7 +10357,7 @@ namespace rx::detail
     inline constexpr match_non_empty_t match_non_empty;
 }
 
-namespace rx
+namespace srx
 {
     namespace detail
     {
@@ -10591,30 +10591,30 @@ namespace rx
 /* structured binding support for submatch */
 
 template<std::bidirectional_iterator I>
-struct std::tuple_size<rx::submatch<I>> : integral_constant<std::size_t, 2> {};
+struct std::tuple_size<srx::submatch<I>> : integral_constant<std::size_t, 2> {};
 
 template<std::size_t N, std::bidirectional_iterator I>
     requires (N < 2)
-struct std::tuple_element<N, rx::submatch<I>>
+struct std::tuple_element<N, srx::submatch<I>>
 {
-    using type = rx::submatch<I>::iterator;
+    using type = srx::submatch<I>::iterator;
 };
 
 /* formatting support for submatch */
 
 template<std::bidirectional_iterator I>
-inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
+inline constexpr auto std::format_kind<srx::submatch<I>> = std::range_format::string;
 
-static_assert(std::formattable<rx::submatch<const char*>, char>);
+static_assert(std::formattable<srx::submatch<const char*>, char>);
 
 /* range correctness for submatch */
 
 template<std::bidirectional_iterator I>
-constexpr bool std::ranges::disable_sized_range<rx::submatch<I>> = not std::sized_sentinel_for<I, I>;
+constexpr bool std::ranges::disable_sized_range<srx::submatch<I>> = not std::sized_sentinel_for<I, I>;
 
 /* submatch factory implementation */
 
-namespace rx::detail
+namespace srx::detail
 {
     template<std::bidirectional_iterator I>
     class submatch_factory
@@ -10635,12 +10635,12 @@ namespace rx::detail
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306dfa;
 
-    template<rx::string_literal Pattern>
+    template<srx::string_literal Pattern>
     struct naive_matcher;
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, typename Regex>
@@ -10650,9 +10650,9 @@ namespace rx::detail
     class replace_fmt;
 }
 
-namespace rx
+namespace srx
 {
-    template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
+    template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
     class static_regex_match_result
     {
         using factory = detail::submatch_factory<I>;
@@ -10770,10 +10770,10 @@ namespace rx
             return {};
         }
 
-        template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
+        template<srx::string_literal Pattern, srx::detail::fsm_flags Flags>
         friend struct detail::p1306dfa;
 
-        template<rx::string_literal Pattern>
+        template<srx::string_literal Pattern>
         friend struct detail::naive_matcher;
 
         template<std::ranges::bidirectional_range V, typename Regex>
@@ -10891,7 +10891,7 @@ namespace rx
 
     /* iterator implementation */
 
-    template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
+    template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
     template<bool Const>
     class static_regex_match_result<I, Captures>::proxy_iterator
     {
@@ -10995,18 +10995,18 @@ namespace rx
 
 /* structured binding support for static_regex_match_result */
 
-template<std::bidirectional_iterator Iter, rx::detail::static_match_result_info Captures>
-struct std::tuple_size<rx::static_regex_match_result<Iter, Captures>>
-    : integral_constant<std::size_t, rx::static_regex_match_result<Iter, Captures>::submatch_count> {};
+template<std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
+struct std::tuple_size<srx::static_regex_match_result<Iter, Captures>>
+    : integral_constant<std::size_t, srx::static_regex_match_result<Iter, Captures>::submatch_count> {};
 
-template<std::size_t N, std::bidirectional_iterator Iter, rx::detail::static_match_result_info Captures>
-    requires (N < rx::static_regex_match_result<Iter, Captures>::submatch_count)
-struct std::tuple_element<N, rx::static_regex_match_result<Iter, Captures>>
+template<std::size_t N, std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
+    requires (N < srx::static_regex_match_result<Iter, Captures>::submatch_count)
+struct std::tuple_element<N, srx::static_regex_match_result<Iter, Captures>>
 {
-    using type = rx::static_regex_match_result<Iter, Captures>::submatch_type;
+    using type = srx::static_regex_match_result<Iter, Captures>::submatch_type;
 };
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     struct tree_info
@@ -12006,11 +12006,11 @@ namespace rx::detail
     };
 }
 
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     #include <simd>
 #endif
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     struct optimised_tr_edge
@@ -12176,7 +12176,7 @@ namespace rx::detail
         return tr_possible<Sc>(c);
     }
 
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
     [[gnu::always_inline]] constexpr auto vector_tr_find(const std::simd::basic_vec<UCharT, Abi>& c_vec)
     {
@@ -12690,7 +12690,7 @@ namespace rx::detail
             return false;
         }
 
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
         template<std::size_t DFAState, std::size_t Count, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
             requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
@@ -12878,7 +12878,7 @@ namespace rx::detail
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool outer_state(Result result, I it, const S last)
         {
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
             if constexpr (std::contiguous_iterator<I> and std::sized_sentinel_for<S, I>
                           and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
                 return vector_outer_state<DFAState>(result, it, last);
@@ -13087,7 +13087,7 @@ namespace rx::detail
     using p1306_searcher = p1306dfa<Pattern, adapt_searcher_flags_to_matcher(Flags)>::searcher;
 }
 
-namespace rx
+namespace srx
 {
     enum class mode : unsigned char
     {
@@ -13399,14 +13399,14 @@ namespace rx
     namespace literals
     {
         template<string_literal Pattern>
-        consteval static_regex<Pattern> operator ""_rx()
+        consteval static_regex<Pattern> operator ""_srx()
         {
             return {};
         }
     }
 }
 
-namespace rx
+namespace srx
 {
     namespace detail
     {
@@ -13867,7 +13867,7 @@ namespace rx
     inline constexpr detail::replace_impl regex_replace;
 }
 
-namespace rx
+namespace srx
 {
     template<std::ranges::bidirectional_range V, typename Regex>
         requires std::ranges::view<V>
@@ -14857,7 +14857,7 @@ namespace rx
                 }
 
                 template<typename Regex>
-                    requires rx::detail::static_regex_like<Regex>
+                    requires srx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
                     return static_regex_match_adaptor_closure<Regex>();
@@ -14959,10 +14959,10 @@ namespace rx
                 }
 
                 template<std::ranges::viewable_range Range, typename CharT>
-                    requires detail::can_replace_view<Range, std::ranges::subrange<const CharT*, rx::detail::cstr_sentinel_t>>
+                    requires detail::can_replace_view<Range, std::ranges::subrange<const CharT*, srx::detail::cstr_sentinel_t>>
                 [[nodiscard]] constexpr auto operator()(Range&& r, const CharT* fmtstr) const
                 {
-                    return replace_view(std::forward<Range>(r), std::ranges::subrange(fmtstr, rx::detail::cstr_sentinel));
+                    return replace_view(std::forward<Range>(r), std::ranges::subrange(fmtstr, srx::detail::cstr_sentinel));
                 }
 
                 template<typename Fmt>
@@ -14974,10 +14974,10 @@ namespace rx
                 template<typename CharT>
                 [[nodiscard]] constexpr auto operator()(const CharT* fmtstr) const
                 {
-                    return dynamic_replace_adaptor_closure{ std::ranges::subrange(fmtstr, rx::detail::cstr_sentinel) };
+                    return dynamic_replace_adaptor_closure{ std::ranges::subrange(fmtstr, srx::detail::cstr_sentinel) };
                 }
 
-                template<rx::string_literal Fmt>
+                template<srx::string_literal Fmt>
                 [[nodiscard]] consteval auto operator()(fmt_t<Fmt>) const
                 {
                     return static_replace_adaptor_closure<Fmt>();
@@ -15005,7 +15005,7 @@ namespace rx
                 }
 
                 template<typename Regex>
-                    requires rx::detail::static_regex_like<Regex>
+                    requires srx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
                     return static_regex_split_adaptor_closure<Regex>();

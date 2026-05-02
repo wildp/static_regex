@@ -10,11 +10,11 @@
 
 #include <ranges>
 
-#include "rx/api/regex_error.hpp"
-#include "rx/ast/capstack.hpp"
+#include "srx/api/regex_error.hpp"
+#include "srx/ast/capstack.hpp"
 
 
-namespace rx::detail::parser
+namespace srx::detail::parser
 {
     template<typename CharT>
     class ll1
@@ -1236,7 +1236,7 @@ namespace rx::detail::parser
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     /* constructor for tree */
 

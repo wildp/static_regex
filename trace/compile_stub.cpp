@@ -1,4 +1,4 @@
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 
 #ifndef REGEX_PATTERN
 #error "REGEX_PATTERN is not defined"
@@ -10,6 +10,6 @@
 
 auto FUNCTION_NAME(std::string_view sv)
 {
-    return rx::detail::p1306_matcher<REGEX_PATTERN, rx::detail::default_fsm_flags::search_all>::operator()(sv.begin(), sv.end(), 0);
+    return srx::detail::p1306_matcher<REGEX_PATTERN, srx::detail::default_fsm_flags::search_all>::operator()(sv.begin(), sv.end(), 0);
 }
 

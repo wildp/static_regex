@@ -9,39 +9,39 @@
 
 namespace
 {
-    constexpr rx::detail::parser_flags tree_test_flags{ .enable_alttocc = false };
+    constexpr srx::detail::parser_flags tree_test_flags{ .enable_alttocc = false };
 
     template<typename CharT>
     consteval bool parse(const CharT* str)
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ str, tree_test_flags };
-        return (rx::testing::to_basic_string(ast) == str);
+        return (srx::testing::to_basic_string(ast) == str);
     }
 
     template<typename CharT>
     consteval bool parse(const CharT* str, const CharT* result)
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ str, tree_test_flags };
-        return (rx::testing::to_basic_string(ast) == result);
+        return (srx::testing::to_basic_string(ast) == result);
     }
 
     template<typename CharT>
     consteval bool alt_to_cc(const CharT* str, const CharT* result)
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ str };
-        return (rx::testing::to_basic_string(ast) == result);
+        return (srx::testing::to_basic_string(ast) == result);
     }
 
     template<typename CharT>
     consteval bool equal_to(const CharT* str1, const CharT* str2)
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast1{ str1, tree_test_flags };
         const expr_tree ast2{ str2, tree_test_flags };
-        return (rx::testing::to_basic_string(ast1) == rx::testing::to_basic_string(ast2));
+        return (srx::testing::to_basic_string(ast1) == srx::testing::to_basic_string(ast2));
     }
 
     template<typename CharT>
@@ -49,11 +49,11 @@ namespace
     {
         try
         {
-            using namespace rx::detail;
+            using namespace srx::detail;
             const expr_tree ast{ str, tree_test_flags };
             return false;
         }
-        catch (const rx::pattern_error&)
+        catch (const srx::pattern_error&)
         {
             return true;
         }
@@ -62,7 +62,7 @@ namespace
     template<typename CharT>
     consteval bool test(const CharT* str)
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ str };
         return true;
     }
@@ -70,7 +70,7 @@ namespace
     template<typename CharT>
     consteval bool empty_match_possible(const CharT* str)
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ str };
         return ast.empty_match_possible();
     }

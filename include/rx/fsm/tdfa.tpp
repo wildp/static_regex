@@ -16,12 +16,12 @@
 #include <ranges>
 #include <utility>
 
-#include "rx/etc/util.hpp"
-#include "rx/api/regex_error.hpp"
-#include "rx/etc/vec_bool_adaptor.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/api/regex_error.hpp"
+#include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace rx::detail::tdfa
+namespace srx::detail::tdfa
 {
     constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
 
@@ -1815,7 +1815,7 @@ namespace rx::detail::tdfa
     }
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     /* tdfa constructor and member functions */
 

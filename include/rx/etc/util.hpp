@@ -14,7 +14,7 @@
 #include <variant>
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<class... Ts>
     struct overloads : Ts... { using Ts::operator()...; };

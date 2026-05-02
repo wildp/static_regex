@@ -1,5 +1,5 @@
 #include <benchmark/benchmark.h>
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 
 
 static const char8_t data[] = {
@@ -52,27 +52,27 @@ static void BM_string_view(benchmark::State& state, auto m)
     }
 }
 
-using namespace rx::literals;
+using namespace srx::literals;
 
 #define TEST(PATTERN)                                \
 BENCHMARK_CAPTURE(BM_cstring_opt, PATTERN, PATTERN); \
 BENCHMARK_CAPTURE(BM_cstring_std, PATTERN, PATTERN); \
 BENCHMARK_CAPTURE(BM_string_view, PATTERN, PATTERN);
 
-TEST(R"(Twain)"_rx);
-TEST(R"((?i)Twain)"_rx);
-TEST(R"([a-z]shing)"_rx);
-TEST(R"(Huck[a-zA-Z]+|Saw[a-zA-Z]+)"_rx);
-TEST(R"(\b\w+nn\b)"_rx);
-TEST(R"([a-q][^u-z]{13}x)"_rx);
-TEST(R"(Tom|Sawyer|Huckleberry|Finn)"_rx);
-TEST(R"((?i)(?:Tom|Sawyer|Huckleberry|Finn))"_rx);
-TEST(R"(.{0,2}(?:Tom|Sawyer|Huckleberry|Finn))"_rx);
-TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))"_rx);
-TEST(R"(Tom.{10,25}river|river.{10,25}Tom)"_rx);
-TEST(R"([a-zA-Z]+ing)"_rx);
-TEST(R"(\s[a-zA-Z]{0,12}ing\s)"_rx);
+TEST(R"(Twain)"_srx);
+TEST(R"((?i)Twain)"_srx);
+TEST(R"([a-z]shing)"_srx);
+TEST(R"(Huck[a-zA-Z]+|Saw[a-zA-Z]+)"_srx);
+TEST(R"(\b\w+nn\b)"_srx);
+TEST(R"([a-q][^u-z]{13}x)"_srx);
+TEST(R"(Tom|Sawyer|Huckleberry|Finn)"_srx);
+TEST(R"((?i)(?:Tom|Sawyer|Huckleberry|Finn))"_srx);
+TEST(R"(.{0,2}(?:Tom|Sawyer|Huckleberry|Finn))"_srx);
+TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))"_srx);
+TEST(R"(Tom.{10,25}river|river.{10,25}Tom)"_srx);
+TEST(R"([a-zA-Z]+ing)"_srx);
+TEST(R"(\s[a-zA-Z]{0,12}ing\s)"_srx);
 TEST(R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)");
-TEST(R"(["'][^"']{0,30}[?!\.][\"'])"_rx);
+TEST(R"(["'][^"']{0,30}[?!\.][\"'])"_srx);
 
 BENCHMARK_MAIN();

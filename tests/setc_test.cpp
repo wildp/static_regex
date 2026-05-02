@@ -4,14 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include <rx/etc/charset.hpp>
+#include <srx/etc/charset.hpp>
 
 
 namespace
 {
     consteval auto make_cs(std::string_view sv)
     {
-        rx::detail::charset<char> result;
+        srx::detail::charset<char> result;
         for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
             result.insert(sv[i], sv[i + 1]);
         return result;
@@ -19,7 +19,7 @@ namespace
 
     consteval auto make_inverted_cs(std::string_view sv)
     {
-        rx::detail::charset<char> result;
+        srx::detail::charset<char> result;
         char tmp{ std::numeric_limits<char>::min() };
         for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
         {
@@ -32,7 +32,7 @@ namespace
 
     consteval auto make_cs_vec(const std::vector<const char*>& vec)
     {
-        std::vector<rx::detail::charset<char>> result;
+        std::vector<srx::detail::charset<char>> result;
         result.reserve(vec.size());
         for (const char* cstr : vec)
             result.emplace_back(make_cs(cstr));
@@ -84,7 +84,7 @@ namespace
     {
         const auto input = make_cs_vec(arg);
         const auto refs = input | std::views::transform([](const auto& b) { return std::cref(b); }) | std::ranges::to<std::vector>();
-        return rx::detail::charset<char>::partition(refs) == make_cs_vec(result);
+        return srx::detail::charset<char>::partition(refs) == make_cs_vec(result);
     }
 }
 

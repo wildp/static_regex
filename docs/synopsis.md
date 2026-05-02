@@ -1,9 +1,9 @@
 # API reference
 
-Header `<rx/regex.hpp>` synopsis:
+Header `<srx/regex.hpp>` synopsis:
 
 ```cpp
-namespace rx {
+namespace srx {
   enum class mode {
     standard,
     linear,
@@ -82,15 +82,15 @@ namespace rx {
   using regex_replace_result = std::ranges::in_out_result<I, O>;
 
   constexpr auto regex_replace(/* 10 overloads */);
-} // namespace rx
+} // namespace srx
 ```
 
-## Enum class `rx::mode`
+## Enum class `srx::mode`
 
 `mode` enumerates the possible regular expression matching implementations that `static_regex` can use.
 
 ```cpp
-namespace rx {
+namespace srx {
   enum class mode {
     standard,
     linear,
@@ -114,28 +114,28 @@ Unlike the finite automaton implementations, backreferences, possessive matching
 This mode should be avoided unless the additional features or improved compilation times are needed.
 
 
-## Class template `rx::string_literal`
+## Class template `srx::string_literal`
 
 `string_literal` exists as a minimal placeholder for the proposed [`std::basic_fixed_string`](wg21.link/p3094), and allows for strings to be passed as template parameters.
 
 ``` cpp
-namespace rx {
+namespace srx {
   template<typename CharT, std::size_t N>
   struct string_literal {
     using value_type = CharT;
     consteval string_literal(const value_type (&str)[N]);
     constexpr std::basic_string_view<value_type> view() const;
   };
-} // namespace rx
+} // namespace srx
 ```
 
 
-## Class template `rx::static_regex`
+## Class template `srx::static_regex`
 
 `static_regex` represents a compile-time regular expression pattern.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<string_literal Pattern, mode Mode = mode::standard>
   struct static_regex {
     using char_type = decltype(Pattern)::value_type;
@@ -167,7 +167,7 @@ namespace rx {
     template<typename R>             static constexpr auto range(R&& r);
     template<typename CharT>         static constexpr auto range(const CharT* cstr);
   };
-} // namespace rx
+} // namespace srx
 ```
 
 `static_regex` has no data members, and the code for matching `Pattern` is only generated when the relevant member function template is instantiated.
@@ -199,18 +199,18 @@ The template parameter requirements for `range` are the same as for `match`, `pr
 Additionally, the following helper is defined for convenience:
 
 ```cpp
-namespace rx {
+namespace srx {
   namespace literals {
     template<string_literal Pattern>
     consteval static_regex<Pattern> operator ""_rx();
   } // namespace literals
-} // namespace rx;
+} // namespace srx;
 ```
 
 The following free functions (implemented as algorithm function objects) provide an alternative API for matching:
 
 ```cpp
-namespace rx {
+namespace srx {
   template<string_literal Pattern, mode Mode = mode::standard>
   constexpr auto static_regex_match(/* args */);
 
@@ -222,18 +222,18 @@ namespace rx {
 
   template<string_literal Pattern, mode Mode = mode::standard>
   constexpr auto static_regex_search_all(/* args */);
-} // namespace rx;
+} // namespace srx;
 ```
 
 Each invocation of `static_regex_foo<Pattern, Mode>()` is equivalent to calling `static_regex<Pattern, Mode>.foo()` with the same arguments, except for `search_all` which instead calls `range()`.
 
 
-## Class template `rx::static_regex_match_result`
+## Class template `srx::static_regex_match_result`
 
 `static_regex_match_result` stores the results of a single compile-time regular expression match.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<std::bidirectional_iterator I, /* implementation details */>
   class static_regex_match_result {
   public:
@@ -271,14 +271,14 @@ namespace rx {
     /* tuple support */
     template<size_type N> requires (N < submatch_count) constexpr submatch_type get() const noexcept;
   };
-} // namespace rx
+} // namespace srx
 
 /* structured binding support for static_regex_match_result */
 template<std::bidirectional_iterator I, /* ... */>
-struct std::tuple_size<rx::static_regex_match_result<I, /* ... */>>;
+struct std::tuple_size<srx::static_regex_match_result<I, /* ... */>>;
 
 template<std::size_t N, std::bidirectional_iterator I, /* ... */>
-struct std::tuple_element<N, rx::static_regex_match_result<I, /* ... */>>;
+struct std::tuple_element<N, srx::static_regex_match_result<I, /* ... */>>;
 ```
 
 The submatch with index `0` denotes the entire match, while any submatches after that correspond to the capturing groups in the matched regex pattern.
@@ -290,12 +290,12 @@ Whenever an individual capturing group is not matched, a default-constructed sub
 As such, `iterator` satisfies `std::random_access_iterator` but due to being a proxy iterator only meets the requirements for *Cpp17InputIterator*.
 
 
-## Class template `rx::submatch`
+## Class template `srx::submatch`
 
 `submatch` identifies a single regular expression submatch.
 
 ``` cpp
-namespace rx {
+namespace srx {
   template<std::bidirectional_iterator I>
   class submatch {
   public:
@@ -355,22 +355,22 @@ namespace rx {
     /* misc */
     void swap(submatch& other) noexcept(std::is_nothrow_swappable_v<I>);
   };
-} // namespace rx
+} // namespace srx
 
 /* structured binding support for submatch */
 template<std::bidirectional_iterator I>
-struct std::tuple_size<rx::submatch<I>>;
+struct std::tuple_size<srx::submatch<I>>;
 
 template<std::size_t N, std::bidirectional_iterator I> requires (N < 2)
-struct std::tuple_element<N, rx::submatch<I>>;
+struct std::tuple_element<N, srx::submatch<I>>;
 
 /* formatting support for submatch */
 template<std::bidirectional_iterator I>
-inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
+inline constexpr auto std::format_kind<srx::submatch<I>> = std::range_format::string;
 
 /* range correctness for submatch */
 template<std::bidirectional_iterator I>
-constexpr bool std::ranges::disable_sized_range<rx::submatch<I>> = not std::sized_sentinel_for<I, I>;
+constexpr bool std::ranges::disable_sized_range<srx::submatch<I>> = not std::sized_sentinel_for<I, I>;
 ```
 
 A `submatch` can be seen as an iterator pair that denotes a matched subrange of the input, combined with an additional bool to track whether the object contains a match, which can be checked through `matched()` or `operator bool()`.
@@ -378,17 +378,17 @@ When a `submatch` is default-constructed, `matched() == false`.
 It should be noted that `submatch` objects can be empty (i.e. `begin() == end()`) while still containing a match; `empty()` should be used to check for the presence of empty or non-match-containing objects.
 
 
-## Class template `rx::regex_match_view`
+## Class template `srx::regex_match_view`
 
 `regex_match_view` provides a way to iterate over every regular expression match in an input string.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
   class regex_match_view {};
 
-  /* rx::static_regex support */
+  /* srx::static_regex support */
   template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
     requires std::ranges::view<V>
   class regex_match_view<V, static_regex<Pattern, Mode>>
@@ -416,7 +416,7 @@ namespace rx {
     template<string_literal Pattern, mode Mode = mode::standard>
     inline constexpr /* range-adaptor */ static_regex_match;
   }
-} // namespace rx
+} // namespace srx
 ```
 
 `regex_match_view` is always an input range.
@@ -424,12 +424,12 @@ Its range value is an instantiation of `static_regex_match_result`.
 
 `views::static_regex_match<Pattern>` is equivalent to `views::regex_match(static_regex<Pattern>{})`.
 
-## Class template `rx::submatches_view`
+## Class template `srx::submatches_view`
 
 `submatches_view` adapts a `regex_match_view` to flatten and iterate over the specified `submatch` objects from each regex match result object of the `regex_match_view`.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<std::ranges::input_range V, int... Submatches>
     requires std::ranges::view<V>
   class submatches_view {};
@@ -472,7 +472,7 @@ namespace rx {
       requires (sizeof...(Submatches) > 0)
     inline constexpr /* range-adaptor */ static_submatches;
   }
-} // namespace rx
+} // namespace srx
 ```
 
 A list of submatch indicies can be supplied to `submatches_view` either at compile time or at run time.
@@ -488,12 +488,12 @@ It should be noted that `submatches_view::iterator` is a proxy iterator.
 `views::static_submatches<Ints...>` is equivalent to `views::submatches(std::integer_sequence<int, Ints...>)`.
 
 
-## Class template `rx::regex_replace_view`
+## Class template `srx::regex_replace_view`
 
 `regex_replace_view` adapts a `regex_match_view` to lazily produce a range where matched substrings are substituted for a replacement string.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<std::ranges::input_range V, typename Fmt>
     requires std::ranges::view<V>
   class replace_view {};
@@ -545,22 +545,22 @@ namespace rx {
     template<string_literal Fmt>
     inline constexpr /* range-adaptor */ static_replace;
   }
-} // namespace rx
+} // namespace srx
 ```
 
 `replace_view` is always an input range.
 It produces a range over the original input to the adapted `regex_match_view` in which all matches are substituted with the contents of a replacement string.
 This replacement string is supplied in the form of either a bidirectional range, a c-style string, or a compile-time replacement string.
-*(See documentation for `rx::regex_replace` for more details)*.
+*(See documentation for `srx::regex_replace` for more details)*.
 
 `views::static_replace<Fmt>` is equivalent to `views::replace(fmt<Fmt>)`.
 
-## Class template `rx::regex_split_view`
+## Class template `srx::regex_split_view`
 
 `regex_split_view` splits an input string using a regular expression.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
   class regex_split_view {};
@@ -594,7 +594,7 @@ namespace rx {
     template<string_literal Pattern, mode Mode = mode::standard>
     inline constexpr /* range-adaptor */ static_regex_split;
   }
-} // namespace rx
+} // namespace srx
 ```
 
 `r | views::regex_split(pattern)` produces the same result as `r | views::regex_match(pattern) | views::static_submatches<-1>`.
@@ -606,12 +606,12 @@ The iterator for `submatches_view` is a proxy iterator.
 `views::static_regex_split<Pattern>` is equivalent to `views::regex_split(static_regex<Pattern>{})`.
 
 
-## Algorithm function object `rx::regex_replace`
+## Algorithm function object `srx::regex_replace`
 
 `regex_replace` substitutes regular expression matches in a input for a replacement string.
 
 ```cpp
-namespace rx {
+namespace srx {
   template<string_literal Fmt> struct fmt_t;
   template<string_literal Fmt> inline constexpr fmt_t<Fmt> fmt;
 
@@ -661,7 +661,7 @@ namespace rx {
   template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
   constexpr auto regex_replace(const CharT* cstr, Regex pattern, fmt_t<Fmt>)
     -> std::basic_string<CharT>;
-} // namespace rx
+} // namespace srx
 ```
 
 `regex_replace` is an algorithm function object.

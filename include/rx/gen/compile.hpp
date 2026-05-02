@@ -11,17 +11,17 @@
 #include <utility>
 #include <vector>
 
-#include "rx/api/regex_error.hpp"
-#include "rx/ast/tree.hpp"
-#include "rx/etc/static_charset.hpp"
-#include "rx/etc/static_span.hpp"
-#include "rx/etc/string_literal.hpp"
-#include "rx/fsm/flags.hpp"
-#include "rx/fsm/tdfa.hpp"
-#include "rx/fsm/tnfa.hpp"
+#include "srx/api/regex_error.hpp"
+#include "srx/ast/tree.hpp"
+#include "srx/etc/static_charset.hpp"
+#include "srx/etc/static_span.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/fsm/flags.hpp"
+#include "srx/fsm/tdfa.hpp"
+#include "srx/fsm/tnfa.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     struct final_capture_info
     {

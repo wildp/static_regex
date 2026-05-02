@@ -10,12 +10,12 @@
 #include <type_traits>
 #include <vector>
 
-#include "rx/etc/bitcharset.hpp"
-#include "rx/etc/charset.hpp"
-#include "rx/etc/static_charset.hpp"
+#include "srx/etc/bitcharset.hpp"
+#include "srx/etc/charset.hpp"
+#include "srx/etc/static_charset.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     enum class named_character_class : unsigned char
     {

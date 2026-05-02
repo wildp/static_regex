@@ -12,13 +12,13 @@
 #include <variant>
 #include <vector>
 
-#include "rx/ast/tree.hpp"
-#include "rx/etc/bitcharset.hpp"
-#include "rx/etc/charset.hpp"
-#include "rx/fsm/flags.hpp"
+#include "srx/ast/tree.hpp"
+#include "srx/etc/bitcharset.hpp"
+#include "srx/etc/charset.hpp"
+#include "srx/fsm/flags.hpp"
 
 
-namespace rx::detail::tnfa
+namespace srx::detail::tnfa
 {
     using state_t = std::size_t;
     using tr_index = std::size_t;
@@ -156,7 +156,7 @@ namespace rx::detail::tnfa
 }
 
 
-namespace rx::detail
+namespace srx::detail
 {
     /* tnfa class */
 

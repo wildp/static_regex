@@ -14,13 +14,13 @@
 #include <string_view>
 #include <type_traits>
 
-#include "rx/api/static_regex.hpp"
-#include "rx/etc/string_literal.hpp"
-#include "rx/etc/util.hpp"
-#include "rx/gen/result.hpp"
+#include "srx/api/static_regex.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/gen/result.hpp"
 
 
-namespace rx
+namespace srx
 {
     namespace detail
     {

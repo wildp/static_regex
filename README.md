@@ -27,4 +27,4 @@ On GCC use `-fconstexpr-ops-limit=4294967296`, and on Clang use `-fconstexpr-ste
 ### Optional Libraries
 
 This library can optionally use [Boost.DynamicBitset](https://www.boost.org/library/latest/dynamic_bitset/) for improved compile times.
-Define `RX_USE_BOOST_DYNAMIC_BITSET` before including `<rx/regex.hpp>` to use this.
+Define `SRX_USE_BOOST_DYNAMIC_BITSET` before including `<srx/regex.hpp>` to use this.

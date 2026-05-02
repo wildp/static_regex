@@ -15,15 +15,15 @@
 #include <type_traits>
 #include <utility>
 
-#include "rx/api/submatch.hpp"
-#include "rx/api/static_regex.hpp"
-#include "rx/api/replace.hpp"
-#include "rx/etc/string_literal.hpp"
-#include "rx/etc/util.hpp"
-#include "rx/fsm/flags.hpp"
+#include "srx/api/submatch.hpp"
+#include "srx/api/static_regex.hpp"
+#include "srx/api/replace.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/fsm/flags.hpp"
 
 
-namespace rx
+namespace srx
 {
     template<std::ranges::bidirectional_range V, typename Regex>
         requires std::ranges::view<V>
@@ -1023,7 +1023,7 @@ namespace rx
                 }
 
                 template<typename Regex>
-                    requires rx::detail::static_regex_like<Regex>
+                    requires srx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
                     return static_regex_match_adaptor_closure<Regex>();
@@ -1125,10 +1125,10 @@ namespace rx
                 }
 
                 template<std::ranges::viewable_range Range, typename CharT>
-                    requires detail::can_replace_view<Range, std::ranges::subrange<const CharT*, rx::detail::cstr_sentinel_t>>
+                    requires detail::can_replace_view<Range, std::ranges::subrange<const CharT*, srx::detail::cstr_sentinel_t>>
                 [[nodiscard]] constexpr auto operator()(Range&& r, const CharT* fmtstr) const
                 {
-                    return replace_view(std::forward<Range>(r), std::ranges::subrange(fmtstr, rx::detail::cstr_sentinel));
+                    return replace_view(std::forward<Range>(r), std::ranges::subrange(fmtstr, srx::detail::cstr_sentinel));
                 }
 
                 template<typename Fmt>
@@ -1140,10 +1140,10 @@ namespace rx
                 template<typename CharT>
                 [[nodiscard]] constexpr auto operator()(const CharT* fmtstr) const
                 {
-                    return dynamic_replace_adaptor_closure{ std::ranges::subrange(fmtstr, rx::detail::cstr_sentinel) };
+                    return dynamic_replace_adaptor_closure{ std::ranges::subrange(fmtstr, srx::detail::cstr_sentinel) };
                 }
 
-                template<rx::string_literal Fmt>
+                template<srx::string_literal Fmt>
                 [[nodiscard]] consteval auto operator()(fmt_t<Fmt>) const
                 {
                     return static_replace_adaptor_closure<Fmt>();
@@ -1171,7 +1171,7 @@ namespace rx
                 }
 
                 template<typename Regex>
-                    requires rx::detail::static_regex_like<Regex>
+                    requires srx::detail::static_regex_like<Regex>
                 [[nodiscard]] consteval auto operator()(Regex /* x */) const
                 {
                     return static_regex_split_adaptor_closure<Regex>();

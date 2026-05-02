@@ -12,16 +12,16 @@
 #include <numeric>
 #include <utility>
 
-#include "rx/ast/tree.hpp"
-#include "rx/etc/captures.hpp"
-#include "rx/etc/string_literal.hpp"
-#include "rx/etc/static_span.hpp"
-#include "rx/etc/util.hpp"
-#include "rx/gen/compile.hpp"
-#include "rx/gen/result.hpp"
+#include "srx/ast/tree.hpp"
+#include "srx/etc/captures.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/etc/static_span.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/gen/compile.hpp"
+#include "srx/gen/result.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     struct tree_info

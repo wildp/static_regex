@@ -12,13 +12,13 @@
 #include <string_view>
 #include <vector>
 
-#include <rx/api/regex_error.hpp>
-#include <rx/ast/tree.hpp>
-#include <rx/etc/cdarray.hpp>
-#include <rx/fsm/tnfa.hpp>
+#include <srx/api/regex_error.hpp>
+#include <srx/ast/tree.hpp>
+#include <srx/etc/cdarray.hpp>
+#include <srx/fsm/tnfa.hpp>
 
 
-namespace rx::testing
+namespace srx::testing
 {
     template<typename CharT>
     class tnfa_matcher : public detail::tagged_nfa<CharT>
@@ -54,8 +54,8 @@ namespace rx::testing
             };
         };
 
-        using namespace rx::detail;
-        using namespace rx::detail::tnfa;
+        using namespace srx::detail;
+        using namespace srx::detail::tnfa;
 
         closure_t new_closure;
         closure_t stack{ std::move(closure) };
@@ -103,8 +103,8 @@ namespace rx::testing
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::step(const closure_t& closure, const CharT a) const -> closure_t
     {
-        using namespace rx::detail;
-        using namespace rx::detail::tnfa;
+        using namespace srx::detail;
+        using namespace srx::detail::tnfa;
 
         closure_t new_closure;
 
@@ -133,7 +133,7 @@ namespace rx::testing
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::match(std::basic_string_view<CharT> input) const -> std::optional<tag_result>
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
 
         tag_vector m0(this->tag_count(), no_tag);
         closure_t c{ { this->start_node(), std::move(m0) } };
@@ -161,7 +161,7 @@ namespace rx::testing
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::make_submatch_results(const tag_vector& v, std::size_t size) const -> tag_result
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
 
         std::vector<std::size_t> result;
         const capture_info& ci{ this->get_capture_info() };

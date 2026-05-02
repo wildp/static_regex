@@ -14,19 +14,19 @@
 #include <type_traits>
 #include <utility>
 
-#include "rx/api/submatch.hpp"
-#include "rx/etc/string_literal.hpp"
-#include "rx/etc/util.hpp"
-#include "rx/fsm/flags.hpp"
-#include "rx/gen/compile.hpp"
+#include "srx/api/submatch.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/fsm/flags.hpp"
+#include "srx/gen/compile.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<string_literal Pattern, fsm_flags Flags>
     struct p1306dfa;
 
-    template<rx::string_literal Pattern>
+    template<srx::string_literal Pattern>
     struct naive_matcher;
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, typename Regex>
@@ -36,9 +36,9 @@ namespace rx::detail
     class replace_fmt;
 }
 
-namespace rx
+namespace srx
 {
-    template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
+    template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
     class static_regex_match_result
     {
         using factory = detail::submatch_factory<I>;
@@ -156,10 +156,10 @@ namespace rx
             return {};
         }
 
-        template<rx::string_literal Pattern, rx::detail::fsm_flags Flags>
+        template<srx::string_literal Pattern, srx::detail::fsm_flags Flags>
         friend struct detail::p1306dfa;
 
-        template<rx::string_literal Pattern>
+        template<srx::string_literal Pattern>
         friend struct detail::naive_matcher;
 
         template<std::ranges::bidirectional_range V, typename Regex>
@@ -279,7 +279,7 @@ namespace rx
 
     /* iterator implementation */
 
-    template<std::bidirectional_iterator I, rx::detail::static_match_result_info Captures>
+    template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
     template<bool Const>
     class static_regex_match_result<I, Captures>::proxy_iterator
     {
@@ -384,13 +384,13 @@ namespace rx
 
 /* structured binding support for static_regex_match_result */
 
-template<std::bidirectional_iterator Iter, rx::detail::static_match_result_info Captures>
-struct std::tuple_size<rx::static_regex_match_result<Iter, Captures>>
-    : integral_constant<std::size_t, rx::static_regex_match_result<Iter, Captures>::submatch_count> {};
+template<std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
+struct std::tuple_size<srx::static_regex_match_result<Iter, Captures>>
+    : integral_constant<std::size_t, srx::static_regex_match_result<Iter, Captures>::submatch_count> {};
 
-template<std::size_t N, std::bidirectional_iterator Iter, rx::detail::static_match_result_info Captures>
-    requires (N < rx::static_regex_match_result<Iter, Captures>::submatch_count)
-struct std::tuple_element<N, rx::static_regex_match_result<Iter, Captures>>
+template<std::size_t N, std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
+    requires (N < srx::static_regex_match_result<Iter, Captures>::submatch_count)
+struct std::tuple_element<N, srx::static_regex_match_result<Iter, Captures>>
 {
-    using type = rx::static_regex_match_result<Iter, Captures>::submatch_type;
+    using type = srx::static_regex_match_result<Iter, Captures>::submatch_type;
 };

@@ -13,14 +13,14 @@
 #include <string>
 #include <vector>
 
-#include <rx/ast/tree.hpp>
-#include <rx/etc/util.hpp>
+#include <srx/ast/tree.hpp>
+#include <srx/etc/util.hpp>
 
 
 // TODO: replace with constexpr std::format specialization
 // TODO: add unicode transcoding support
 
-namespace rx::testing
+namespace srx::testing
 {
     template<typename CharT>
     [[nodiscard]] constexpr std::basic_string<CharT> to_basic_string(const detail::expr_tree<CharT>& ast)

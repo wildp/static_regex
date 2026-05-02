@@ -13,12 +13,12 @@
 #include <variant>
 #include <vector>
 
-#include "rx/etc/captures.hpp"
-#include "rx/fsm/flags.hpp"
-#include "rx/fsm/tnfa.hpp"
+#include "srx/etc/captures.hpp"
+#include "srx/fsm/flags.hpp"
+#include "srx/fsm/tnfa.hpp"
 
 
-namespace rx::detail::tdfa
+namespace srx::detail::tdfa
 {
     template<typename CharT>
     using charset_t = tnfa::charset_t<CharT>;
@@ -120,7 +120,7 @@ namespace rx::detail::tdfa
     };
 }
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     class tagged_dfa

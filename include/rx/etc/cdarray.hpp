@@ -14,7 +14,7 @@
 #include <type_traits>
 
 
-namespace rx::detail
+namespace srx::detail
 {
     /* WARNING: cdarray is NOT thread-safe */
     template<typename T, typename Allocator = std::allocator<T>>

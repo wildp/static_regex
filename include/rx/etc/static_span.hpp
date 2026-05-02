@@ -18,7 +18,7 @@
 #include <type_traits>
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename T>
     class static_span

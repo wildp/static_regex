@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 
 #include <deque>
 #include <list>
@@ -20,71 +20,71 @@ namespace
     template<int... Is>
     using ints = std::integer_sequence<int, Is...>;
 
-    template<rx::string_literal Pattern, std::ranges::bidirectional_range T>
+    template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
     constexpr int match_count(T input)
     {
         int count{ 0 };
-        for (const auto& _ : input | rx::views::regex_match(rx::static_regex<Pattern>{}))
+        for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}))
             ++count;
         return count;
     }
 
-    template<rx::string_literal Pattern, typename CharT>
+    template<srx::string_literal Pattern, typename CharT>
     constexpr int match_count(const CharT* input)
     {
-        return match_count<Pattern>(std::ranges::subrange(input, rx::detail::cstr_sentinel));
+        return match_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
     }
 
-    template<rx::string_literal Pattern, typename Ints, std::ranges::bidirectional_range T>
+    template<srx::string_literal Pattern, typename Ints, std::ranges::bidirectional_range T>
     constexpr int submatch_count(T input)
     {
         int count{ 0 };
-        for (const auto& _ : input | rx::views::regex_match(rx::static_regex<Pattern>{}) | rx::views::submatches(Ints{}))
+        for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}) | srx::views::submatches(Ints{}))
             ++count;
         return count;
     }
 
-    template<rx::string_literal Pattern, std::ranges::bidirectional_range T>
+    template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
     constexpr int submatch_count(T input, const std::vector<int>& vec)
     {
         int count{ 0 };
-        for (const auto& _ : input | rx::views::regex_match(rx::static_regex<Pattern>{}) | rx::views::submatches(vec))
+        for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}) | srx::views::submatches(vec))
             ++count;
         return count;
     }
 
-    template<rx::string_literal Pattern, typename Ints, typename CharT>
+    template<srx::string_literal Pattern, typename Ints, typename CharT>
     constexpr int submatch_count(const CharT* input)
     {
-        return submatch_count<Pattern, Ints>(std::ranges::subrange(input, rx::detail::cstr_sentinel));
+        return submatch_count<Pattern, Ints>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
     }
 
-    template<rx::string_literal Pattern, typename CharT>
+    template<srx::string_literal Pattern, typename CharT>
     constexpr int submatch_count(const CharT* input, const std::vector<int>& vec)
     {
-        return submatch_count<Pattern>(std::ranges::subrange(input, rx::detail::cstr_sentinel), vec);
+        return submatch_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel), vec);
     }
 
-    template<rx::string_literal Pattern, std::ranges::bidirectional_range T>
+    template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
     constexpr int split_count(T input)
     {
         int count{ 0 };
-        for (const auto& _ : input | rx::views::regex_split(rx::static_regex<Pattern>{}))
+        for (const auto& _ : input | srx::views::regex_split(srx::static_regex<Pattern>{}))
             ++count;
         return count;
     }
 
-    template<rx::string_literal Pattern, typename CharT>
+    template<srx::string_literal Pattern, typename CharT>
     constexpr int split_count(const CharT* input)
     {
-        return split_count<Pattern>(std::ranges::subrange(input, rx::detail::cstr_sentinel));
+        return split_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
     }
 
     template<std::size_t I, std::ranges::bidirectional_range R>
     constexpr bool test(R&& r)
     {
-        using namespace rx::literals;
-        auto matcher = "(Hello)|(World)"_rx;
+        using namespace srx::literals;
+        auto matcher = "(Hello)|(World)"_srx;
         auto result = matcher.match(std::forward<R>(r));
         return result and get<0>(result) == get<I>(result);
     }
@@ -92,8 +92,8 @@ namespace
     template<std::size_t I, std::ranges::bidirectional_range R>
     constexpr bool owning_test(R r)
     {
-        using namespace rx::literals;
-        auto matcher = "(Hello)|(World)"_rx;
+        using namespace srx::literals;
+        auto matcher = "(Hello)|(World)"_srx;
         auto result = matcher.match(r);
         return result and get<0>(result) == get<I>(result);
     }
@@ -101,18 +101,18 @@ namespace
 
 
 using namespace std::literals;
-using namespace rx::literals;
+using namespace srx::literals;
 
 /* iterator category tests */
-static_assert(std::random_access_iterator<rx::detail::p1306_matcher<"", rx::detail::default_fsm_flags::search_all>::template result<const char*>::iterator>);
+static_assert(std::random_access_iterator<srx::detail::p1306_matcher<"", srx::detail::default_fsm_flags::search_all>::template result<const char*>::iterator>);
 
 /* range category tests */
-using range_category_test_1 = decltype(std::declval<std::string>() | rx::views::regex_match(""_rx));
-using range_category_test_2 = decltype(std::ranges::subrange(std::declval<const char*>(), rx::detail::cstr_sentinel) | rx::views::regex_match(""_rx));
-using range_category_test_3 = decltype(std::declval<range_category_test_1>() | rx::views::submatches(std::integer_sequence<int, 0, -1>{}));
-using range_category_test_4 = decltype(std::declval<range_category_test_2>() | rx::views::submatches(std::integer_sequence<int, 0, -1>{}));
-using range_category_test_5 = decltype(std::declval<range_category_test_1>() | rx::views::submatches(std::vector{ 0, -1 }));
-using range_category_test_6 = decltype(std::declval<range_category_test_2>() | rx::views::submatches(std::vector{ 0, -1 }));
+using range_category_test_1 = decltype(std::declval<std::string>() | srx::views::regex_match(""_srx));
+using range_category_test_2 = decltype(std::ranges::subrange(std::declval<const char*>(), srx::detail::cstr_sentinel) | srx::views::regex_match(""_srx));
+using range_category_test_3 = decltype(std::declval<range_category_test_1>() | srx::views::submatches(std::integer_sequence<int, 0, -1>{}));
+using range_category_test_4 = decltype(std::declval<range_category_test_2>() | srx::views::submatches(std::integer_sequence<int, 0, -1>{}));
+using range_category_test_5 = decltype(std::declval<range_category_test_1>() | srx::views::submatches(std::vector{ 0, -1 }));
+using range_category_test_6 = decltype(std::declval<range_category_test_2>() | srx::views::submatches(std::vector{ 0, -1 }));
 static_assert(std::ranges::input_range<range_category_test_1>);
 static_assert(std::ranges::input_range<range_category_test_2>);
 static_assert(std::ranges::input_range<range_category_test_3>);
@@ -120,9 +120,9 @@ static_assert(std::ranges::input_range<range_category_test_4>);
 static_assert(std::ranges::input_range<range_category_test_5>);
 static_assert(std::ranges::input_range<range_category_test_6>);
 
-using range_category_test_7 = decltype(std::declval<std::string>() | rx::views::regex_split(" "_rx));
-using range_category_test_8 = decltype(std::ranges::subrange(std::declval<const char*>(), rx::detail::cstr_sentinel) | rx::views::regex_split(" "_rx));
-using range_category_test_9 = decltype(std::declval<std::list<char>>() | rx::views::regex_split(" "_rx));
+using range_category_test_7 = decltype(std::declval<std::string>() | srx::views::regex_split(" "_srx));
+using range_category_test_8 = decltype(std::ranges::subrange(std::declval<const char*>(), srx::detail::cstr_sentinel) | srx::views::regex_split(" "_srx));
+using range_category_test_9 = decltype(std::declval<std::list<char>>() | srx::views::regex_split(" "_srx));
 using range_category_test_7_inner = std::ranges::range_value_t<range_category_test_7>;
 using range_category_test_8_inner = std::ranges::range_value_t<range_category_test_8>;
 using range_category_test_9_inner = std::ranges::range_value_t<range_category_test_9>;

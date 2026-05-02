@@ -13,7 +13,7 @@
 #include <vector>
 
 
-namespace rx::detail::parser
+namespace srx::detail::parser
 {
     struct capture_flags
     {

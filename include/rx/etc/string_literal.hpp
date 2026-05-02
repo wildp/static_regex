@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <string_view>
 
-namespace rx
+namespace srx
 {
     template<typename CharT, std::size_t N>
     struct string_literal

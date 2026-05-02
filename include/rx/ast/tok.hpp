@@ -14,13 +14,13 @@
 #include <type_traits>
 #include <variant>
 
-#include "rx/api/regex_error.hpp"
-#include "rx/ast/charclass.hpp"
+#include "srx/api/regex_error.hpp"
+#include "srx/ast/charclass.hpp"
 
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
-namespace rx::detail
+namespace srx::detail
 {
     /* RE2 limits counted repetitions to 1000 - we do the same here */
     inline constexpr int counted_repetition_limit{ 1000 };

@@ -14,12 +14,12 @@
 #include <string>
 #include <variant>
 
-#include <rx/etc/util.hpp>
-#include <rx/fsm/tdfa.hpp>
-#include <rx/fsm/tnfa.hpp>
+#include <srx/etc/util.hpp>
+#include <srx/fsm/tdfa.hpp>
+#include <srx/fsm/tnfa.hpp>
 
 
-namespace rx::testing
+namespace srx::testing
 {
     template<typename T>
     concept print_destination = requires (T t) { std::println(t); };

@@ -14,13 +14,13 @@
 #include <variant>
 #include <vector>
 
-#include <rx/etc/captures.hpp>
-#include <rx/etc/cdarray.hpp>
-#include <rx/etc/util.hpp>
-#include <rx/fsm/tdfa.hpp>
+#include <srx/etc/captures.hpp>
+#include <srx/etc/cdarray.hpp>
+#include <srx/etc/util.hpp>
+#include <srx/fsm/tdfa.hpp>
 
 
-namespace rx::testing
+namespace srx::testing
 {
     template<typename CharT>
     class tdfa_matcher : public detail::tagged_dfa<CharT>
@@ -140,7 +140,7 @@ namespace rx::testing
         requires std::convertible_to<std::iter_value_t<I>, CharT>
     constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I last, const bool enable_fallback, const std::size_t start) const -> impl_ret_type
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
 
         std::vector<I> registers(this->reg_count());
         std::vector<bool> registers_enabled(this->reg_count(), false);
@@ -220,7 +220,7 @@ namespace rx::testing
         const capture_info& ci{ this->get_capture_info() };
         const auto& final_reg = this->final_registers();
 
-        using namespace rx::detail;
+        using namespace srx::detail;
 
         auto f = [&](const capture_info::tag_pair_t& p) -> bool {
             return not ((p.first.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.first.tag_number)))

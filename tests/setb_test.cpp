@@ -4,14 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include <rx/etc/bitcharset.hpp>
+#include <srx/etc/bitcharset.hpp>
 
 
 namespace
 {
     consteval auto make_bs(std::string_view sv)
     {
-        rx::detail::bitcharset<char> result;
+        srx::detail::bitcharset<char> result;
         for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
             result.insert(sv[i], sv[i + 1]);
         return result;
@@ -19,7 +19,7 @@ namespace
 
     consteval auto make_inverted_bs(std::string_view sv)
     {
-        rx::detail::bitcharset<char> result;
+        srx::detail::bitcharset<char> result;
         char tmp{ std::numeric_limits<char>::min() };
         for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
         {
@@ -32,7 +32,7 @@ namespace
 
     consteval auto make_bs_vec(const std::vector<const char*>& vec)
     {
-        std::vector<rx::detail::bitcharset<char>> result;
+        std::vector<srx::detail::bitcharset<char>> result;
         result.reserve(vec.size());
         for (const char* cstr : vec)
             result.emplace_back(make_bs(cstr));
@@ -41,7 +41,7 @@ namespace
 
     consteval auto make_pairvec(std::string_view sv)
     {
-        std::vector<rx::detail::bitcharset<char>::char_interval> result;
+        std::vector<srx::detail::bitcharset<char>::char_interval> result;
         for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
             result.emplace_back(sv[i], sv[i + 1]);
         return result;
@@ -54,13 +54,13 @@ namespace
 
     consteval bool test_compl_empty()
     {
-        using bcs = rx::detail::bitcharset<char>;
+        using bcs = srx::detail::bitcharset<char>;
         return (~bcs{}) == bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max() }};
     }
 
     consteval bool test_compl_full()
     {
-        using bcs = rx::detail::bitcharset<char>;
+        using bcs = srx::detail::bitcharset<char>;
         return (~bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max()  }}) == bcs{};
     }
 
@@ -116,7 +116,7 @@ namespace
     {
         const auto input = make_bs_vec(arg);
         const auto refs = input | std::views::transform([](const auto& b) { return std::cref(b); }) | std::ranges::to<std::vector>();
-        return rx::detail::bitcharset<char>::partition(refs) == make_bs_vec(result);
+        return srx::detail::bitcharset<char>::partition(refs) == make_bs_vec(result);
     }
 }
 

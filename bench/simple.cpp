@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <ctre.hpp>
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 
 
 template<typename Matcher>
@@ -14,7 +14,7 @@ static void BM_ctre_match(benchmark::State& state, Matcher m, const std::string_
 }
 
 template<typename Matcher>
-static void BM_rx_match(benchmark::State& state, Matcher m, const std::string_view input)
+static void BM_srx_match(benchmark::State& state, Matcher m, const std::string_view input)
 {
     for (auto _ : state)
     {
@@ -23,15 +23,15 @@ static void BM_rx_match(benchmark::State& state, Matcher m, const std::string_vi
     }
 }
 
-using namespace rx::literals;
+using namespace srx::literals;
 using namespace ctre::literals;
 
-template<rx::string_literal Pattern>
-consteval rx::static_regex<Pattern, rx::mode::backtrack> operator ""_rxn() { return {}; }
+template<srx::string_literal Pattern>
+consteval srx::static_regex<Pattern, srx::mode::backtrack> operator ""_srxn() { return {}; }
 
 #define TEST(NAME, PATTERN, INPUT)                             \
-BENCHMARK_CAPTURE(BM_rx_match, NAME, PATTERN ## _rx, INPUT);   \
-BENCHMARK_CAPTURE(BM_rx_match, NAME, PATTERN ## _rxn, INPUT);  \
+BENCHMARK_CAPTURE(BM_srx_match, NAME, PATTERN ## _srx, INPUT);   \
+BENCHMARK_CAPTURE(BM_srx_match, NAME, PATTERN ## _srxn, INPUT);  \
 BENCHMARK_CAPTURE(BM_ctre_match, NAME, PATTERN ## _ctre, INPUT);
 
 TEST(email, R"([a-zA-Z0-9._%+\x2D]+@[a-zA-Z0-9.\x2D]+\.[a-zA-Z]{2,})", "john.doe@example.com");

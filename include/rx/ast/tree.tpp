@@ -15,11 +15,11 @@
 #include <numeric>
 #include <utility>
 
-#include "rx/api/regex_error.hpp"
-#include "rx/etc/captures.hpp"
+#include "srx/api/regex_error.hpp"
+#include "srx/etc/captures.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     /* observer for non empty match */
 

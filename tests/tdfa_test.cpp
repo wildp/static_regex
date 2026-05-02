@@ -12,12 +12,12 @@ namespace
     template<typename CharT>
     consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ pattern };
         tagged_nfa nfa{ ast, default_fsm_flags::full_match };
         nfa.rewrite_assertions();
 
-        const rx::testing::tdfa_matcher dfa{ nfa };
+        const srx::testing::tdfa_matcher dfa{ nfa };
         const auto match_result = dfa.match(str);
 
         if (captures.empty())
@@ -31,12 +31,12 @@ namespace
     template<typename CharT>
     consteval bool prefix_match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         const expr_tree ast{ pattern };
         tagged_nfa nfa{ ast, default_fsm_flags::partial_match };
         nfa.rewrite_assertions();
 
-        const rx::testing::tdfa_matcher dfa{ nfa };
+        const srx::testing::tdfa_matcher dfa{ nfa };
         const auto match_result = dfa.partial_match(str);
 
         if (captures.empty())
@@ -50,13 +50,13 @@ namespace
     template<typename CharT>
     consteval bool search(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         expr_tree ast{ pattern };
         ast.insert_search_prefix();
         tagged_nfa nfa{ ast, default_fsm_flags::search_single };
         nfa.rewrite_assertions();
 
-        const rx::testing::tdfa_matcher dfa{ nfa };
+        const srx::testing::tdfa_matcher dfa{ nfa };
         const auto match_result = dfa.partial_match(str);
 
         if (captures.empty())
@@ -70,7 +70,7 @@ namespace
     template<typename CharT>
     consteval bool search_all(const CharT* pattern, const CharT* str, const std::vector<std::vector<std::size_t>>& captures = {})
     {
-        using namespace rx::detail;
+        using namespace srx::detail;
         expr_tree ast{ pattern };
         ast.insert_search_prefix();
         tagged_nfa nfa{ ast, default_fsm_flags::search_all };
@@ -78,7 +78,7 @@ namespace
         if (ast.empty_match_possible())
             nfa.add_non_empty_match_pathway();
 
-        const rx::testing::tdfa_matcher dfa{ nfa };
+        const srx::testing::tdfa_matcher dfa{ nfa };
         const auto match_result = dfa.match_all(str);
 
         if (captures.empty())
@@ -90,7 +90,7 @@ namespace
     }
 }
 
-using rx::detail::no_tag;
+using srx::detail::no_tag;
 
 /* basic tests */
 static_assert(match("", ""));

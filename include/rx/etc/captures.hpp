@@ -16,7 +16,7 @@
 #include <vector>
 
 
-namespace rx::detail
+namespace srx::detail
 {
     using tag_number_t = int; /* note: tags must be non-negative */
     inline constexpr tag_number_t start_of_input_tag{ std::numeric_limits<tag_number_t>::min() };

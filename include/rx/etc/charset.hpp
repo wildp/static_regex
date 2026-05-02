@@ -17,10 +17,10 @@
 #include <utility>
 #include <vector>
 
-#include "rx/etc/vec_bool_adaptor.hpp"
+#include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename T, typename CharT>
     concept charset_interval_range = std::ranges::contiguous_range<T>
@@ -863,7 +863,7 @@ namespace rx::detail
         for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
 #else
             mask[input.size() - i - 1] = true;
@@ -893,7 +893,7 @@ namespace rx::detail
         for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
 #else
             mask[input.size() - i - 1] = true;
@@ -912,7 +912,7 @@ namespace rx::detail
         {
             result.emplace_back(std::move(it->second), std::vector<T>{});
             for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
 #else
                 if (it->first.at(input.size() - i - 1))
@@ -937,7 +937,7 @@ namespace rx::detail
         for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
         {
             bitset_t mask(input.size(), false);
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
             mask[i] = true;
 #else
             mask[input.size() - i - 1] = true;
@@ -956,7 +956,7 @@ namespace rx::detail
         {
             result.emplace_back();
             for (std::size_t i{ 0 }, i_end{ input.size() }; i < i_end; ++i)
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
                 if (it->first.at(i))
 #else
                 if (it->first.at(input.size() - i - 1))

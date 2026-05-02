@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <ctre.hpp>
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 #include <regex>
 #include <re2/re2.h>
 #include <boost/regex.hpp>
@@ -26,7 +26,7 @@ namespace
     }
 
     template<typename Matcher>
-    std::size_t matchcount_rx(Matcher re)
+    std::size_t matchcount_srx(Matcher re)
     {
         auto view = re.range(input);
         return std::ranges::distance(view.begin(), view.end());
@@ -134,14 +134,14 @@ static void BM_ctre(benchmark::State& state, Matcher re, const std::size_t count
 }
 
 template<typename Matcher>
-static void BM_rx(benchmark::State& state, Matcher re, const std::size_t count)
+static void BM_srx(benchmark::State& state, Matcher re, const std::size_t count)
 {
-    if (matchcount_rx(re) != count)
+    if (matchcount_srx(re) != count)
         return;
 
     for (auto _ : state)
     {
-        auto tmp = matchcount_rx(re);
+        auto tmp = matchcount_srx(re);
         benchmark::DoNotOptimize(tmp);
     }
 }
@@ -215,10 +215,10 @@ static void BM_pcre2jit(benchmark::State& state, const std::string_view pattern,
 }
 
 using namespace ctre::literals;
-using namespace rx::literals;
+using namespace srx::literals;
 
 #define TEST(PATTERN, COUNT)                                 \
-BENCHMARK_CAPTURE(BM_rx, PATTERN, PATTERN ## _rx, COUNT);    \
+BENCHMARK_CAPTURE(BM_srx, PATTERN, PATTERN ## _srx, COUNT);    \
 BENCHMARK_CAPTURE(BM_ctre, PATTERN, PATTERN ## _ctre, COUNT);\
 BENCHMARK_CAPTURE(BM_re2, PATTERN, PATTERN, COUNT);          \
 BENCHMARK_CAPTURE(BM_boost, PATTERN, PATTERN, COUNT);        \

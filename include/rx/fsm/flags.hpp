@@ -7,7 +7,7 @@
 #pragma once
 
 
-namespace rx::detail
+namespace srx::detail
 {
     struct fsm_flags
     {

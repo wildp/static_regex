@@ -9,12 +9,12 @@
 #include <variant>
 #include <vector>
 
-#include "rx/ast/tok.hpp"
-#include "rx/etc/captures.hpp"
-#include "rx/etc/util.hpp"
+#include "srx/ast/tok.hpp"
+#include "srx/etc/captures.hpp"
+#include "srx/etc/util.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     namespace parser
     {

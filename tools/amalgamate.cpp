@@ -16,7 +16,7 @@
 
 #include <sys/mman.h>
 
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 
 namespace
 {
@@ -100,9 +100,9 @@ namespace
         }
 
     private:
-        static constexpr auto pattern = rx::static_regex<
+        static constexpr auto pattern = srx::static_regex<
             R"--((?m:^#include "(.*?)"$\n?|^(#include <.*?>)$\n?|^(#pragma once)$\n?|^(// *?(?i:copyright \(c\)).*?)$|^ *?//.*?$\n?| *?//.*?$))--"
-            , rx::mode::standard>{};
+            , srx::mode::standard>{};
 
         [[nodiscard]] path find_path(const path& next, const path& current_dir) const
         {
@@ -181,8 +181,8 @@ namespace
             mmap_data data{ file };
             const auto input = data.view();
 
-            rx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
-                              rx::static_regex<R"((?m:^.*?\n))">{}, rx::fmt<"// $0">);
+            srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
+                               srx::static_regex<R"((?m:^.*?\n))">{}, srx::fmt<"// $0">);
 
             ofs << "\n\n";
         }
@@ -192,8 +192,8 @@ namespace
             mmap_data data{ file };
             const auto input = data.view();
 
-            rx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
-                              rx::static_regex<R"(\n\s+\n)", rx::mode::linear>{}, rx::fmt<"\n\n">);
+            srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
+                               srx::static_regex<R"(\n\s+\n)", srx::mode::linear>{}, srx::fmt<"\n\n">);
         }
 
         std::vector<path> include_dirs_;

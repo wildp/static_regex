@@ -18,10 +18,10 @@
 #include <utility>
 #include <vector>
 
-#include "rx/etc/vec_bool_adaptor.hpp"
+#include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     class bitcharset

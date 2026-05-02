@@ -14,12 +14,12 @@
 #include <string_view>
 #include <vector>
 
-#include <rx/api/regex_error.hpp>
-#include <rx/ast/tree.hpp>
-#include <rx/etc/cdarray.hpp>
+#include <srx/api/regex_error.hpp>
+#include <srx/ast/tree.hpp>
+#include <srx/etc/cdarray.hpp>
 
 
-namespace rx::testing
+namespace srx::testing
 {
     template<typename CharT>
     class tree_matcher : public detail::expr_tree<CharT>

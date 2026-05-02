@@ -3,13 +3,13 @@
 #include <ranges>
 #include <vector>
 
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
     #include <boost/dynamic_bitset.hpp>
 #endif
 
-namespace rx::detail
+namespace srx::detail
 {
-#ifndef RX_USE_BOOST_DYNAMIC_BITSET
+#ifndef SRX_USE_BOOST_DYNAMIC_BITSET
     class vec_bool_adaptor
     {
     public:
@@ -163,7 +163,7 @@ namespace rx::detail
     };
 #endif
 
-#ifdef RX_USE_BOOST_DYNAMIC_BITSET
+#ifdef SRX_USE_BOOST_DYNAMIC_BITSET
     using bitset_t = boost::dynamic_bitset<std::size_t>;
 #else
     using bitset_t = vec_bool_adaptor;

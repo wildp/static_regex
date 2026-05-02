@@ -12,13 +12,13 @@
 #include <ranges>
 #include <type_traits>
 
-#include "rx/etc/bitcharset.hpp"
-#include "rx/etc/charset.hpp"
-#include "rx/etc/static_span.hpp"
-#include "rx/etc/util.hpp"
+#include "srx/etc/bitcharset.hpp"
+#include "srx/etc/charset.hpp"
+#include "srx/etc/static_span.hpp"
+#include "srx/etc/util.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     class static_charset;

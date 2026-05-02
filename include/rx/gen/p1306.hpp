@@ -14,20 +14,20 @@
 #include <meta>
 #include <type_traits>
 
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     #include <simd>
 #endif
 
-#include "rx/etc/static_charset.hpp"
-#include "rx/etc/string_literal.hpp"
-#include "rx/etc/util.hpp"
-#include "rx/fsm/flags.hpp"
-#include "rx/fsm/tdfa.hpp"
-#include "rx/gen/compile.hpp"
-#include "rx/gen/result.hpp"
+#include "srx/etc/static_charset.hpp"
+#include "srx/etc/string_literal.hpp"
+#include "srx/etc/util.hpp"
+#include "srx/fsm/flags.hpp"
+#include "srx/fsm/tdfa.hpp"
+#include "srx/gen/compile.hpp"
+#include "srx/gen/result.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     template<typename CharT>
     struct optimised_tr_edge
@@ -197,7 +197,7 @@ namespace rx::detail
         return tr_possible<Sc>(c);
     }
 
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
     [[gnu::always_inline]] constexpr auto vector_tr_find(const std::simd::basic_vec<UCharT, Abi>& c_vec)
     {
@@ -713,7 +713,7 @@ namespace rx::detail
             return false;
         }
 
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
         template<std::size_t DFAState, std::size_t Count, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
             requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
@@ -902,7 +902,7 @@ namespace rx::detail
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool outer_state(Result result, I it, const S last)
         {
-#if __cpp_lib_simd >= 202411L or (__GNUC__ >= 16 and defined(__GLIBCXX__))
+#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
             if constexpr (std::contiguous_iterator<I> and std::sized_sentinel_for<S, I>
                           and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
                 return vector_outer_state<DFAState>(result, it, last);

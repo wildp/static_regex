@@ -18,12 +18,12 @@
 #include <type_traits>
 #include <utility>
 
-#include "rx/api/regex_error.hpp"
-#include "rx/etc/static_charset.hpp"
-#include "rx/etc/vec_bool_adaptor.hpp"
+#include "srx/api/regex_error.hpp"
+#include "srx/etc/static_charset.hpp"
+#include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace rx::detail
+namespace srx::detail
 {
     struct stack_elem
     {

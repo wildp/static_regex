@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include <rx/regex.hpp>
+#include <srx/regex.hpp>
 
 
 namespace
@@ -12,7 +12,7 @@ namespace
     template<typename MatchResult, std::bidirectional_iterator Iter>
     consteval bool submatch_check(const MatchResult& mr, const std::vector<std::size_t>& captures, const Iter start, std::size_t init = 0)
     {
-        using rx::detail::no_tag;
+        using srx::detail::no_tag;
 
         if (((mr.size() - init) * 2) != captures.size())
             return false;
@@ -46,47 +46,47 @@ namespace
     }
 
 
-    template<rx::string_literal S>
-    consteval bool match(rx::static_regex<S> pattern, const char* cstr)
+    template<srx::string_literal S>
+    consteval bool match(srx::static_regex<S> pattern, const char* cstr)
     {
         return pattern.is_match(cstr);
     }
 
-    template<rx::string_literal S>
-    consteval bool match(rx::static_regex<S> pattern, const char* cstr, const std::vector<std::size_t>& captures)
+    template<srx::string_literal S>
+    consteval bool match(srx::static_regex<S> pattern, const char* cstr, const std::vector<std::size_t>& captures)
     {
         std::string_view sv{ cstr };
         return submatch_check(pattern.match(cstr), captures, sv.begin(), 1);
     }
 
-    template<rx::string_literal S>
-    consteval bool prefix_match(rx::static_regex<S> pattern, const char* cstr)
+    template<srx::string_literal S>
+    consteval bool prefix_match(srx::static_regex<S> pattern, const char* cstr)
     {
        return pattern.starts_with_match(cstr);
     }
 
-    template<rx::string_literal S>
-    consteval bool prefix_match(rx::static_regex<S> pattern, const char* cstr, const std::vector<std::size_t>& captures)
+    template<srx::string_literal S>
+    consteval bool prefix_match(srx::static_regex<S> pattern, const char* cstr, const std::vector<std::size_t>& captures)
     {
         std::string_view sv{ cstr };
         return submatch_check(pattern.prefix_match(cstr), captures, sv.begin());
     }
 
-    template<rx::string_literal S>
-    consteval bool search(rx::static_regex<S> pattern, const char* cstr)
+    template<srx::string_literal S>
+    consteval bool search(srx::static_regex<S> pattern, const char* cstr)
     {
        return pattern.contains_match(cstr);
     }
 
-    template<rx::string_literal S>
-    consteval bool search(rx::static_regex<S> pattern, const char* cstr, const std::vector<std::size_t>& captures)
+    template<srx::string_literal S>
+    consteval bool search(srx::static_regex<S> pattern, const char* cstr, const std::vector<std::size_t>& captures)
     {
         std::string_view sv{ cstr };
         return submatch_check(pattern.search(cstr), captures, sv.begin());
     }
 
-    template<rx::string_literal S>
-    consteval bool search_all(rx::static_regex<S> pattern, const char* cstr, const std::vector<std::vector<std::size_t>>& captures)
+    template<srx::string_literal S>
+    consteval bool search_all(srx::static_regex<S> pattern, const char* cstr, const std::vector<std::vector<std::size_t>>& captures)
     {
         std::string_view sv{ cstr };
         for (const auto& [match, caps] : std::views::zip(pattern.range(cstr), captures))
@@ -101,212 +101,212 @@ namespace
 /* these tests are copied from srx1 and exist due to the implementation divergence
  * between the std::string_view and const char* matcher implementations. */
 
-using rx::detail::no_tag;
-using namespace rx::literals;
+using srx::detail::no_tag;
+using namespace srx::literals;
 
 /* basic tests */
-static_assert(match(""_rx, ""));
-static_assert(not match(""_rx, "a"));
-static_assert(not match("a"_rx, ""));
-static_assert(match("a"_rx, "a"));
-static_assert(not match("a"_rx, "b"));
+static_assert(match(""_srx, ""));
+static_assert(not match(""_srx, "a"));
+static_assert(not match("a"_srx, ""));
+static_assert(match("a"_srx, "a"));
+static_assert(not match("a"_srx, "b"));
 
 /* grouping tests */
-static_assert(not match("a|b"_rx, ""));
-static_assert(match("a|b"_rx, "a"));
-static_assert(match("a|b"_rx, "b"));
-static_assert(not match("a|b"_rx, "c"));
-static_assert(match("a|b|c"_rx, "c"));
-static_assert(match("a|b|c"_rx, "b"));
-static_assert(match("a|b|c"_rx, "a"));
-static_assert(not match("aa"_rx, ""));
-static_assert(not match("aa"_rx, "a"));
-static_assert(match("aa"_rx, "aa"));
-static_assert(not match("aa"_rx, "aaa"));
-static_assert(not match("ab"_rx, ""));
-static_assert(not match("ab"_rx, "a"));
-static_assert(not match("ab"_rx, "b"));
-static_assert(match("ab"_rx, "ab"));
-static_assert(not match("ab"_rx, "ba"));
-static_assert(not match("ab"_rx, "abb"));
-static_assert(not match("ab"_rx, "aab"));
-static_assert(not match("ab"_rx, "bb"));
+static_assert(not match("a|b"_srx, ""));
+static_assert(match("a|b"_srx, "a"));
+static_assert(match("a|b"_srx, "b"));
+static_assert(not match("a|b"_srx, "c"));
+static_assert(match("a|b|c"_srx, "c"));
+static_assert(match("a|b|c"_srx, "b"));
+static_assert(match("a|b|c"_srx, "a"));
+static_assert(not match("aa"_srx, ""));
+static_assert(not match("aa"_srx, "a"));
+static_assert(match("aa"_srx, "aa"));
+static_assert(not match("aa"_srx, "aaa"));
+static_assert(not match("ab"_srx, ""));
+static_assert(not match("ab"_srx, "a"));
+static_assert(not match("ab"_srx, "b"));
+static_assert(match("ab"_srx, "ab"));
+static_assert(not match("ab"_srx, "ba"));
+static_assert(not match("ab"_srx, "abb"));
+static_assert(not match("ab"_srx, "aab"));
+static_assert(not match("ab"_srx, "bb"));
 
 /* character class tests */
-static_assert(match("[a-c]"_rx, "a"));
-static_assert(match("[a-c]"_rx, "b"));
-static_assert(match("[a-c]"_rx, "c"));
-static_assert(not match("[a-c]"_rx, "d"));
+static_assert(match("[a-c]"_srx, "a"));
+static_assert(match("[a-c]"_srx, "b"));
+static_assert(match("[a-c]"_srx, "c"));
+static_assert(not match("[a-c]"_srx, "d"));
 
 /* repeater tests */
-static_assert(match("a*"_rx, ""));
-static_assert(match("a*"_rx, "a"));
-static_assert(match("a*"_rx, "aa"));
-static_assert(match("a*"_rx, "aaaaa"));
-static_assert(not match("a+"_rx, ""));
-static_assert(match("a+"_rx, "a"));
-static_assert(match("a+"_rx, "aa"));
-static_assert(match("a+"_rx, "aaaaa"));
-static_assert(match("a?"_rx, ""));
-static_assert(match("a?"_rx, "a"));
-static_assert(not match("a?"_rx, "aa"));
-static_assert(not match("a?"_rx, "aaaaa"));
-static_assert(not match("a{1}"_rx, ""));
-static_assert(match("a{1}"_rx, "a"));
-static_assert(not match("a{1}"_rx, "aa"));
-static_assert(not match("a{2,5}"_rx, "a"));
-static_assert(match("a{2,5}"_rx, "aa"));
-static_assert(match("a{2,5}"_rx, "aaa"));
-static_assert(match("a{2,5}"_rx, "aaaa"));
-static_assert(match("a{2,5}"_rx, "aaaaa"));
-static_assert(not match("a{2,5}"_rx, "aaaaaaa"));
-static_assert(not match("a{2,}"_rx, "a"));
-static_assert(match("a{2,}"_rx, "aa"));
-static_assert(match("a{2,}"_rx, "aaa"));
-static_assert(match("a{2,}"_rx, "aaaa"));
-static_assert(match("a{2,}"_rx, "aaaaa"));
-static_assert(not match("a{3},"_rx, "aa"));
-static_assert(match("a{3}"_rx, "aaa"));
-static_assert(not match("a{3}"_rx, "aaaa"));
+static_assert(match("a*"_srx, ""));
+static_assert(match("a*"_srx, "a"));
+static_assert(match("a*"_srx, "aa"));
+static_assert(match("a*"_srx, "aaaaa"));
+static_assert(not match("a+"_srx, ""));
+static_assert(match("a+"_srx, "a"));
+static_assert(match("a+"_srx, "aa"));
+static_assert(match("a+"_srx, "aaaaa"));
+static_assert(match("a?"_srx, ""));
+static_assert(match("a?"_srx, "a"));
+static_assert(not match("a?"_srx, "aa"));
+static_assert(not match("a?"_srx, "aaaaa"));
+static_assert(not match("a{1}"_srx, ""));
+static_assert(match("a{1}"_srx, "a"));
+static_assert(not match("a{1}"_srx, "aa"));
+static_assert(not match("a{2,5}"_srx, "a"));
+static_assert(match("a{2,5}"_srx, "aa"));
+static_assert(match("a{2,5}"_srx, "aaa"));
+static_assert(match("a{2,5}"_srx, "aaaa"));
+static_assert(match("a{2,5}"_srx, "aaaaa"));
+static_assert(not match("a{2,5}"_srx, "aaaaaaa"));
+static_assert(not match("a{2,}"_srx, "a"));
+static_assert(match("a{2,}"_srx, "aa"));
+static_assert(match("a{2,}"_srx, "aaa"));
+static_assert(match("a{2,}"_srx, "aaaa"));
+static_assert(match("a{2,}"_srx, "aaaaa"));
+static_assert(not match("a{3},"_srx, "aa"));
+static_assert(match("a{3}"_srx, "aaa"));
+static_assert(not match("a{3}"_srx, "aaaa"));
 
 /* laziness tests */
-static_assert(match("(a)?a*"_rx, "", { no_tag, no_tag }));
-static_assert(match("(a)?a*"_rx, "a", { 0, 1 }));
-static_assert(match("(a)?a*"_rx, "aa", { 0, 1 }));
-static_assert(match("(a)??a*"_rx, "aa", { no_tag, no_tag }));
-static_assert(match("(a)+?a?"_rx, "aa", { 0, 1 }));
-static_assert(match("(a)+a?"_rx, "aa", { 1, 2 }));
-static_assert(match("(a){2,3}?a?"_rx, "aaa", { 1, 2 }));
-static_assert(match("(a){2,3}a?"_rx, "aaa", { 2, 3 }));
-static_assert(match("(ab+c)+?(ab+c|.*d)"_rx, "abcabbcacd", { 0, 3, 3, 10 }));
-static_assert(match("(ab+c)+(ab+c|.*d)"_rx, "abcabbcacd", { 3, 7, 7, 10 }));
+static_assert(match("(a)?a*"_srx, "", { no_tag, no_tag }));
+static_assert(match("(a)?a*"_srx, "a", { 0, 1 }));
+static_assert(match("(a)?a*"_srx, "aa", { 0, 1 }));
+static_assert(match("(a)??a*"_srx, "aa", { no_tag, no_tag }));
+static_assert(match("(a)+?a?"_srx, "aa", { 0, 1 }));
+static_assert(match("(a)+a?"_srx, "aa", { 1, 2 }));
+static_assert(match("(a){2,3}?a?"_srx, "aaa", { 1, 2 }));
+static_assert(match("(a){2,3}a?"_srx, "aaa", { 2, 3 }));
+static_assert(match("(ab+c)+?(ab+c|.*d)"_srx, "abcabbcacd", { 0, 3, 3, 10 }));
+static_assert(match("(ab+c)+(ab+c|.*d)"_srx, "abcabbcacd", { 3, 7, 7, 10 }));
 
 /* submatch disambiguation tests */
-static_assert(match("(a|bcdef|g|ab|c|d|e|efg|fg)*"_rx, "abcdefg", { 6, 7 }));     /* [perl]: a bcdef g */
-static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*"_rx, "abcdefg", { 4, 7 })); /* [posix]: ab c d efg */
-static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*"_rx, "abcdefg", { 5, 7 })); /* [incorrect]: ab c d e fg */
+static_assert(match("(a|bcdef|g|ab|c|d|e|efg|fg)*"_srx, "abcdefg", { 6, 7 }));     /* [perl]: a bcdef g */
+static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*"_srx, "abcdefg", { 4, 7 })); /* [posix]: ab c d efg */
+static_assert(not match("(a|bcdef|g|ab|c|d|e|efg|fg)*"_srx, "abcdefg", { 5, 7 })); /* [incorrect]: ab c d e fg */
 
 /* capture location tests */
-static_assert(match("(a)"_rx, "a", { 0, 1 }));
-static_assert(match("a(a)"_rx, "aa", { 1, 2 }));
-static_assert(match("a(a)a"_rx, "aaa", { 1, 2 }));
-static_assert(match("(a)*"_rx, "a", { 0, 1 }));
-static_assert(match("(a)*"_rx, "aa", { 1, 2 }));
-static_assert(match("(?:(a)|(d))c"_rx, "ac", { 0, 1, no_tag, no_tag }));
-static_assert(match("(?:(a)|(d))c"_rx, "dc", { no_tag, no_tag, 0, 1 }));
-static_assert(match("(a)+(b)*"_rx, "ab", { 0, 1, 1, 2 }));
-static_assert(match("(a)+(b)*"_rx, "aab", { 1, 2, 2, 3 }));
-static_assert(match("(aa)+a*"_rx, "aaaaa", { 2, 4 }));
-static_assert(match("(aa)+?a*"_rx, "aaaaa", { 0, 2 }));
-static_assert(match("(a((a)))(a)c"_rx, "aaac", { 0, 2, 1, 2, 1, 2, 2, 3 }));
-static_assert(match("a(aa)b|(aa)ac"_rx, "aaab", { 1, 3, no_tag, no_tag }));
-static_assert(match("a(aa)b|(aa)ac"_rx, "aaac", { no_tag, no_tag, 0, 2 }));
+static_assert(match("(a)"_srx, "a", { 0, 1 }));
+static_assert(match("a(a)"_srx, "aa", { 1, 2 }));
+static_assert(match("a(a)a"_srx, "aaa", { 1, 2 }));
+static_assert(match("(a)*"_srx, "a", { 0, 1 }));
+static_assert(match("(a)*"_srx, "aa", { 1, 2 }));
+static_assert(match("(?:(a)|(d))c"_srx, "ac", { 0, 1, no_tag, no_tag }));
+static_assert(match("(?:(a)|(d))c"_srx, "dc", { no_tag, no_tag, 0, 1 }));
+static_assert(match("(a)+(b)*"_srx, "ab", { 0, 1, 1, 2 }));
+static_assert(match("(a)+(b)*"_srx, "aab", { 1, 2, 2, 3 }));
+static_assert(match("(aa)+a*"_srx, "aaaaa", { 2, 4 }));
+static_assert(match("(aa)+?a*"_srx, "aaaaa", { 0, 2 }));
+static_assert(match("(a((a)))(a)c"_srx, "aaac", { 0, 2, 1, 2, 1, 2, 2, 3 }));
+static_assert(match("a(aa)b|(aa)ac"_srx, "aaab", { 1, 3, no_tag, no_tag }));
+static_assert(match("a(aa)b|(aa)ac"_srx, "aaac", { no_tag, no_tag, 0, 2 }));
 
 /* wildcard tests */
-static_assert(not match("."_rx, ""));
-static_assert(match("."_rx, "0"));
-static_assert(match("."_rx, "@"));
-static_assert(match("."_rx, "$"));
-static_assert(match("."_rx, "z"));
-static_assert(match("."_rx, "A"));
-static_assert(match("."_rx, "."));
-static_assert(not match("."_rx, "\n"));
-static_assert(match("(?s)."_rx, "\n"));
+static_assert(not match("."_srx, ""));
+static_assert(match("."_srx, "0"));
+static_assert(match("."_srx, "@"));
+static_assert(match("."_srx, "$"));
+static_assert(match("."_srx, "z"));
+static_assert(match("."_srx, "A"));
+static_assert(match("."_srx, "."));
+static_assert(not match("."_srx, "\n"));
+static_assert(match("(?s)."_srx, "\n"));
 // TODO: add test cases for non ascii chars
 
 
 /* fallback tests */
-static_assert(prefix_match("abc"_rx, "abcdef", { 0, 3 }));
-static_assert(prefix_match("abcdef|abc"_rx, "abc", { 0, 3 }));
-static_assert(prefix_match("abcdef|abc"_rx, "abcdef", { 0, 6 }));
-static_assert(prefix_match("abc|abcdef"_rx, "abcdef", { 0, 3 }));
-static_assert(prefix_match("abcdef|abc"_rx, "abcde", { 0, 3 }));
+static_assert(prefix_match("abc"_srx, "abcdef", { 0, 3 }));
+static_assert(prefix_match("abcdef|abc"_srx, "abc", { 0, 3 }));
+static_assert(prefix_match("abcdef|abc"_srx, "abcdef", { 0, 6 }));
+static_assert(prefix_match("abc|abcdef"_srx, "abcdef", { 0, 3 }));
+static_assert(prefix_match("abcdef|abc"_srx, "abcde", { 0, 3 }));
 
 /* lazy prefix matching tests */
-static_assert(prefix_match("(abc)+"_rx, "abcabc", { 0, 6, 3, 6 }));
-static_assert(prefix_match("(abc)+?"_rx, "abcabc", { 0, 3, 0, 3 }));
-static_assert(prefix_match("(abc)+?a"_rx, "abcabc", { 0, 4, 0, 3 }));
-static_assert(prefix_match("(abc)+?a"_rx, "abcabca", { 0, 4, 0, 3 }));
+static_assert(prefix_match("(abc)+"_srx, "abcabc", { 0, 6, 3, 6 }));
+static_assert(prefix_match("(abc)+?"_srx, "abcabc", { 0, 3, 0, 3 }));
+static_assert(prefix_match("(abc)+?a"_srx, "abcabc", { 0, 4, 0, 3 }));
+static_assert(prefix_match("(abc)+?a"_srx, "abcabca", { 0, 4, 0, 3 }));
 
 /* additional capture location tests */
-static_assert(match("(ab+c)+?(ab+c|.*d)"_rx, "abcabbcacd", { 0, 3, 3, 10 }));
-static_assert(prefix_match("(ab+c)+?(ab+c|.*d)"_rx, "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
-static_assert(prefix_match("(ab+c)+(ab+c|.*d)"_rx, "abcabbcacd", { 0, 10, 3, 7, 7, 10 }));
-static_assert(search("([ad]b+c)+?([ad])"_rx, "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10 }));
-static_assert(search("([ad]b+c)+([ad])"_rx, "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
+static_assert(match("(ab+c)+?(ab+c|.*d)"_srx, "abcabbcacd", { 0, 3, 3, 10 }));
+static_assert(prefix_match("(ab+c)+?(ab+c|.*d)"_srx, "abcabbcacd", { 0, 7, 0, 3, 3, 7 }));
+static_assert(prefix_match("(ab+c)+(ab+c|.*d)"_srx, "abcabbcacd", { 0, 10, 3, 7, 7, 10 }));
+static_assert(search("([ad]b+c)+?([ad])"_srx, "aaabacabcdbbcacd", { 6, 10, 6, 9, 9, 10 }));
+static_assert(search("([ad]b+c)+([ad])"_srx, "aaabacabcdbbcacd", { 6, 14, 9, 13, 13, 14 }));
 
 /* search tests */
-static_assert(search("a"_rx, "abcd", { 0, 1 }));
-static_assert(search("b"_rx, "abcd", { 1, 2 }));
-static_assert(search("d"_rx, "abcd", { 3, 4 }));
-static_assert(not search("e"_rx, "abcd"));
-static_assert(search("aa"_rx, "abaab", { 2, 4 }));
-static_assert(search("ab"_rx, "abaab", { 0, 2 }));
-static_assert(search("bc"_rx, "abcd", { 1, 3 }));
-static_assert(search_all("a"_rx, "a", { { 0, 1 } }));
-static_assert(search_all("a"_rx, "aaa", { { 0, 1 }, { 1, 2 }, { 2, 3 } }));
-static_assert(search_all("ab"_rx, "abab", { { 0, 2 }, { 2, 4 } }));
-static_assert(search_all("ab"_rx, "abaab", { { 0, 2 }, { 3, 5 } }));
-static_assert(search_all("(?:)|abc"_rx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
-static_assert(search_all("(?:)|abc"_rx, "abcabc", { { 0, 0 }, { 0, 3 }, { 3, 3 }, { 3, 6 }, { 6, 6 } }));
+static_assert(search("a"_srx, "abcd", { 0, 1 }));
+static_assert(search("b"_srx, "abcd", { 1, 2 }));
+static_assert(search("d"_srx, "abcd", { 3, 4 }));
+static_assert(not search("e"_srx, "abcd"));
+static_assert(search("aa"_srx, "abaab", { 2, 4 }));
+static_assert(search("ab"_srx, "abaab", { 0, 2 }));
+static_assert(search("bc"_srx, "abcd", { 1, 3 }));
+static_assert(search_all("a"_srx, "a", { { 0, 1 } }));
+static_assert(search_all("a"_srx, "aaa", { { 0, 1 }, { 1, 2 }, { 2, 3 } }));
+static_assert(search_all("ab"_srx, "abab", { { 0, 2 }, { 2, 4 } }));
+static_assert(search_all("ab"_srx, "abaab", { { 0, 2 }, { 3, 5 } }));
+static_assert(search_all("(?:)|abc"_srx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(search_all("(?:)|abc"_srx, "abcabc", { { 0, 0 }, { 0, 3 }, { 3, 3 }, { 3, 6 }, { 6, 6 } }));
 
 /* sof+eof anchor tests */
-static_assert(match("a$"_rx, "a"));
-static_assert(match("^a"_rx, "a"));
-static_assert(match("^a$"_rx, "a"));
-static_assert(match("^$"_rx, ""));
-static_assert(prefix_match("a$"_rx, "a"));
-static_assert(prefix_match("^a"_rx, "a"));
-static_assert(prefix_match("^a$"_rx, "a"));
-static_assert(prefix_match("^$"_rx, ""));
-static_assert(not search("^$"_rx, "a"));
-static_assert(search("^$"_rx, "", { 0, 0 }));
-static_assert(search("$^"_rx, "", { 0, 0 }));
-static_assert(search("a$"_rx, "a", { 0, 1 }));
-static_assert(search("^a"_rx, "a", { 0, 1 }));
-static_assert(search("^a$"_rx, "a", { 0, 1 }));
-static_assert(prefix_match("(a)+?$$"_rx, "a", { 0, 1, 0, 1 }));
-static_assert(prefix_match("(a)+?$$"_rx, "aa", { 0, 2, 1, 2 }));
-static_assert(prefix_match("(a)+?$"_rx, "a", { 0, 1, 0, 1 }));
-static_assert(prefix_match("(a)+?$"_rx, "aa", { 0, 2, 1, 2 }));
-static_assert(prefix_match("(a)+?"_rx, "a", { 0, 1, 0, 1 }));
-static_assert(prefix_match("(a)+?"_rx, "aa", { 0, 1, 0, 1 }));
-static_assert(not search("^^ab"_rx, "bab"));
-static_assert(search("^^ab"_rx, "aba", { 0, 2 }));
-static_assert(not search("^ab"_rx, "bab"));
-static_assert(search("^ab"_rx, "aba", { 0, 2 }));
-static_assert(search("ab"_rx, "bab", { 1, 3 }));
-static_assert(search("ab"_rx, "aba", { 0, 2 }));
-static_assert(search("(abc)|(^abc)"_rx, "abc", { 0, 3, 0, 3, no_tag, no_tag }));
+static_assert(match("a$"_srx, "a"));
+static_assert(match("^a"_srx, "a"));
+static_assert(match("^a$"_srx, "a"));
+static_assert(match("^$"_srx, ""));
+static_assert(prefix_match("a$"_srx, "a"));
+static_assert(prefix_match("^a"_srx, "a"));
+static_assert(prefix_match("^a$"_srx, "a"));
+static_assert(prefix_match("^$"_srx, ""));
+static_assert(not search("^$"_srx, "a"));
+static_assert(search("^$"_srx, "", { 0, 0 }));
+static_assert(search("$^"_srx, "", { 0, 0 }));
+static_assert(search("a$"_srx, "a", { 0, 1 }));
+static_assert(search("^a"_srx, "a", { 0, 1 }));
+static_assert(search("^a$"_srx, "a", { 0, 1 }));
+static_assert(prefix_match("(a)+?$$"_srx, "a", { 0, 1, 0, 1 }));
+static_assert(prefix_match("(a)+?$$"_srx, "aa", { 0, 2, 1, 2 }));
+static_assert(prefix_match("(a)+?$"_srx, "a", { 0, 1, 0, 1 }));
+static_assert(prefix_match("(a)+?$"_srx, "aa", { 0, 2, 1, 2 }));
+static_assert(prefix_match("(a)+?"_srx, "a", { 0, 1, 0, 1 }));
+static_assert(prefix_match("(a)+?"_srx, "aa", { 0, 1, 0, 1 }));
+static_assert(not search("^^ab"_srx, "bab"));
+static_assert(search("^^ab"_srx, "aba", { 0, 2 }));
+static_assert(not search("^ab"_srx, "bab"));
+static_assert(search("^ab"_srx, "aba", { 0, 2 }));
+static_assert(search("ab"_srx, "bab", { 1, 3 }));
+static_assert(search("ab"_srx, "aba", { 0, 2 }));
+static_assert(search("(abc)|(^abc)"_srx, "abc", { 0, 3, 0, 3, no_tag, no_tag }));
 
 /* sol+eol anchor tests */
-static_assert(prefix_match("(?m:a$)"_rx, "a", { 0, 1 }));
-static_assert(prefix_match("(?m:a$)"_rx, "a\na", { 0, 1 }));
-static_assert(prefix_match("(?m:a$\na)"_rx, "a\na", { 0, 3 }));
-static_assert(prefix_match("(?m:a$\na)"_rx, "a\na", { 0, 3 }));
-static_assert(prefix_match("(?m)($\na)+"_rx, "\na", { 0, 2, 0, 2 }));
-static_assert(prefix_match("(?m)($\na)+"_rx, "\na\na", { 0, 4, 2, 4 }));
-static_assert(prefix_match("(?m)(\n$)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
-static_assert(prefix_match("(?m)(a$)"_rx, "a\na", { 0, 1, 0, 1 }));
-static_assert(search("(?m:^a)"_rx, "a", { 0, 1 }));
-static_assert(search("(?m:^a)"_rx, "\na", { 1, 2 }));
-static_assert(search("(?ms)(^a.?)*"_rx, "a\na", { 0, 3, 2, 3 }));
-static_assert(search("(?m:^\n*$)"_rx, "\n\n\n\n", { 0, 4 }));
-static_assert(search("(?m:^\n*?$)"_rx, "\n\n\n\n", { 0, 0 }));
-static_assert(prefix_match("(?m)(\n$)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
-static_assert(search("(?m)(^\n$)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
-static_assert(search("(?m)($\n^)+"_rx, "\n\n\n\n", { 0, 4, 3, 4 }));
-static_assert(search("(?m)(^a\n)+"_rx, "a\na\na", { 0, 4, 2, 4 }));
-static_assert(search_all("(?m)^a"_rx, "a\na\na", { { 0, 1 }, { 2, 3 }, { 4, 5 } }));
+static_assert(prefix_match("(?m:a$)"_srx, "a", { 0, 1 }));
+static_assert(prefix_match("(?m:a$)"_srx, "a\na", { 0, 1 }));
+static_assert(prefix_match("(?m:a$\na)"_srx, "a\na", { 0, 3 }));
+static_assert(prefix_match("(?m:a$\na)"_srx, "a\na", { 0, 3 }));
+static_assert(prefix_match("(?m)($\na)+"_srx, "\na", { 0, 2, 0, 2 }));
+static_assert(prefix_match("(?m)($\na)+"_srx, "\na\na", { 0, 4, 2, 4 }));
+static_assert(prefix_match("(?m)(\n$)+"_srx, "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(prefix_match("(?m)(a$)"_srx, "a\na", { 0, 1, 0, 1 }));
+static_assert(search("(?m:^a)"_srx, "a", { 0, 1 }));
+static_assert(search("(?m:^a)"_srx, "\na", { 1, 2 }));
+static_assert(search("(?ms)(^a.?)*"_srx, "a\na", { 0, 3, 2, 3 }));
+static_assert(search("(?m:^\n*$)"_srx, "\n\n\n\n", { 0, 4 }));
+static_assert(search("(?m:^\n*?$)"_srx, "\n\n\n\n", { 0, 0 }));
+static_assert(prefix_match("(?m)(\n$)+"_srx, "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(search("(?m)(^\n$)+"_srx, "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(search("(?m)($\n^)+"_srx, "\n\n\n\n", { 0, 4, 3, 4 }));
+static_assert(search("(?m)(^a\n)+"_srx, "a\na\na", { 0, 4, 2, 4 }));
+static_assert(search_all("(?m)^a"_srx, "a\na\na", { { 0, 1 }, { 2, 3 }, { 4, 5 } }));
 
 /* word boundary tests */
-static_assert(not search(R"(\b)"_rx, ""));
-static_assert(search(R"(\B)"_rx, "", { 0, 0 }));
-static_assert(search_all(R"(\b)"_rx, "ab+-cd", { { 0, 0 }, { 2, 2 }, { 4, 4 }, { 6, 6 } }));
-static_assert(search_all(R"(\B)"_rx, "ab<>cd", { { 1, 1 }, { 3, 3 }, { 5, 5 } }));
-static_assert(search(R"(\B)"_rx, "a_", { 1, 1 }));
-static_assert(search(R"(a\b)"_rx, "a+", { 0, 1 }));
-static_assert(search(R"(a\b)"_rx, "a.", { 0, 1 }));
-static_assert(not search(R"(a\b)"_rx, "a_"));
-static_assert(search_all(R"(\b|abc)"_rx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
-static_assert(search_all(R"(\b|^abc)"_rx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(not search(R"(\b)"_srx, ""));
+static_assert(search(R"(\B)"_srx, "", { 0, 0 }));
+static_assert(search_all(R"(\b)"_srx, "ab+-cd", { { 0, 0 }, { 2, 2 }, { 4, 4 }, { 6, 6 } }));
+static_assert(search_all(R"(\B)"_srx, "ab<>cd", { { 1, 1 }, { 3, 3 }, { 5, 5 } }));
+static_assert(search(R"(\B)"_srx, "a_", { 1, 1 }));
+static_assert(search(R"(a\b)"_srx, "a+", { 0, 1 }));
+static_assert(search(R"(a\b)"_srx, "a.", { 0, 1 }));
+static_assert(not search(R"(a\b)"_srx, "a_"));
+static_assert(search_all(R"(\b|abc)"_srx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
+static_assert(search_all(R"(\b|^abc)"_srx, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));

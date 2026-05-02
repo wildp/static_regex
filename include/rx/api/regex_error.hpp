@@ -9,7 +9,7 @@
 #include <stdexcept>
 
 
-namespace rx
+namespace srx
 {
     class regex_error : public std::runtime_error
     {

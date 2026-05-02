@@ -8,10 +8,10 @@
 
 #include <print>
 
-#include <rx/fsm/tdfa.hpp>
+#include <srx/fsm/tdfa.hpp>
 
 
-namespace rx::testing
+namespace srx::testing
 {
     template<typename T, typename CharT>
         requires requires (T t) { std::println(t); }

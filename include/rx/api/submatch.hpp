@@ -13,10 +13,10 @@
 #include <string>
 #include <string_view>
 
-#include "rx/etc/util.hpp"
+#include "srx/etc/util.hpp"
 
 
-namespace rx
+namespace srx
 {
     namespace detail
     {
@@ -252,33 +252,33 @@ namespace rx
 /* structured binding support for submatch */
 
 template<std::bidirectional_iterator I>
-struct std::tuple_size<rx::submatch<I>> : integral_constant<std::size_t, 2> {};
+struct std::tuple_size<srx::submatch<I>> : integral_constant<std::size_t, 2> {};
 
 template<std::size_t N, std::bidirectional_iterator I>
     requires (N < 2)
-struct std::tuple_element<N, rx::submatch<I>>
+struct std::tuple_element<N, srx::submatch<I>>
 {
-    using type = rx::submatch<I>::iterator;
+    using type = srx::submatch<I>::iterator;
 };
 
 
 /* formatting support for submatch */
 
 template<std::bidirectional_iterator I>
-inline constexpr auto std::format_kind<rx::submatch<I>> = std::range_format::string;
+inline constexpr auto std::format_kind<srx::submatch<I>> = std::range_format::string;
 
-static_assert(std::formattable<rx::submatch<const char*>, char>);
+static_assert(std::formattable<srx::submatch<const char*>, char>);
 
 
 /* range correctness for submatch */
 
 template<std::bidirectional_iterator I>
-constexpr bool std::ranges::disable_sized_range<rx::submatch<I>> = not std::sized_sentinel_for<I, I>;
+constexpr bool std::ranges::disable_sized_range<srx::submatch<I>> = not std::sized_sentinel_for<I, I>;
 
 
 /* submatch factory implementation */
 
-namespace rx::detail
+namespace srx::detail
 {
     template<std::bidirectional_iterator I>
     class submatch_factory
