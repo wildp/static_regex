@@ -17,4 +17,4 @@ target_sources(tests
         tnfa_test.cpp
         tree_test.cpp
 )
-target_link_libraries(tests PUBLIC rx)
+target_link_libraries(tests PUBLIC static_regex)

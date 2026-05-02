@@ -7,27 +7,27 @@ project(rx
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-add_library(rx INTERFACE)
-target_compile_features(rx INTERFACE cxx_std_26)
-target_sources(rx
+add_library(static_regex INTERFACE)
+target_compile_features(static_regex INTERFACE cxx_std_26)
+target_sources(static_regex
     INTERFACE
     FILE_SET
         HEADERS
     BASE_DIRS
         include/
     FILES
-        include/rx/regex.hpp
+        include/srx/regex.hpp
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(rx
+    target_compile_options(static_regex
         INTERFACE
             -freflection-latest
             -fconstexpr-steps=4294967295
             -fconstexpr-backtrace-limit=0
     )
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    target_compile_options(rx
+    target_compile_options(static_regex
         INTERFACE
             -freflection
             -fconstexpr-ops-limit=4294967296
@@ -41,14 +41,14 @@ add_subdirectory(tools/ EXCLUDE_FROM_ALL)
 
 add_custom_command(
     OUTPUT
-        single-include/rx/regex.hpp
+        single-include/srx/regex.hpp
     COMMAND
-       amalgamate include/ include/rx/regex.hpp single-include/rx/regex.hpp LICENSE
+       amalgamate include/ include/srx/regex.hpp single-include/srx/regex.hpp LICENSE
     WORKING_DIRECTORY
         ${PROJECT_SOURCE_DIR}
 )
 
 add_custom_target(single-header
     DEPENDS
-        single-include/rx/regex.hpp
+        single-include/srx/regex.hpp
 )

@@ -1,4 +1,4 @@
-// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM "include/rx/regex.hpp"
+// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM "include/srx/regex.hpp"
 // Copyright (C) 2026 Peter Wild
 
 
