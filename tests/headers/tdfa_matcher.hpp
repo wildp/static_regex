@@ -83,7 +83,7 @@ namespace srx::testing
                 std::ranges::advance(it, mlast);
 
                 result.emplace_back(std::move(*ret.first));
-                std::ranges::for_each(result.back(), [x = std::ranges::distance(first, prev_it)](auto& v) { v += x; });
+                std::ranges::for_each(result.back(), [x = std::ranges::distance(first, prev_it)](auto& v){ v += x; });
 
                 if (ret.second == detail::tdfa::no_continue)
                     break;

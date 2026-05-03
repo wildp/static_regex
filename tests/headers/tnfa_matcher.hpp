@@ -48,7 +48,7 @@ namespace srx::testing
     template<typename CharT>
     constexpr auto tnfa_matcher<CharT>::e_closure(closure_t&& closure, const std::size_t k) const -> closure_t
     {
-        static constexpr auto compose = [](const auto& g, const auto& f) {
+        static constexpr auto compose = [](const auto& g, const auto& f){
             return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };
@@ -69,8 +69,8 @@ namespace srx::testing
 
             using epsilon_t = std::pair<state_t, epsilon_tr>;
             auto et = this->get_node(q).out_tr
-                      | std::views::transform([&](const std::size_t i) { return this->get_tr(i); })
-                      | std::views::filter([](const auto& t) { return holds_alternative<epsilon_tr>(t.type); })
+                      | std::views::transform([&](const std::size_t i){ return this->get_tr(i); })
+                      | std::views::filter([](const auto& t){ return holds_alternative<epsilon_tr>(t.type); })
                       | std::views::transform([](const auto& t) -> epsilon_t { return { t.dst, get<epsilon_tr>(t.type) }; })
                       | std::ranges::to<std::vector>();
 
@@ -94,7 +94,7 @@ namespace srx::testing
             if (this->get_node(e.first).is_final)
                 return false;
             return 0 != std::ranges::count_if(this->get_node(e.first).out_tr,
-                                              [&](const std::size_t i) { return not holds_alternative<normal_tr<CharT>>(this->get_tr(i).type); });
+                                              [&](const std::size_t i){ return not holds_alternative<normal_tr<CharT>>(this->get_tr(i).type); });
         });
 
         return new_closure;
@@ -148,7 +148,7 @@ namespace srx::testing
         }
 
         c = e_closure(std::move(c), input.size());
-        auto result = std::ranges::find_if(c, [&](std::size_t arg) { return this->get_node(arg).is_final; }, &closure_entry::first);
+        auto result = std::ranges::find_if(c, [&](std::size_t arg){ return this->get_node(arg).is_final; }, &closure_entry::first);
 
         if (result == c.end())
             return {};

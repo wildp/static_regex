@@ -37,7 +37,7 @@ namespace srx::detail
 
         [[nodiscard]] consteval bool has_match_start() const
         {
-            static constexpr auto pred = [](const capture_info::tag_pair_t& pair) {
+            static constexpr auto pred = [](const capture_info::tag_pair_t& pair){
                 const auto& [fst, snd] = pair;
                 return (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag);
             };
@@ -123,7 +123,7 @@ namespace srx::detail
             {
                 // TODO: switch to using views::enumerate when supported by clang
                 auto scored_pairs = std::views::zip(std::views::iota(0uz),
-                                                    vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
+                                                    vec | std::views::transform([](const auto& t){ return t.second.score_intervals(); }))
                                     | std::ranges::to<std::vector>();
 
                 std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });

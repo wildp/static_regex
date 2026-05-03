@@ -124,7 +124,7 @@ namespace srx::testing
 
                 const std::size_t pos{ raw_data.pos() };
 
-                static constexpr auto is_ascii_word_character = [](CharT c) {
+                static constexpr auto is_ascii_word_character = [](CharT c){
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
                 };
 

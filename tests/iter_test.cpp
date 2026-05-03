@@ -152,13 +152,13 @@ static_assert(owning_test<1>(std::list<char>{ 'H', 'e', 'l', 'l', 'o' }));
 #if __cpp_lib_constexpr_deque >= 202502L
 static_assert(owning_test<2>(std::deque<char>{ 'W', 'o', 'r', 'l', 'd' }));
 #endif
-static_assert(owning_test<2>("Vnqkc"sv | std::views::transform([](char c) { return static_cast<char>(c + 1); })));
+static_assert(owning_test<2>("Vnqkc"sv | std::views::transform([](char c){ return static_cast<char>(c + 1); })));
 static_assert(owning_test<2>(std::vector<char>{ 'V', 'n', 'q', 'k', 'c' } | std::views::transform([](char c) -> char { return c + 1; })));
-static_assert(owning_test<1>("H e l l o"s | std::views::filter([](char c) { return c != ' '; })));
-static_assert(owning_test<1>("Gdkkn"sv | std::views::transform([](char c) { return static_cast<char>(c + 1); })));
+static_assert(owning_test<1>("H e l l o"s | std::views::filter([](char c){ return c != ' '; })));
+static_assert(owning_test<1>("Gdkkn"sv | std::views::transform([](char c){ return static_cast<char>(c + 1); })));
 static_assert(owning_test<1>("Hello World"s | std::views::take(5)));
 static_assert(owning_test<2>("Hello World"s | std::views::drop(6)));
-static_assert(owning_test<1>("Hello World"sv | std::views::take_while([](char c) { return c != ' '; })));
+static_assert(owning_test<1>("Hello World"sv | std::views::take_while([](char c){ return c != ' '; })));
 static_assert(owning_test<1>(std::vector{ "He"sv, "ll"sv, "o"sv } | std::views::join));
 static_assert(owning_test<2>(std::vector{ "Wo"sv, "ld"sv} | std::views::join_with("r"sv)));
 

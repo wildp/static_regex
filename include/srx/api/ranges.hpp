@@ -232,7 +232,7 @@ namespace srx
             if (dynamic_submatches_.empty())
                 throw std::invalid_argument("submatches_view::submatches_view: no submatches specified");
 
-            if (not std::ranges::all_of(dynamic_submatches_, [](int s) { return (-1 == s) or (s < submatch_limit); }))
+            if (not std::ranges::all_of(dynamic_submatches_, [](int s){ return (-1 == s) or (s < submatch_limit); }))
                 throw std::out_of_range("submatches_view::submatches_view: invalid submatch index");
         }
 
@@ -468,7 +468,7 @@ namespace srx
             : current_{ std::move(current) }, end_{ std::move(end) }
             , subrange_{ std::in_place_index<base_subrange_index>, current_.base(), get<0>(*current_).begin() }
         {
-            if (subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } }))
                 find_next();
         }
 
@@ -484,12 +484,12 @@ namespace srx
 
         constexpr value_type operator*() const
         {
-            return subrange_.visit(detail::overloads{ [](const auto& sub) { return *sub.begin(); } });
+            return subrange_.visit(detail::overloads{ [](const auto& sub){ return *sub.begin(); } });
         }
 
         constexpr iterator& operator++()
         {
-            if (subrange_.visit(detail::overloads{ [](auto& sub) { sub.advance(1); return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](auto& sub){ sub.advance(1); return sub.empty(); } }))
                 find_next();
 
             return *this;
@@ -502,7 +502,7 @@ namespace srx
 
         friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
-            return x.subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } });
+            return x.subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } });
         }
 
     private:
@@ -642,7 +642,7 @@ namespace srx
             : parent_{ std::addressof(parent) }, current_{ std::move(current) }, end_{ std::move(end) }
             , subrange_{ std::in_place_index<base_subrange_index>, current_.base(), get<0>(*current_).begin() }
         {
-            if (subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } }))
                 find_next();
         }
 
@@ -658,12 +658,12 @@ namespace srx
 
         constexpr value_type operator*() const
         {
-            return subrange_.visit(detail::overloads{ [](const auto& sub) { return *sub.begin(); } });
+            return subrange_.visit(detail::overloads{ [](const auto& sub){ return *sub.begin(); } });
         }
 
         constexpr iterator& operator++()
         {
-            if (subrange_.visit(detail::overloads{ [](auto& sub) { sub.advance(1); return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](auto& sub){ sub.advance(1); return sub.empty(); } }))
                 find_next();
 
             return *this;
@@ -676,7 +676,7 @@ namespace srx
 
         friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
-            return x.subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } });
+            return x.subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } });
         }
 
     private:
@@ -877,7 +877,7 @@ namespace srx
                 }
                 else
                 {
-                    const auto result = [&]() {
+                    const auto result = [&](){
                         if constexpr (not matcher_type::never_empty)
                         {
                             if (next_.begin() == next_.end())

@@ -76,7 +76,7 @@ namespace srx::detail
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
         {
-            static constexpr auto compose = [](const auto& g, const auto& f) {
+            static constexpr auto compose = [](const auto& g, const auto& f){
                 return [=]<typename T>(T&& arg) {
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
@@ -101,7 +101,7 @@ namespace srx::detail
 
         [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map)
         {
-            static constexpr auto compose = [](const auto& g, const auto& f) {
+            static constexpr auto compose = [](const auto& g, const auto& f){
                 return [=]<typename T>(T&& arg) {
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
@@ -130,7 +130,7 @@ namespace srx::detail
             std::ranges::sort(set);
             auto [tmp_beg, tmp_end] = std::ranges::unique(set);
             set.erase(tmp_beg, tmp_end);
-            std::erase_if(set, [](tag_number_t n) { return n < 0; });
+            std::erase_if(set, [](tag_number_t n){ return n < 0; });
 
             for (tag_number_t i{ 0 }; std::cmp_less(i, set.size()); ++i)
                 remapper[set.at(i)] = i;

@@ -189,7 +189,7 @@ namespace srx::detail::tdfa
         closure_t new_closure;
 
         closure_t stack{ std::move(c) };
-        std::erase_if(stack, [](const closure_entry& ce) { return not ce.new_tag_seq.empty(); });
+        std::erase_if(stack, [](const closure_entry& ce){ return not ce.new_tag_seq.empty(); });
         std::ranges::reverse(stack);
         bitset_t visited(tnfa_ptr_->node_count(), false);
 
@@ -326,7 +326,7 @@ namespace srx::detail::tdfa
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto is_final = [this](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_final; };
+        const auto is_final = [this](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
         const auto it = std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state);
         std::optional<continue_at_t> continue_at;
         if (it != current_cfg.end())
@@ -353,7 +353,7 @@ namespace srx::detail::tdfa
         if (flags_.enable_fallback)
         {
             /* set fallback state status for fallback_regops */
-            const auto is_fallback = [&](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_fallback; };
+            const auto is_fallback = [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; };
             const auto it2 = std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state);
             if (it2 != current_cfg.end())
             {
@@ -453,7 +453,7 @@ namespace srx::detail::tdfa
     template<typename CharT>
     constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, tag_t tag) const
     {
-        return std::ranges::contains(h, tag, [](auto x) { return x < 0 ? -x : x; });
+        return std::ranges::contains(h, tag, [](auto x){ return x < 0 ? -x : x; });
     }
 
     template<typename CharT>
@@ -659,7 +659,7 @@ namespace srx::detail::tdfa
     template<typename CharT>
     constexpr void factory<CharT>::factory_init()
     {
-        static constexpr auto compose = [](const auto& g, const auto& f) {
+        static constexpr auto compose = [](const auto& g, const auto& f){
             return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };
@@ -1137,7 +1137,7 @@ namespace srx::detail::tdfa
         for (reg_t& reg : dfa.final_registers_)
             reg = remap.at(reg);
 
-        dfa.register_count_ = 1 + std::ranges::max(remap | std::views::filter([](reg_t r) { return r != std::numeric_limits<reg_t>::max(); }));
+        dfa.register_count_ = 1 + std::ranges::max(remap | std::views::filter([](reg_t r){ return r != std::numeric_limits<reg_t>::max(); }));
     }
 
     template<typename CharT>
@@ -1435,7 +1435,7 @@ namespace srx::detail::tdfa
                     }
                     else if (x != no_register and y == no_register)
                     {
-                        if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t) { return not overlapping_lifetimes.at(t, cpy->src); }))
+                        if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t){ return not overlapping_lifetimes.at(t, cpy->src); }))
                         {
                             representative_map.at(cpy->src) = x;
 
@@ -1447,7 +1447,7 @@ namespace srx::detail::tdfa
                     }
                     else if (x == no_register and y != no_register)
                     {
-                        if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t) { return not overlapping_lifetimes.at(t, op.dst); }))
+                        if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t){ return not overlapping_lifetimes.at(t, op.dst); }))
                         {
                             representative_map.at(op.dst) = y;
 
@@ -1475,7 +1475,7 @@ namespace srx::detail::tdfa
 
                 // /* we don't have ranges::cartesian_product yet :( */
                 // if (std::ranges::all_of(std::views::cartesian_product(equivalence_classes.at(x), equivalence_classes.at(y)),
-                //                         [&](const std::tuple<reg_t, reg_t>& pair) { return not overlapping_lifetimes.at(get<0>(pair), get<1>(pair)); }))
+                //                         [&](const std::tuple<reg_t, reg_t>& pair){ return not overlapping_lifetimes.at(get<0>(pair), get<1>(pair)); }))
                 // {
                 //     /* do thing */
                 // }
@@ -1522,7 +1522,7 @@ namespace srx::detail::tdfa
                 if (representative_map.at(j) != j)
                     continue;
 
-                if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t) { return not overlapping_lifetimes.at(i, t); }))
+                if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t){ return not overlapping_lifetimes.at(i, t); }))
                 {
                     representative_map.at(i) = j;
 
@@ -1896,8 +1896,8 @@ namespace srx::detail
             // TODO: switch to using views::enumerate when supported by clang
             auto scored_pairs = std::views::zip(std::views::iota(0uz),
                                                 node.tr
-                                                | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
-                                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
+                                                | std::views::transform([](const auto& t){ return t.cs.score_intervals(); }))
+                                | std::views::filter([largest_index](const auto& x){ return get<0>(x) != largest_index; })
                                 | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
@@ -1993,13 +1993,13 @@ namespace srx::detail
         using node_type = tdfa::node<char_type>;
 
         auto keys = nodes_
-                    | std::views::transform([](const node_type& n) {
-                        return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr);
-                    })
+                    | std::views::transform([](const node_type& n){
+                          return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr);
+                      })
                     | std::ranges::to<std::vector>();
 
         auto values = std::views::iota(0uz, nodes_.size())
-                    | std::ranges::to<std::vector>();
+                      | std::ranges::to<std::vector>();
 
         // TODO: switch to using std::flat_multimap instead when constexpr is supported
         //       (but an unordered flat set would be much better)

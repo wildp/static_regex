@@ -70,7 +70,7 @@ namespace srx::detail
 
                 if (pos == cat.idxs.size())
                 {
-                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i) { return lengths.at(i); });
+                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
                     lengths.at(idx) = std::ranges::fold_left(tmp, min_max_t{ 0, 0 }, [](const min_max_t& x, const min_max_t& y) -> min_max_t {
 #if __cpp_lib_saturation_arithmetic >= 202603L
                         return { std::saturating_add(x.first, y.first), std::saturating_add(x.second, y.second) };
@@ -94,7 +94,7 @@ namespace srx::detail
 
                 if (pos == atl.idxs.size())
                 {
-                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i) { return lengths.at(i); });
+                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
 
                     if (std::ranges::empty(tmp))
                         lengths.at(idx) = { 0, no_upper_bound };
@@ -320,11 +320,11 @@ namespace srx::detail
                 if (pos == cat.idxs.size())
                 {
                     auto tmp = cat.idxs
-                               | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                               | std::views::transform([&](std::size_t i){ return const_len.at(i); })
                                | std::ranges::to<std::vector>();
 
-                    if (std::ranges::all_of(tmp, [](const opt_t& o) { return o.has_value(); }))
-                        const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o) { return *o; }),
+                    if (std::ranges::all_of(tmp, [](const opt_t& o){ return o.has_value(); }))
+                        const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o){ return *o; }),
                                                                    0, std::plus{});
 
                     stack.pop_back();
@@ -344,12 +344,12 @@ namespace srx::detail
                 if (pos == atl.idxs.size())
                 {
                     auto tmp = atl.idxs
-                               | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                               | std::views::transform([&](std::size_t i){ return const_len.at(i); })
                                | std::ranges::to<std::vector>();
 
                     auto first = *std::ranges::begin(tmp);
 
-                    if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o) { return o == first; }))
+                    if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o){ return o == first; }))
                         const_len.at(idx) = first;
 
                     stack.pop_back();

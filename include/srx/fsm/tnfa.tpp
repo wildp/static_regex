@@ -584,7 +584,7 @@ namespace srx::detail
 
         /* remove dead and unreachable nodes and transitions from nodes */
 
-        const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i) { return rt.at(i); };
+        const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i){ return rt.at(i); };
 
         for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
         {
@@ -823,7 +823,7 @@ namespace srx::detail
             outer_visit.emplace_back(
                 edge,
                 tr_vec
-                | std::views::transform([this](const tr_index i) { return transitions_.at(i).dst; })
+                | std::views::transform([this](const tr_index i){ return transitions_.at(i).dst; })
                 | std::ranges::to<std::vector>()
             );
         }
@@ -836,7 +836,7 @@ namespace srx::detail
 
             /* perform a modified epsilon closure */
 
-            auto pred = [&](const tnfa::transition<char_type>& tr) {
+            auto pred = [&](const tnfa::transition<char_type>& tr){
                 /* skip normal transitions and eof anchors */
                 if (holds_alternative<normal_tr>(tr.type) or holds_alternative<eof_anchor_tr>(tr.type))
                     return false;
@@ -1086,7 +1086,7 @@ namespace srx::detail
 
         if (wraparound_lb_closure.has_value())
         {
-            const auto fn = [this](const tr_index i) {
+            const auto fn = [this](const tr_index i){
                 const auto& tr = get_tr(i);
                 return std::cref(get<lookbehind_1_tr>(tr.type).cs);
             };
@@ -1164,7 +1164,7 @@ namespace srx::detail
             if (edges.empty())
                 continue;
 
-            const auto fn = [&](const charset_type& edge) {
+            const auto fn = [&](const charset_type& edge){
                 std::size_t cont_index{ std::numeric_limits<wraparound_index>::max() };
 
                 for (std::size_t i{ 0 }, i_max{ wrap_starts.size() }; i < i_max; ++i)
@@ -1204,7 +1204,7 @@ namespace srx::detail
         {
             auto& mapped_states = all_mapped_states[edge];
 
-            auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr) {
+            auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr){
                 if (holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                     return false;
 
@@ -1222,7 +1222,7 @@ namespace srx::detail
             ec.erase(first, last);
 
             /* create new state for each state in ec; defer making nodes fallback to later */
-            auto new_states = ec | std::views::transform([this](auto&&) { return node_create(); }) | std::ranges::to<std::vector>();
+            auto new_states = ec | std::views::transform([this](auto&&){ return node_create(); }) | std::ranges::to<std::vector>();
             mapped_states.replace(std::move(ec), std::move(new_states));
         }
 

@@ -55,7 +55,7 @@ namespace srx::testing
         static_assert(std::same_as<char_type, CharT>);
         static_assert(std::same_as<char_type, typename ast_t::char_class::underlying_char_type>);
 
-        static constexpr auto append_int = [](string_type& result, const std::integral auto value) {
+        static constexpr auto append_int = [](string_type& result, const std::integral auto value){
             static constexpr decltype(value) base{ 10 };
             std::vector<char> buf;
             if (value == 0)
@@ -68,7 +68,7 @@ namespace srx::testing
             std::ranges::move(buf.rbegin(), buf.rend(), std::back_insert_iterator(result));
         };
 
-        static constexpr auto escape = [](string_type& result, char_type c) {
+        static constexpr auto escape = [](string_type& result, char_type c){
             if (c == '\177' or (c >= '\0' and c < '\40'))
             {
                 result += '\\';

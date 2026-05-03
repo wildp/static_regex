@@ -138,7 +138,7 @@ namespace srx::detail
     template<static_charset Sc>
     [[gnu::always_inline]] constexpr bool tr_possible(const typename decltype(Sc)::char_type c)
     {
-#ifdef __clang_major__
+#ifndef __GNUC_MINOR__
         // TODO: change to use structured binding when supported
         template for (constexpr auto pair : Sc.get_intervals())
         {
@@ -623,7 +623,6 @@ namespace srx::detail
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
         static constexpr bool scalar_outer_state(Result result, I it, const S last)
-            requires (DFA.continue_nodes.size() > 1 and (Flags.enable_fallback or not fixed_length))
         {
             if constexpr (DFA.register_count > 0)
                 ++result.gen.current;
@@ -753,7 +752,7 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            constexpr auto flags = []() consteval {
+            static constexpr auto flags = []() consteval {
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
@@ -827,14 +826,14 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            constexpr auto flags = []() {
+            static constexpr auto flags = [](){
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
                     return std::simd::flag_default;
             }();
 
-            static constexpr bool avoid_simd = []() {
+            static constexpr bool avoid_simd = [](){
                 charset<char_type> acc;
                 for (const auto& tr : DFA.nodes[DFAState])
                     acc |= tr.cs;
@@ -944,8 +943,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue);
+#endif
             result<I> res{ first };
 
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
@@ -980,8 +984,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue and (Flags.maybe_no_empty)
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue and (Flags.maybe_no_empty));
+#endif
             result<I> res{ first };
 
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
@@ -1034,8 +1043,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue);
+#endif
             result<I> res{ first };
             gen_info gen{};
 
@@ -1077,8 +1091,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue and (Flags.maybe_no_empty)
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue and (Flags.maybe_no_empty));
+#endif
             result<I> res{ first };
             gen_info gen{};
 

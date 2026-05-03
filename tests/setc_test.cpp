@@ -83,7 +83,7 @@ namespace
     consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
     {
         const auto input = make_cs_vec(arg);
-        const auto refs = input | std::views::transform([](const auto& b) { return std::cref(b); }) | std::ranges::to<std::vector>();
+        const auto refs = input | std::views::transform([](const auto& b){ return std::cref(b); }) | std::ranges::to<std::vector>();
         return srx::detail::charset<char>::partition(refs) == make_cs_vec(result);
     }
 }

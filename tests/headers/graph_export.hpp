@@ -52,7 +52,7 @@ namespace srx::testing
         if (is_negated)
             result += '^';
 
-        static constexpr auto get_char = [](char_type c) {
+        static constexpr auto get_char = [](char_type c){
             if (c == '-' or c == '[' or c == ']' or c == '^')
                 return std::format("\\{}", c);
 

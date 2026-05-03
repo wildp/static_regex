@@ -676,7 +676,7 @@ namespace srx::detail
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
                 requires (asr.type == assert_type::ascii_word_boundary)
             {
-                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
+                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c){
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
                 };
 
@@ -690,7 +690,7 @@ namespace srx::detail
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
                 requires (asr.type == assert_type::not_ascii_word_boundary)
             {
-                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
+                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c){
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
                 };
 

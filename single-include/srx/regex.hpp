@@ -3860,7 +3860,7 @@ namespace srx::detail
 
         [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
         {
-            static constexpr auto compose = [](const auto& g, const auto& f) {
+            static constexpr auto compose = [](const auto& g, const auto& f){
                 return [=]<typename T>(T&& arg) {
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
@@ -3885,7 +3885,7 @@ namespace srx::detail
 
         [[nodiscard]] constexpr tag_remapper_t remap_tags(const std::flat_map<tag_number_t, pair_entry>& map)
         {
-            static constexpr auto compose = [](const auto& g, const auto& f) {
+            static constexpr auto compose = [](const auto& g, const auto& f){
                 return [=]<typename T>(T&& arg) {
                     return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
                 };
@@ -3914,7 +3914,7 @@ namespace srx::detail
             std::ranges::sort(set);
             auto [tmp_beg, tmp_end] = std::ranges::unique(set);
             set.erase(tmp_beg, tmp_end);
-            std::erase_if(set, [](tag_number_t n) { return n < 0; });
+            std::erase_if(set, [](tag_number_t n){ return n < 0; });
 
             for (tag_number_t i{ 0 }; std::cmp_less(i, set.size()); ++i)
                 remapper[set.at(i)] = i;
@@ -4188,7 +4188,7 @@ namespace srx::detail
 
                 if (pos == cat.idxs.size())
                 {
-                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i) { return lengths.at(i); });
+                    auto tmp = cat.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
                     lengths.at(idx) = std::ranges::fold_left(tmp, min_max_t{ 0, 0 }, [](const min_max_t& x, const min_max_t& y) -> min_max_t {
 #if __cpp_lib_saturation_arithmetic >= 202603L
                         return { std::saturating_add(x.first, y.first), std::saturating_add(x.second, y.second) };
@@ -4212,7 +4212,7 @@ namespace srx::detail
 
                 if (pos == atl.idxs.size())
                 {
-                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i) { return lengths.at(i); });
+                    auto tmp = atl.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
 
                     if (std::ranges::empty(tmp))
                         lengths.at(idx) = { 0, no_upper_bound };
@@ -4437,11 +4437,11 @@ namespace srx::detail
                 if (pos == cat.idxs.size())
                 {
                     auto tmp = cat.idxs
-                               | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                               | std::views::transform([&](std::size_t i){ return const_len.at(i); })
                                | std::ranges::to<std::vector>();
 
-                    if (std::ranges::all_of(tmp, [](const opt_t& o) { return o.has_value(); }))
-                        const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o) { return *o; }),
+                    if (std::ranges::all_of(tmp, [](const opt_t& o){ return o.has_value(); }))
+                        const_len.at(idx) = std::ranges::fold_left(tmp | std::views::transform([](const opt_t& o){ return *o; }),
                                                                    0, std::plus{});
 
                     stack.pop_back();
@@ -4461,12 +4461,12 @@ namespace srx::detail
                 if (pos == atl.idxs.size())
                 {
                     auto tmp = atl.idxs
-                               | std::views::transform([&](std::size_t i) { return const_len.at(i); })
+                               | std::views::transform([&](std::size_t i){ return const_len.at(i); })
                                | std::ranges::to<std::vector>();
 
                     auto first = *std::ranges::begin(tmp);
 
-                    if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o) { return o == first; }))
+                    if (std::ranges::size(tmp) > 0 and std::ranges::all_of(tmp, [&](const opt_t& o){ return o == first; }))
                         const_len.at(idx) = first;
 
                     stack.pop_back();
@@ -7028,7 +7028,7 @@ namespace srx::detail
 
         /* remove dead and unreachable nodes and transitions from nodes */
 
-        const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i) { return rt.at(i); };
+        const auto pred = [&rt = std::as_const(removed_transitions)](const std::size_t i){ return rt.at(i); };
 
         for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
         {
@@ -7266,7 +7266,7 @@ namespace srx::detail
             outer_visit.emplace_back(
                 edge,
                 tr_vec
-                | std::views::transform([this](const tr_index i) { return transitions_.at(i).dst; })
+                | std::views::transform([this](const tr_index i){ return transitions_.at(i).dst; })
                 | std::ranges::to<std::vector>()
             );
         }
@@ -7279,7 +7279,7 @@ namespace srx::detail
 
             /* perform a modified epsilon closure */
 
-            auto pred = [&](const tnfa::transition<char_type>& tr) {
+            auto pred = [&](const tnfa::transition<char_type>& tr){
                 /* skip normal transitions and eof anchors */
                 if (holds_alternative<normal_tr>(tr.type) or holds_alternative<eof_anchor_tr>(tr.type))
                     return false;
@@ -7520,7 +7520,7 @@ namespace srx::detail
 
         if (wraparound_lb_closure.has_value())
         {
-            const auto fn = [this](const tr_index i) {
+            const auto fn = [this](const tr_index i){
                 const auto& tr = get_tr(i);
                 return std::cref(get<lookbehind_1_tr>(tr.type).cs);
             };
@@ -7596,7 +7596,7 @@ namespace srx::detail
             if (edges.empty())
                 continue;
 
-            const auto fn = [&](const charset_type& edge) {
+            const auto fn = [&](const charset_type& edge){
                 std::size_t cont_index{ std::numeric_limits<wraparound_index>::max() };
 
                 for (std::size_t i{ 0 }, i_max{ wrap_starts.size() }; i < i_max; ++i)
@@ -7635,7 +7635,7 @@ namespace srx::detail
         {
             auto& mapped_states = all_mapped_states[edge];
 
-            auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr) {
+            auto pred = [&e = std::as_const(edge)](const tnfa::transition<char_type>& tr){
                 if (holds_alternative<tnfa::normal_tr<char_type>>(tr.type))
                     return false;
 
@@ -7653,7 +7653,7 @@ namespace srx::detail
             ec.erase(first, last);
 
             /* create new state for each state in ec; defer making nodes fallback to later */
-            auto new_states = ec | std::views::transform([this](auto&&) { return node_create(); }) | std::ranges::to<std::vector>();
+            auto new_states = ec | std::views::transform([this](auto&&){ return node_create(); }) | std::ranges::to<std::vector>();
             mapped_states.replace(std::move(ec), std::move(new_states));
         }
 
@@ -8269,7 +8269,7 @@ namespace srx::detail::tdfa
         closure_t new_closure;
 
         closure_t stack{ std::move(c) };
-        std::erase_if(stack, [](const closure_entry& ce) { return not ce.new_tag_seq.empty(); });
+        std::erase_if(stack, [](const closure_entry& ce){ return not ce.new_tag_seq.empty(); });
         std::ranges::reverse(stack);
         bitset_t visited(tnfa_ptr_->node_count(), false);
 
@@ -8406,7 +8406,7 @@ namespace srx::detail::tdfa
 
         /* make final regops if state is an accepting state */
         const auto& current_cfg = state_info_.back().config;
-        const auto is_final = [this](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_final; };
+        const auto is_final = [this](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
         const auto it = std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state);
         std::optional<continue_at_t> continue_at;
         if (it != current_cfg.end())
@@ -8433,7 +8433,7 @@ namespace srx::detail::tdfa
         if (flags_.enable_fallback)
         {
             /* set fallback state status for fallback_regops */
-            const auto is_fallback = [&](std::size_t arg) { return tnfa_ptr_->get_node(arg).is_fallback; };
+            const auto is_fallback = [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; };
             const auto it2 = std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state);
             if (it2 != current_cfg.end())
             {
@@ -8533,7 +8533,7 @@ namespace srx::detail::tdfa
     template<typename CharT>
     constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, tag_t tag) const
     {
-        return std::ranges::contains(h, tag, [](auto x) { return x < 0 ? -x : x; });
+        return std::ranges::contains(h, tag, [](auto x){ return x < 0 ? -x : x; });
     }
 
     template<typename CharT>
@@ -8737,7 +8737,7 @@ namespace srx::detail::tdfa
     template<typename CharT>
     constexpr void factory<CharT>::factory_init()
     {
-        static constexpr auto compose = [](const auto& g, const auto& f) {
+        static constexpr auto compose = [](const auto& g, const auto& f){
             return [=]<typename T>(T&& arg) {
                 return std::invoke(g, std::invoke(f, std::forward<T>(arg)));
             };
@@ -9210,7 +9210,7 @@ namespace srx::detail::tdfa
         for (reg_t& reg : dfa.final_registers_)
             reg = remap.at(reg);
 
-        dfa.register_count_ = 1 + std::ranges::max(remap | std::views::filter([](reg_t r) { return r != std::numeric_limits<reg_t>::max(); }));
+        dfa.register_count_ = 1 + std::ranges::max(remap | std::views::filter([](reg_t r){ return r != std::numeric_limits<reg_t>::max(); }));
     }
 
     template<typename CharT>
@@ -9508,7 +9508,7 @@ namespace srx::detail::tdfa
                     }
                     else if (x != no_register and y == no_register)
                     {
-                        if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t) { return not overlapping_lifetimes.at(t, cpy->src); }))
+                        if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t){ return not overlapping_lifetimes.at(t, cpy->src); }))
                         {
                             representative_map.at(cpy->src) = x;
 
@@ -9520,7 +9520,7 @@ namespace srx::detail::tdfa
                     }
                     else if (x == no_register and y != no_register)
                     {
-                        if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t) { return not overlapping_lifetimes.at(t, op.dst); }))
+                        if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t){ return not overlapping_lifetimes.at(t, op.dst); }))
                         {
                             representative_map.at(op.dst) = y;
 
@@ -9587,7 +9587,7 @@ namespace srx::detail::tdfa
                 if (representative_map.at(j) != j)
                     continue;
 
-                if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t) { return not overlapping_lifetimes.at(i, t); }))
+                if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t){ return not overlapping_lifetimes.at(i, t); }))
                 {
                     representative_map.at(i) = j;
 
@@ -9953,8 +9953,8 @@ namespace srx::detail
 
             auto scored_pairs = std::views::zip(std::views::iota(0uz),
                                                 node.tr
-                                                | std::views::transform([](const auto& t) { return t.cs.score_intervals(); }))
-                                | std::views::filter([largest_index](const auto& x) { return get<0>(x) != largest_index; })
+                                                | std::views::transform([](const auto& t){ return t.cs.score_intervals(); }))
+                                | std::views::filter([largest_index](const auto& x){ return get<0>(x) != largest_index; })
                                 | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
@@ -10046,13 +10046,13 @@ namespace srx::detail
         using node_type = tdfa::node<char_type>;
 
         auto keys = nodes_
-                    | std::views::transform([](const node_type& n) {
-                        return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr);
-                    })
+                    | std::views::transform([](const node_type& n){
+                          return tdfa::hash_node(n.tr.begin(), n.tr.end(), n.default_tr);
+                      })
                     | std::ranges::to<std::vector>();
 
         auto values = std::views::iota(0uz, nodes_.size())
-                    | std::ranges::to<std::vector>();
+                      | std::ranges::to<std::vector>();
 
         static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); };
         std::ranges::sort(std::views::zip(keys, values), {}, key_proj);
@@ -10141,7 +10141,7 @@ namespace srx::detail
 
         [[nodiscard]] consteval bool has_match_start() const
         {
-            static constexpr auto pred = [](const capture_info::tag_pair_t& pair) {
+            static constexpr auto pred = [](const capture_info::tag_pair_t& pair){
                 const auto& [fst, snd] = pair;
                 return (fst.tag_number == start_of_input_tag or snd.tag_number == start_of_input_tag);
             };
@@ -10226,7 +10226,7 @@ namespace srx::detail
             if (not vec.empty())
             {
                 auto scored_pairs = std::views::zip(std::views::iota(0uz),
-                                                    vec | std::views::transform([](const auto& t) { return t.second.score_intervals(); }))
+                                                    vec | std::views::transform([](const auto& t){ return t.second.score_intervals(); }))
                                     | std::ranges::to<std::vector>();
 
                 std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
@@ -11614,7 +11614,7 @@ namespace srx::detail
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
                 requires (asr.type == assert_type::ascii_word_boundary)
             {
-                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
+                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c){
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
                 };
 
@@ -11628,7 +11628,7 @@ namespace srx::detail
             [[gnu::always_inline]] static constexpr bool check_impl(const I first, const S last, const I it)
                 requires (asr.type == assert_type::not_ascii_word_boundary)
             {
-                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c) {
+                static constexpr auto is_ascii_word_character = [](std::iter_value_t<I> c){
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
                 };
 
@@ -12118,7 +12118,7 @@ namespace srx::detail
     template<static_charset Sc>
     [[gnu::always_inline]] constexpr bool tr_possible(const typename decltype(Sc)::char_type c)
     {
-#ifdef __clang_major__
+#ifndef __GNUC_MINOR__
         template for (constexpr auto pair : Sc.get_intervals())
         {
             if (pair.first <= c and c <= pair.second)
@@ -12600,7 +12600,6 @@ namespace srx::detail
 
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
         static constexpr bool scalar_outer_state(Result result, I it, const S last)
-            requires (DFA.continue_nodes.size() > 1 and (Flags.enable_fallback or not fixed_length))
         {
             if constexpr (DFA.register_count > 0)
                 ++result.gen.current;
@@ -12729,7 +12728,7 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            constexpr auto flags = []() consteval {
+            static constexpr auto flags = []() consteval {
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
@@ -12803,14 +12802,14 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            constexpr auto flags = []() {
+            static constexpr auto flags = [](){
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
                     return std::simd::flag_default;
             }();
 
-            static constexpr bool avoid_simd = []() {
+            static constexpr bool avoid_simd = [](){
                 charset<char_type> acc;
                 for (const auto& tr : DFA.nodes[DFAState])
                     acc |= tr.cs;
@@ -12920,8 +12919,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue);
+#endif
             result<I> res{ first };
 
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
@@ -12956,8 +12960,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue and (Flags.maybe_no_empty)
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue and (Flags.maybe_no_empty));
+#endif
             result<I> res{ first };
 
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
@@ -13010,8 +13019,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue);
+#endif
             result<I> res{ first };
             gen_info gen{};
 
@@ -13053,8 +13067,13 @@ namespace srx::detail
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
             requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
         [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
+#ifndef __GNUC_MINOR__
             requires result<I>::has_continue and (Flags.maybe_no_empty)
+#endif
         {
+#ifdef __GNUC_MINOR__
+            static_assert(result<I>::has_continue and (Flags.maybe_no_empty));
+#endif
             result<I> res{ first };
             gen_info gen{};
 
@@ -14073,7 +14092,7 @@ namespace srx
             if (dynamic_submatches_.empty())
                 throw std::invalid_argument("submatches_view::submatches_view: no submatches specified");
 
-            if (not std::ranges::all_of(dynamic_submatches_, [](int s) { return (-1 == s) or (s < submatch_limit); }))
+            if (not std::ranges::all_of(dynamic_submatches_, [](int s){ return (-1 == s) or (s < submatch_limit); }))
                 throw std::out_of_range("submatches_view::submatches_view: invalid submatch index");
         }
 
@@ -14307,7 +14326,7 @@ namespace srx
             : current_{ std::move(current) }, end_{ std::move(end) }
             , subrange_{ std::in_place_index<base_subrange_index>, current_.base(), get<0>(*current_).begin() }
         {
-            if (subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } }))
                 find_next();
         }
 
@@ -14323,12 +14342,12 @@ namespace srx
 
         constexpr value_type operator*() const
         {
-            return subrange_.visit(detail::overloads{ [](const auto& sub) { return *sub.begin(); } });
+            return subrange_.visit(detail::overloads{ [](const auto& sub){ return *sub.begin(); } });
         }
 
         constexpr iterator& operator++()
         {
-            if (subrange_.visit(detail::overloads{ [](auto& sub) { sub.advance(1); return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](auto& sub){ sub.advance(1); return sub.empty(); } }))
                 find_next();
 
             return *this;
@@ -14341,7 +14360,7 @@ namespace srx
 
         friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
-            return x.subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } });
+            return x.subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } });
         }
 
     private:
@@ -14480,7 +14499,7 @@ namespace srx
             : parent_{ std::addressof(parent) }, current_{ std::move(current) }, end_{ std::move(end) }
             , subrange_{ std::in_place_index<base_subrange_index>, current_.base(), get<0>(*current_).begin() }
         {
-            if (subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } }))
                 find_next();
         }
 
@@ -14496,12 +14515,12 @@ namespace srx
 
         constexpr value_type operator*() const
         {
-            return subrange_.visit(detail::overloads{ [](const auto& sub) { return *sub.begin(); } });
+            return subrange_.visit(detail::overloads{ [](const auto& sub){ return *sub.begin(); } });
         }
 
         constexpr iterator& operator++()
         {
-            if (subrange_.visit(detail::overloads{ [](auto& sub) { sub.advance(1); return sub.empty(); } }))
+            if (subrange_.visit(detail::overloads{ [](auto& sub){ sub.advance(1); return sub.empty(); } }))
                 find_next();
 
             return *this;
@@ -14514,7 +14533,7 @@ namespace srx
 
         friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
         {
-            return x.subrange_.visit(detail::overloads{ [](const auto& sub) { return sub.empty(); } });
+            return x.subrange_.visit(detail::overloads{ [](const auto& sub){ return sub.empty(); } });
         }
 
     private:
@@ -14712,7 +14731,7 @@ namespace srx
                 }
                 else
                 {
-                    const auto result = [&]() {
+                    const auto result = [&](){
                         if constexpr (not matcher_type::never_empty)
                         {
                             if (next_.begin() == next_.end())
