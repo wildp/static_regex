@@ -12809,6 +12809,13 @@ namespace srx::detail
                     return std::simd::flag_default;
             }();
 
+            static constexpr static_charset combined_cs = []{
+                charset<char_type> result;
+                template for (constexpr auto& tr : DFA.nodes[DFAState])
+                    result |= tr.cs;
+                return static_charset{ result };
+            }();
+
             static constexpr bool avoid_simd = [](){
                 charset<char_type> acc;
                 for (const auto& tr : DFA.nodes[DFAState])
@@ -12829,17 +12836,7 @@ namespace srx::detail
                 for (; i + vec_type::size() < max; i += vec_type::size())
                 {
                     const auto block = std::simd::unchecked_load<vec_type>(it, last, flags);
-
-                    mask_type mask{};
-
-#ifdef __GNUC_MINOR__
-                    [&](){ /* NB: This is a workaround for a name mangling bug */
-#endif
-                    template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
-                        mask |= vector_tr_find<tr.cs>(block);
-#ifdef __GNUC_MINOR__
-                    }();
-#endif
+                    const auto mask = vector_tr_find<combined_cs>(block);
 
                     if (vector_candidate_check<DFAState, min_length>(result, it, last, mask.to_ullong()))
                         return true;
@@ -12853,17 +12850,7 @@ namespace srx::detail
                     const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
                     const auto block = std::simd::partial_load<vec_type>(it, last, epi_mask, flags);
-
-                    mask_type mask{};
-
-#ifdef __GNUC_MINOR__
-                    [&](){ /* NB: This is a workaround for a name mangling bug */
-#endif
-                    template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
-                        mask |= vector_tr_find<tr.cs>(block);
-#ifdef __GNUC_MINOR__
-                    }();
-#endif
+                    const auto mask = vector_tr_find<combined_cs>(block);
 
                     if (vector_candidate_check<DFAState, min_length>(result, it, last, (mask & epi_mask).to_ullong()))
                         return true;
