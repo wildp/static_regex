@@ -16,7 +16,8 @@
 
 #include <srx/api/regex_error.hpp>
 #include <srx/ast/tree.hpp>
-#include <srx/etc/cdarray.hpp>
+
+#include "cdarray.hpp"
 
 
 namespace srx::testing
@@ -84,9 +85,8 @@ namespace srx::testing
     template<typename I>
     struct matcher_state
     {
-        using tags_t         = detail::cdarray<std::optional<I>>;
+        using tags_t         = cdarray<std::optional<I>>;
         using continuation_t = std::vector<cont_val>;
-
 
         I              it;
         continuation_t cont;
@@ -94,13 +94,12 @@ namespace srx::testing
 
         constexpr matcher_state(I first, std::size_t tag_count, std::size_t start_state)
             : it{ first }, cont{ start_state }, tags(tag_count) {}
-    };
 
-    enum class rc : unsigned char
-    {
-        match_failure,
-        match_success,
-        match_continue,
+        constexpr matcher_state(I first, std::size_t tag_count, std::size_t start_state, std::size_t end_state)
+            : it{ first }, cont{ end_state, start_state }, tags(tag_count) {}
+
+        constexpr matcher_state(I first, const tags_t& tags, std::size_t start_state)
+            : it{ first }, cont{ start_state }, tags(tags) {}
     };
 
 
@@ -115,6 +114,7 @@ namespace srx::testing
 
         const auto& ci = this->get_capture_info();
         const std::size_t capture_count{ ci.capture_count() };
+        const std::size_t pos_end{ this->get_all_exprs().size() };
 
         auto visitor = [&, this](this const auto& rec, state_t& s) -> bool {
             while (not s.cont.empty())
@@ -128,64 +128,44 @@ namespace srx::testing
                     return ('0' <= c and c <= '9') or ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z') or (c == '_');
                 };
 
-                const rc result = this->get_expr(pos).visit(detail::overloads{
-                    [&](const typename tree_matcher::assertion& asr) -> rc {
+                if (pos >= pos_end)
+                    return s.it == last;
+
+                const bool result = this->get_expr(pos).visit(detail::overloads{
+                    [&](const typename tree_matcher::assertion& asr) -> bool {
                         using detail::assert_type;
                         switch (asr.type)
                         {
                         case assert_type::text_start:
-                            if (s.it == first)
-                                return rc::match_continue;
-                            break;
+                            return s.it == first;
                         case assert_type::text_end:
-                            if (s.it == last)
-                                return rc::match_continue;
-                            break;
+                            return s.it == last;
                         case assert_type::line_start:
-                            if (s.it == first or *std::ranges::prev(s.it) == '\n')
-                                return rc::match_continue;
-                            break;
+                            return s.it == first or *std::ranges::prev(s.it) == '\n';
                         case assert_type::line_end:
-                            if (s.it == last or *s.it == '\n')
-                                return rc::match_continue;
-                            break;
+                            return s.it == last or *s.it == '\n';
                         case assert_type::ascii_word_boundary:
                             if (s.it == first or not is_ascii_word_character(*std::ranges::prev(s.it)))
-                            {
-                                if (s.it != last and is_ascii_word_character(*s.it))
-                                    return rc::match_continue;
-                            }
+                                return s.it != last and is_ascii_word_character(*s.it);
                             else /* if (s.it != first and is_ascii_word_character(*std::ranges::prev(s.it))) */
-                            {
-                                if (s.it == last or not is_ascii_word_character(*s.it))
-                                    return rc::match_continue;
-                            }
-                            break;
+                                return s.it == last or not is_ascii_word_character(*s.it);
                         case assert_type::not_ascii_word_boundary:
                             if (s.it == first or not is_ascii_word_character(*std::ranges::prev(s.it)))
-                            {
-                                if (s.it == last or not is_ascii_word_character(*s.it))
-                                    return rc::match_continue;
-
-                            }
+                                return s.it == last or not is_ascii_word_character(*s.it);
                             else /* if (s.it != first and is_ascii_word_character(*std::ranges::prev(s.it))) */
-                            {
-                                if (s.it != last and is_ascii_word_character(*s.it))
-                                    return rc::match_continue;
-                            }
-                            break;
+                                return s.it != last and is_ascii_word_character(*s.it);
                         default:
                             throw tree_error("Encountered unimplemented assertion while matching");
                         }
-                        return rc::match_failure;
+                        return false;
                     },
-                    [&](const typename tree_matcher::concat& cat) -> rc {
+                    [&](const typename tree_matcher::concat& cat) -> bool {
                         s.cont.append_range(cat.idxs | std::views::reverse);
-                        return rc::match_continue;
+                        return true;
                     },
-                    [&](const typename tree_matcher::alt& alt) -> rc {
+                    [&](const typename tree_matcher::alt& alt) -> bool {
                         if (alt.idxs.empty())
-                            return rc::match_failure;
+                            return false;
 
                         for (std::size_t i{ 0 }, i_end{ alt.idxs.size() }; i + 1 < i_end; ++i)
                         {
@@ -195,19 +175,18 @@ namespace srx::testing
                             if (rec(s_copy))
                             {
                                 s = std::move(s_copy);
-                                return rc::match_success;
+                                return true;
                             }
                         }
 
                         s.cont.push_back(alt.idxs.back());
-                        return rc::match_continue;
+                        return true;
                     },
-                    [&](const typename tree_matcher::tag& tag) -> rc {
+                    [&](const typename tree_matcher::tag& tag) -> bool {
                         s.tags.at(tag.number) = s.it;
-
-                        return rc::match_continue;
+                        return true;
                     },
-                    [&](const typename tree_matcher::backref& bref) -> rc {
+                    [&](const typename tree_matcher::backref& bref) -> bool {
                         if (bref.number >= capture_count)
                             throw pattern_error("Backreference to non-existent submatch");
 
@@ -235,24 +214,24 @@ namespace srx::testing
                                    | std::ranges::to<std::vector>();
 
                         if (std::ranges::size(rng) == 0)
-                            return rc::match_failure; /* capture doesn't exist */
+                            return false; /* capture doesn't exist */
 
                         auto [bit, blast] = std::ranges::max(rng, std::ranges::less{}, &std::pair<I, I>::first);
 
                         for (; bit != blast; ++s.it, ++bit)
                             if (s.it == last or *s.it != *bit)
-                                return rc::match_failure;
+                                return false;
 
-                        return rc::match_continue;
+                        return true;
                     },
-                    [&](const typename tree_matcher::repeat& rep) -> rc {
+                    [&](const typename tree_matcher::repeat& rep) -> bool {
                         using detail::repeater_mode;
 
                         if (rep.min == rep.max)
                         {
                             /* fixed number of repetitions - don't insert repeated */
                             s.cont.insert(s.cont.end(), /* count = */ rep.min, /* value = */ rep.idx);
-                            return rc::match_continue;
+                            return true;
                         }
 
                         const auto rep_count = raw_data.reps();
@@ -262,7 +241,7 @@ namespace srx::testing
                             /* perform fixed number of repetitions and then revisit  */
                             s.cont.emplace_back(pos, rep.min);
                             s.cont.insert(s.cont.end(), /* count = */ rep.min - rep_count, /* value = */ rep.idx);
-                            return rc::match_continue;
+                            return true;
                         }
 
                         if (rep.mode == repeater_mode::greedy)
@@ -277,7 +256,7 @@ namespace srx::testing
                             if (rec(s_copy))
                             {
                                 s = std::move(s_copy);
-                                return rc::match_success;
+                                return true;
                             }
                         }
                         else if (rep.mode == repeater_mode::lazy)
@@ -288,7 +267,7 @@ namespace srx::testing
                             if (rec(s_copy))
                             {
                                 s = std::move(s_copy);
-                                return rc::match_success;
+                                return true;
                             }
 
                             if (rep.max < rep.min or rep_count < rep.max - 1)
@@ -297,44 +276,46 @@ namespace srx::testing
                         }
                         else /* if (rep.mode == repeater_mode::possessive) */
                         {
-                            /* unoptimised possessive matching */
-
-                            state_t s_copy{ s };
-
-                            if (rep.max < rep.min or rep_count < rep.max - 1)
-                                s_copy.cont.emplace_back(pos, rep_count, 1);
-                            s_copy.cont.push_back(rep.idx);
-
-                            if (rec(s_copy))
+                            /* check rep in a copy of state */
+                            if (rep.max < rep.min)
                             {
-                                s = std::move(s_copy);
-                                return rc::match_success;
-                            }
-                            else if (rec(s))
-                            {
-                                return rc::match_success;
+                                while (true)
+                                {
+                                    state_t s_tmp{ s.it, s.tags, rep.idx };
+                                    if (not rec(s_tmp))
+                                        break;
+                                    s.it = std::move(s_tmp.it);
+                                    s.tags = std::move(s_tmp.tags);
+                                }
                             }
                             else
                             {
-                                return rc::match_failure;
+                                for (auto count = rep_count; count < rep.max; ++count)
+                                {
+                                    state_t s_tmp{ s.it, s.tags, rep.idx };
+                                    if (not rec(s_tmp))
+                                        break;
+                                    s.it = std::move(s_tmp.it);
+                                    s.tags = std::move(s_tmp.tags);
+                                }
                             }
                         }
 
-                        return rc::match_continue;
+                        return true;
                     },
-                    [&](const typename tree_matcher::char_str& lit) -> rc {
+                    [&](const typename tree_matcher::char_str& lit) -> bool {
                         for (const auto c : lit.data)
                         {
                             if (s.it == last or *s.it != c)
-                                return rc::match_failure; /* unsuccessful match */
+                                return false; /* unsuccessful match */
                             ++s.it;
                         }
 
-                        return rc::match_continue;
+                        return true;
                     },
-                    [&](const typename tree_matcher::char_class& cla) -> rc {
+                    [&](const typename tree_matcher::char_class& cla) -> bool {
                         if (s.it == last)
-                            return rc::match_failure;
+                            return false;
 
                         using uct = tree_matcher::char_class::underlying_char_type;
 
@@ -355,20 +336,18 @@ namespace srx::testing
                             input = *s.it++;
                         }
 
-                        if (cla.data.get().contains(input))
-                            return rc::match_continue;
-                        return rc::match_failure;
+                        return cla.data.get().contains(input);
                     }
                 });
 
-                if (result != rc::match_continue)
-                    return (result == rc::match_success);
+                if (not result)
+                    return false;
             }
 
-            return (s.it == last);
+            return s.cont.empty();
         };
 
-        state_t s(first, this->tag_count(), this->root_idx());
+        state_t s(first, this->tag_count(), this->root_idx(), pos_end);
         auto rv = visitor(s);
 
         if (not rv)

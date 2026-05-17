@@ -14,8 +14,9 @@
 
 #include <srx/api/regex_error.hpp>
 #include <srx/ast/tree.hpp>
-#include <srx/etc/cdarray.hpp>
 #include <srx/fsm/tnfa.hpp>
+
+#include "cdarray.hpp"
 
 
 namespace srx::testing
@@ -30,7 +31,7 @@ namespace srx::testing
         [[nodiscard]] constexpr std::optional<tag_result> match(std::basic_string_view<CharT> input) const;
 
     private:
-        using tag_vector = detail::cdarray<std::size_t>;
+        using tag_vector = cdarray<std::size_t>;
         using closure_entry = std::pair<std::size_t, tag_vector>;
         using closure_t = std::vector<closure_entry>;
 

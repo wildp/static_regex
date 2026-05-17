@@ -185,8 +185,11 @@ namespace srx::testing
                 const auto& rep = std::get<typename ast_t::repeat>(entry);
                 if (reps == 0)
                 {
-                    cont.emplace_back(pos, reps + 1);
-                    cont.emplace_back(rep.idx);
+                    if (not (rep.min == 0 and rep.max == 0))
+                    {
+                        cont.emplace_back(pos, reps + 1);
+                        cont.emplace_back(rep.idx);
+                    }
                 }
                 else
                 {

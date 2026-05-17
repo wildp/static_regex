@@ -11,11 +11,9 @@
 #include <ranges>
 #include <stdexcept>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 #include <srx/etc/captures.hpp>
-#include <srx/etc/cdarray.hpp>
 #include <srx/etc/util.hpp>
 #include <srx/fsm/tdfa.hpp>
 

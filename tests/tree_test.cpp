@@ -287,6 +287,7 @@ static_assert(alt_to_cc("[[:alpha:]]|[[:digit:]]", "[0-9A-Za-z]"));
 static_assert(alt_to_cc("(a|bcdef|g|ab|c|d|e|efg|fg)*", "(a|bcdef|g|ab|[c-e]|efg|fg)*"));
 
 /* other test cases */
+static_assert(parse("ab{0}a", "aa"));
 static_assert(parse("(?# comment )", ""));
 static_assert(parse("(?:aaa)", "aaa"));
 static_assert(parse("\\Q...\\E", "..."));
