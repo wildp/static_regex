@@ -6771,6 +6771,11 @@ namespace srx::detail
                         max -= 1;
                         q0 = q2;
                     }
+                    else if (min == 0 and max == 0)
+                    {
+                        make_epsilon(q0, qf);
+                        break;
+                    }
                     else if (min == 0)
                     {
                         const state_t q1{ node_create() };
