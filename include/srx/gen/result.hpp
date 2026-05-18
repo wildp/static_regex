@@ -39,7 +39,7 @@ namespace srx::detail
 namespace srx
 {
     template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
-    class static_regex_match_result
+    class static_match_results
     {
         using factory = detail::submatch_factory<I>;
 
@@ -61,7 +61,7 @@ namespace srx
 
         static constexpr size_type submatch_count{ Captures.fci.capture_count() };
 
-        constexpr static_regex_match_result() noexcept(std::is_nothrow_default_constructible_v<I>)
+        constexpr static_match_results() noexcept(std::is_nothrow_default_constructible_v<I>)
         {
             if constexpr (has_registers and not has_enabled)
                 reg_.fill(I{});
@@ -149,7 +149,7 @@ namespace srx
 
         template<size_type N>
             requires (N < submatch_count)
-        [[nodiscard]] friend constexpr submatch_type get(const static_regex_match_result& r) noexcept
+        [[nodiscard]] friend constexpr submatch_type get(const static_match_results& r) noexcept
         {
             if (r.has_value())
                 return r.template force_get<N>();
@@ -185,7 +185,7 @@ namespace srx
         static constexpr bool has_continue{ Captures.has_continue };
         static constexpr bool continue_from_it{ Captures.continue_from_it };
 
-        explicit constexpr static_regex_match_result(I start)
+        explicit constexpr static_match_results(I start)
             noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
             : match_start_{ std::move(start) }
         {
@@ -256,7 +256,7 @@ namespace srx
         constexpr void range_check(size_type n) const
         {
             if (n >= this->size())
-                throw std::out_of_range("static_regex_match_result::range_check: n >= this->size()");
+                throw std::out_of_range("static_match_results::range_check: n >= this->size()");
         }
 
 
@@ -281,7 +281,7 @@ namespace srx
 
     template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
     template<bool Const>
-    class static_regex_match_result<I, Captures>::proxy_iterator
+    class static_match_results<I, Captures>::proxy_iterator
     {
     public:
         using iterator_concept  = std::random_access_iterator_tag;
@@ -295,7 +295,7 @@ namespace srx
 
         proxy_iterator() = default;
 
-        constexpr proxy_iterator(const static_regex_match_result* ptr, size_type pos) noexcept
+        constexpr proxy_iterator(const static_match_results* ptr, size_type pos) noexcept
             : ptr_{ ptr }, pos_{ pos } {}
 
         constexpr explicit(false) proxy_iterator(proxy_iterator<not Const> i) noexcept requires Const
@@ -376,21 +376,21 @@ namespace srx
         friend class proxy_iterator<not Const>;
 
     private:
-        const static_regex_match_result* ptr_{ nullptr };
+        const static_match_results* ptr_{ nullptr };
         size_type pos_{ 0 };
     };
 }
 
 
-/* structured binding support for static_regex_match_result */
+/* structured binding support for static_match_results */
 
 template<std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
-struct std::tuple_size<srx::static_regex_match_result<Iter, Captures>>
-    : integral_constant<std::size_t, srx::static_regex_match_result<Iter, Captures>::submatch_count> {};
+struct std::tuple_size<srx::static_match_results<Iter, Captures>>
+    : integral_constant<std::size_t, srx::static_match_results<Iter, Captures>::submatch_count> {};
 
 template<std::size_t N, std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
-    requires (N < srx::static_regex_match_result<Iter, Captures>::submatch_count)
-struct std::tuple_element<N, srx::static_regex_match_result<Iter, Captures>>
+    requires (N < srx::static_match_results<Iter, Captures>::submatch_count)
+struct std::tuple_element<N, srx::static_match_results<Iter, Captures>>
 {
-    using type = srx::static_regex_match_result<Iter, Captures>::submatch_type;
+    using type = srx::static_match_results<Iter, Captures>::submatch_type;
 };

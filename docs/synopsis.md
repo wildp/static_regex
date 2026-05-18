@@ -29,7 +29,7 @@ namespace srx {
   constexpr auto static_regex_search_all(/* 3 overloads */);
 
   template<std::bidirectional_iterator I, /* implementation details */>
-  class static_regex_match_result;
+  class static_match_results;
 
   template<std::bidirectional_iterator I>
   class submatch;
@@ -173,7 +173,7 @@ namespace srx {
 `static_regex` has no data members, and the code for matching `Pattern` is only generated when the relevant member function template is instantiated.
 `Mode` dictates the implementation used by the matching functions *(see above section for more details)*.
 
-Instantiations of the member function templates `match`, `prefix_match`, and `search` return a `static_regex_match_result` corresponding to the substring (and capturing groups, if any) matched by `Pattern`.
+Instantiations of the member function templates `match`, `prefix_match`, and `search` return a `static_match_results` corresponding to the substring (and capturing groups, if any) matched by `Pattern`.
 `match` attempts to match the entire input, while `search` finds the first substring which matches `Pattern`.
 `prefix_match` attempts to match a substring that begins at the start of the input.
 
@@ -196,10 +196,13 @@ Depending on the regex pattern, using these functions may allow for a smaller DF
 `range` returns a `regex_match_view` over all substrings of the input matched by `Pattern`.
 The template parameter requirements for `range` are the same as for `match`, `prefix_match`, and `search`.
 
-Additionally, the following helper is defined for convenience:
+Additionally, the following helpers are defined for convenience:
 
 ```cpp
 namespace srx {
+  template<string_literal Pattern, mode Mode = mode::standard>
+  inline constexpr static_regex<Pattern, Mode> srx;
+
   namespace literals {
     template<string_literal Pattern>
     consteval static_regex<Pattern> operator ""_rx();
@@ -228,14 +231,14 @@ namespace srx {
 Each invocation of `static_regex_foo<Pattern, Mode>()` is equivalent to calling `static_regex<Pattern, Mode>.foo()` with the same arguments, except for `search_all` which instead calls `range()`.
 
 
-## Class template `srx::static_regex_match_result`
+## Class template `srx::static_match_results`
 
-`static_regex_match_result` stores the results of a single compile-time regular expression match.
+`static_match_results` stores the results of a single compile-time regular expression match.
 
 ```cpp
 namespace srx {
   template<std::bidirectional_iterator I, /* implementation details */>
-  class static_regex_match_result {
+  class static_match_results {
   public:
     using size_type              = std::size_t;
     using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
@@ -247,7 +250,7 @@ namespace srx {
 
     static constexpr size_type submatch_count;
 
-    constexpr static_regex_match_result() noexcept;
+    constexpr static_match_results() noexcept;
 
     /* observers */
     constexpr bool has_value() const noexcept;
@@ -273,19 +276,19 @@ namespace srx {
   };
 } // namespace srx
 
-/* structured binding support for static_regex_match_result */
+/* structured binding support for static_match_results */
 template<std::bidirectional_iterator I, /* ... */>
-struct std::tuple_size<srx::static_regex_match_result<I, /* ... */>>;
+struct std::tuple_size<srx::static_match_results<I, /* ... */>>;
 
 template<std::size_t N, std::bidirectional_iterator I, /* ... */>
-struct std::tuple_element<N, srx::static_regex_match_result<I, /* ... */>>;
+struct std::tuple_element<N, srx::static_match_results<I, /* ... */>>;
 ```
 
 The submatch with index `0` denotes the entire match, while any submatches after that correspond to the capturing groups in the matched regex pattern.
 The public static data member `submatch_count` denotes the maximum number of submatches that an object contains.
 It should be noted that `size()` returns `submatch_count` when `has_value()` is `true`, and `0` otherwise.
 
-`static_regex_match_result` does not store individual submatches; instead submatches are re-constructed as needed.
+`static_match_results` does not store individual submatches; instead submatches are re-constructed as needed.
 Whenever an individual capturing group is not matched, a default-constructed submatch is returned.
 As such, `iterator` satisfies `std::random_access_iterator` but due to being a proxy iterator only meets the requirements for *Cpp17InputIterator*.
 
@@ -420,7 +423,7 @@ namespace srx {
 ```
 
 `regex_match_view` is always an input range.
-Its range value is an instantiation of `static_regex_match_result`.
+Its range value is an instantiation of `static_match_results`.
 
 `views::static_regex_match<Pattern>` is equivalent to `views::regex_match(static_regex<Pattern>{})`.
 

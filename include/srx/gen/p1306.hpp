@@ -267,7 +267,7 @@ namespace srx::detail
         static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
 
         template<typename I>
-        using result = static_regex_match_result<I, DFA.make_match_result_info(Flags.is_iterator)>;
+        using result = static_match_results<I, DFA.make_match_result_info(Flags.is_iterator)>;
 
     private:
         static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };

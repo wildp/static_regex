@@ -204,11 +204,14 @@ namespace srx
         }
     };
 
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr static_regex<Pattern, Mode> srx;
+
 
     namespace detail
     {
         template<typename R>
-        concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_regex_match_result>;
+        concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_match_results>;
 
         template<typename Regex>
         concept static_regex_like = template_instantiation_of<Regex, ^^static_regex>;

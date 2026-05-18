@@ -260,7 +260,7 @@ namespace srx::detail
         static constexpr std::size_t require_non_empty_match{ std::numeric_limits<std::size_t>::max() - 1 };
 
         template<typename I>
-        using result = static_regex_match_result<I, ast.make_match_result_info()>;
+        using result = static_match_results<I, ast.make_match_result_info()>;
 
         template<typename I>
         struct result_helper

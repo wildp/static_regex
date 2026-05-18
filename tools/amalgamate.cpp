@@ -100,9 +100,9 @@ namespace
         }
 
     private:
-        static constexpr auto pattern = srx::static_regex<
+        static constexpr auto pattern = srx::srx<
             R"--((?m:^#include "(.*?)"$\n?|^(#include <.*?>)$\n?|^(#pragma once)$\n?|^(// *?(?i:copyright \(c\)).*?)$|^ *?//.*?$\n?| *?//.*?$))--"
-            , srx::mode::standard>{};
+            , srx::mode::standard>;
 
         [[nodiscard]] path find_path(const path& next, const path& current_dir) const
         {
@@ -182,7 +182,7 @@ namespace
             const auto input = data.view();
 
             srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
-                               srx::static_regex<R"((?m:^.*?\n))">{}, srx::fmt<"// $0">);
+                               srx::srx<R"((?m:^.*?\n))">, srx::fmt<"// $0">);
 
             ofs << "\n\n";
         }
@@ -193,7 +193,7 @@ namespace
             const auto input = data.view();
 
             srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
-                               srx::static_regex<R"(\n\s+\n)", srx::mode::linear>{}, srx::fmt<"\n\n">);
+                               srx::srx<R"(\n\s+\n)", srx::mode::linear>, srx::fmt<"\n\n">);
         }
 
         std::vector<path> include_dirs_;
