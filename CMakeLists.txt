@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 4.0)
 
 project(rx
-    VERSION 0.0.2
+    VERSION 0.2.0
     LANGUAGES CXX
 )
 

@@ -1,5 +1,10 @@
 project(rx-tools)
 
-add_executable(amalgamate)
-target_sources(amalgamate PRIVATE amalgamate.cpp)
-target_link_libraries(amalgamate PUBLIC static_regex)
+file(GLOB TOOL_SOURCES "*.cpp")
+foreach(TOOL_SOURCE ${TOOL_SOURCES})
+    get_filename_component(TARGET_NAME ${TOOL_SOURCE} NAME_WE)
+    add_executable(${TARGET_NAME})
+    target_sources(${TARGET_NAME} PRIVATE ${TOOL_SOURCE})
+    target_link_libraries(${TARGET_NAME} PUBLIC static_regex)
+    set_target_properties(${TARGET_NAME} PROPERTIES FOLDER tools)
+endforeach()
