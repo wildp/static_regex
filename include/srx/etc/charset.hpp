@@ -99,6 +99,14 @@ namespace srx::detail
             return score;
         }
 
+        [[nodiscard]] constexpr bool should_invert() const noexcept
+        {
+            /* an extremely simple heuristic (this could probably be improved?) */
+            return data_.size() > 0
+                   and data_.front().first == std::numeric_limits<CharT>::min()
+                   and data_.back().second == std::numeric_limits<CharT>::max();
+        }
+
         [[nodiscard]] constexpr bool contains(char_type c) const
         {
             const auto it = std::ranges::lower_bound(data_, c, {}, &char_interval::second);

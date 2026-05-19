@@ -6,12 +6,14 @@
 
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <limits>
 #include <meta>
+#include <ranges>
 #include <type_traits>
 
 #if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
@@ -39,10 +41,11 @@ namespace srx::detail
         value_type msk;
     };
 
-    template<typename CharT>
-    consteval auto make_optimised_edges(const static_charset<CharT>& sc, bool inverted = false)
+    template<unconstrained_charset_like CharsetType>
+    consteval auto make_optimised_edges(const CharsetType& sc, bool inverted = false)
     {
-        using ote = optimised_tr_edge<CharT>;
+        using char_type = CharsetType::char_type;
+        using ote = optimised_tr_edge<char_type>;
         using uchar_type = typename ote::value_type;
         std::vector<ote> result;
 
@@ -50,14 +53,14 @@ namespace srx::detail
         {
             for (const auto& [first, last] : (~sc).get_intervals())
                 result.emplace_back(static_cast<uchar_type>(first),
-                                    static_cast<uchar_type>(static_cast<CharT>(last - first)),
+                                    static_cast<uchar_type>(static_cast<char_type>(last - first)),
                                     static_cast<uchar_type>(~0u));
         }
         else
         {
             for (const auto& [first, last] : sc.get_intervals())
                 result.emplace_back(static_cast<uchar_type>(first),
-                                    static_cast<uchar_type>(static_cast<CharT>(last - first)),
+                                    static_cast<uchar_type>(static_cast<char_type>(last - first)),
                                     static_cast<uchar_type>(~0u));
         }
 
@@ -111,7 +114,39 @@ namespace srx::detail
     }
 
     template<typename CharT>
-    consteval auto get_flattened_states(const tdfa_info<CharT>& dfa, std::size_t state)
+    consteval std::size_t score_optimised_edges(const std::vector<optimised_tr_edge<CharT>>& otes, bool inverted = false)
+    {
+        using ote_t = optimised_tr_edge<CharT>;
+        using value_type = ote_t::value_type;
+
+        static constexpr std::size_t bit_count{ std::numeric_limits<value_type>::digits };
+        static constexpr std::size_t range_penalty{ 2 };
+        static constexpr std::size_t scale{ 4 }; /* arbitrarily selected constant */
+
+        if (otes.empty())
+            return -1uz;
+
+        /* note: this is just a heuristic; there may be better ones */
+
+        std::size_t count{ 0 };
+        std::size_t ops{ 0 };
+        
+        for (const auto& [sub, rng, msk] : otes)
+        {
+            std::size_t mask_bits{ bit_count - std::popcount(msk) };
+            std::size_t number{ (1 + rng) * mask_bits };
+            count += number;
+            ops += 2 + (rng != 0) * range_penalty + (mask_bits != 0);
+        }
+
+        if (inverted)
+            count = (~0uz >> (std::numeric_limits<std::size_t>::digits - bit_count)) - count;
+
+        return count * scale + ops;
+    }
+
+    template<typename CharT>
+    consteval auto get_flattened_states(const tdfa_info<CharT>& dfa, std::size_t state, bool trailing = false)
     {
         std::vector<std::size_t> result;
 
@@ -125,7 +160,11 @@ namespace srx::detail
             //     break;
 
             if (dfa.nodes.at(state).size() != 1)
+            {
+                if (trailing)
+                    result.emplace_back(state);
                 break;
+            }
 
             const auto& tr = dfa.nodes.at(state).front();
             result.emplace_back(state);
@@ -133,6 +172,62 @@ namespace srx::detail
         }
 
         return result;
+    }
+
+    template<typename CharT>
+    consteval auto get_edge_scores(const tdfa_info<CharT>& dfa, const std::span<const std::size_t> qs)
+    {
+        if (qs.empty())
+            throw std::range_error("get_edge_scores: qs is empty");
+
+        const auto edges = qs 
+                           | std::views::transform([&](std::size_t q){ 
+                                 if (dfa.nodes[q].size() == 1)
+                                 {
+                                     const auto& cs = dfa.nodes[q].front().cs;
+                                     const bool should_invert{ cs.should_invert() };
+                                     return std::pair{ make_optimised_edges(cs, should_invert), should_invert };
+                                 }
+                                 else
+                                 {
+                                     charset<CharT> cs;
+                                     for (const auto tr : dfa.nodes[q])
+                                         cs |= tr.cs;
+                                     const bool should_invert{ cs.should_invert() };
+                                     return std::pair{ make_optimised_edges(cs, should_invert), should_invert };
+                                 }
+                             })
+                           | std::ranges::to<std::vector>();
+
+        return edges
+               | std::views::transform([](const auto& e){ return score_optimised_edges(e.first, e.second); })
+               | std::ranges::to<std::vector>();
+    }
+
+    template<typename CharT>
+    consteval auto get_outer_state_position_pair(const tdfa_info<CharT>& dfa, const std::span<const std::size_t> qs)
+    {
+        auto scores = get_edge_scores(dfa, qs);
+
+        const auto left_elem = std::ranges::min_element(scores);
+        *left_elem = -1uz;
+        const std::size_t left{ static_cast<std::size_t>(std::ranges::distance(scores.begin(), left_elem)) };
+
+        const auto right_elem = std::ranges::min_element(scores.rbegin(), scores.rend());
+        const std::size_t right{ static_cast<std::size_t>(std::ranges::distance(right_elem, scores.rend()) - 1) };
+
+        if (left > right)
+            return std::pair{ right, left };
+        else
+            return std::pair{ left, right };
+    }
+
+    template<typename CharT>
+    consteval auto get_outer_state_position_single(const tdfa_info<CharT>& dfa, const std::span<const std::size_t> qs)
+    {
+        const auto scores = get_edge_scores(dfa, qs);
+        const auto left_elem = std::ranges::min_element(scores);
+        return static_cast<std::size_t>(std::ranges::distance(scores.begin(), left_elem));
     }
 
     template<static_charset Sc>
@@ -759,8 +854,7 @@ namespace srx::detail
                     return std::simd::flag_default;
             }();
 
-            static constexpr std::size_t position1{ 0 };
-            static constexpr std::size_t position2{ states.size() - 1 };
+            static constexpr auto [position1, position2] = get_outer_state_position_pair(DFA, states);
 
             static constexpr bool avoid_simd = []() consteval {
                 std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
@@ -821,6 +915,7 @@ namespace srx::detail
                       and (not fixed_length or not branch_free))
         {
             static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+            static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState, true));
 
             using uchar_type = std::make_unsigned_t<char_type>;
             using vec_type = std::simd::vec<uchar_type>;
@@ -833,21 +928,17 @@ namespace srx::detail
                     return std::simd::flag_default;
             }();
 
+            static constexpr auto position = get_outer_state_position_single(DFA, states);
+
             // TODO: possibly select a second position to check?
             static constexpr static_charset combined_cs = []{
                 charset<char_type> result;
-                template for (constexpr auto& tr : DFA.nodes[DFAState])
+                template for (constexpr auto& tr : DFA.nodes[position])
                     result |= tr.cs;
                 return static_charset{ result };
             }();
 
-
-            static constexpr bool avoid_simd = [](){
-                charset<char_type> acc;
-                for (const auto& tr : DFA.nodes[DFAState])
-                    acc |= tr.cs;
-                return acc.count() > avoid_simd_threshold;
-            }();
+            static constexpr bool avoid_simd{ combined_cs.count() > avoid_simd_threshold };
 
             if constexpr (avoid_simd)
             {
@@ -861,7 +952,7 @@ namespace srx::detail
                 std::ptrdiff_t i{ 0 };
                 for (; i + vec_type::size() < max; i += vec_type::size())
                 {
-                    const auto block = std::simd::unchecked_load<vec_type>(it, last, flags);
+                    const auto block = std::simd::unchecked_load<vec_type>(it + position, last, flags);
                     const auto mask = vector_tr_find<combined_cs>(block);
 
                     if (vector_candidate_check<DFAState, min_length>(result, it, last, mask.to_ullong()))
@@ -875,7 +966,7 @@ namespace srx::detail
                     const auto epi_size = max - i;
                     const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
-                    const auto block = std::simd::partial_load<vec_type>(it, last, epi_mask, flags);
+                    const auto block = std::simd::partial_load<vec_type>(it + position, last, epi_mask, flags);
                     const auto mask = vector_tr_find<combined_cs>(block);
 
                     if (vector_candidate_check<DFAState, min_length>(result, it, last, (mask & epi_mask).to_ullong()))

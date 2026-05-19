@@ -26,6 +26,9 @@ namespace srx::detail
     template<typename T, typename CharT>
     concept charset_like = one_of<T, charset<CharT>, static_charset<CharT>>;
 
+    template<typename T>
+    concept unconstrained_charset_like = template_instantiation_of<T, ^^charset> or template_instantiation_of<T, ^^static_charset>;
+
     template<typename CharT>
     class static_charset
     {
