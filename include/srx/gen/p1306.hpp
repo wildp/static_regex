@@ -838,9 +838,10 @@ namespace srx::detail
         [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
             requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
         {
-            while (mask != 0)
+            while (mask != 0) [[unlikely]]
             {
                 const auto offset = std::countr_zero(mask);
+                mask &= (mask - 1);
 
                 // TODO: implement simd-based checking
                 if (unchecked_state_skip<DFAState, Count, Skip>(result, it + offset, last, maybe_fallback_t<I>{ it + offset, fallback_disabled }))
@@ -854,8 +855,6 @@ namespace srx::detail
                     if constexpr (DFA.register_count > 0)
                         ++result.gen.current;
                 }
-
-                mask &= (mask - 1);
             }
 
             return false;
@@ -902,8 +901,7 @@ namespace srx::detail
             {
                 const std::ptrdiff_t max{ std::ranges::distance(it, last) - (length - 1) };
 
-                std::ptrdiff_t i{ 0 };
-                for (; i + vec_type::size() < max; i += vec_type::size())
+                for (std::ptrdiff_t i{ max / vec_type::size() }; i > 0; --i) [[likely]]
                 {
                     const auto block1 = std::simd::unchecked_load<vec_type>(it + position1, last, flags);
                     const auto block2 = std::simd::unchecked_load<vec_type>(it + position2, last, flags);
@@ -917,9 +915,8 @@ namespace srx::detail
                     it += vec_type::size();
                 }
 
-                if (i < max)
+                if (const auto epi_size = max % vec_type::size(); epi_size > 0) [[likely]]
                 {
-                    const auto epi_size = max - i;
                     const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
                     const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, flags);
@@ -928,8 +925,7 @@ namespace srx::detail
                     const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                     const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
 
-                    if (vector_candidate_check<DFAState, length, skipped>(result, it, last, (mask1 & mask2 & epi_mask).to_ullong()))
-                        return true;
+                    return vector_candidate_check<DFAState, length, skipped>(result, it, last, (mask1 & mask2 & epi_mask).to_ullong());
                 }
 
                 return false;
@@ -977,8 +973,7 @@ namespace srx::detail
             {
                 const std::ptrdiff_t max{ std::ranges::distance(it, last) - (min_length - 1) };
 
-                std::ptrdiff_t i{ 0 };
-                for (; i + vec_type::size() < max; i += vec_type::size())
+                for (std::ptrdiff_t i{ max / vec_type::size() }; i > 0; --i) [[likely]]
                 {
                     const auto block = std::simd::unchecked_load<vec_type>(it + position, last, flags);
                     const auto mask = vector_tr_find<combined_cs>(block);
@@ -989,16 +984,14 @@ namespace srx::detail
                     it += vec_type::size();
                 }
 
-                if (i < max)
+                if (const auto epi_size = max % vec_type::size(); epi_size > 0) [[likely]]
                 {
-                    const auto epi_size = max - i;
                     const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
                     const auto block = std::simd::partial_load<vec_type>(it + position, last, epi_mask, flags);
                     const auto mask = vector_tr_find<combined_cs>(block);
 
-                    if (vector_candidate_check<DFAState, min_length, skipped>(result, it, last, (mask & epi_mask).to_ullong()))
-                        return true;
+                    return vector_candidate_check<DFAState, min_length, skipped>(result, it, last, (mask & epi_mask).to_ullong());
                 }
 
                 return false;
