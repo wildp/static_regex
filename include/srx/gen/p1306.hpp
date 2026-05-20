@@ -652,6 +652,32 @@ namespace srx::detail
             }
         }
 
+        template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+        static constexpr bool unchecked_state_skip(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+        {
+            if constexpr (sequence_helper<Skip>::empty or Count == 0 or DFA.nodes[DFAState].size() != 1)
+            {
+                [[clang::musttail]] return unchecked_state<DFAState, Count>(result, it, last, fallback);
+            }
+            else if constexpr (Count == sequence_helper<Skip>::head)
+            {
+                static constexpr auto tr = DFA.nodes[DFAState].front(); 
+                register_operations<tr.op_index>(result, it);
+                [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(result, ++it, last, fallback);
+            }
+            else 
+            {
+                static constexpr auto tr = DFA.nodes[DFAState].front();
+                if (tr_possible<tr.cs>(*it))
+                {
+                    register_operations<tr.op_index>(result, it);
+                    [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, Skip>(result, ++it, last, fallback);
+                }
+
+                return false;
+            }
+        }
+
         template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool initial_state(Result result, I it, const S last)
         {
@@ -808,7 +834,7 @@ namespace srx::detail
         }
 
 #if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
-        template<std::size_t DFAState, std::size_t Count, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+        template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
             requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
         {
@@ -817,7 +843,7 @@ namespace srx::detail
                 const auto offset = std::countr_zero(mask);
 
                 // TODO: implement simd-based checking
-                if (unchecked_state<DFAState, Count>(result, it + offset, last, maybe_fallback_t<I>{ it + offset, fallback_disabled }))
+                if (unchecked_state_skip<DFAState, Count, Skip>(result, it + offset, last, maybe_fallback_t<I>{ it + offset, fallback_disabled }))
                 {
                     if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                         result.res.match_start_ = it + offset;
@@ -855,6 +881,7 @@ namespace srx::detail
             }();
 
             static constexpr auto [position1, position2] = get_outer_state_position_pair(DFA, states);
+            using skipped = std::index_sequence<length - position1, length - position2>;
 
             static constexpr bool avoid_simd = []() consteval {
                 std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
@@ -884,7 +911,7 @@ namespace srx::detail
                     const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                     const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
 
-                    if (vector_candidate_check<DFAState, length>(result, it, last, (mask1 & mask2).to_ullong()))
+                    if (vector_candidate_check<DFAState, length, skipped>(result, it, last, (mask1 & mask2).to_ullong()))
                         return true;
 
                     it += vec_type::size();
@@ -901,7 +928,7 @@ namespace srx::detail
                     const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                     const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
 
-                    if (vector_candidate_check<DFAState, length>(result, it, last, (mask1 & mask2 & epi_mask).to_ullong()))
+                    if (vector_candidate_check<DFAState, length, skipped>(result, it, last, (mask1 & mask2 & epi_mask).to_ullong()))
                         return true;
                 }
 
@@ -929,6 +956,7 @@ namespace srx::detail
             }();
 
             static constexpr auto position = get_outer_state_position_single(DFA, states);
+            using skipped = std::index_sequence<min_length - position>;
 
             // TODO: possibly select a second position to check?
             static constexpr static_charset combined_cs = []{
@@ -955,7 +983,7 @@ namespace srx::detail
                     const auto block = std::simd::unchecked_load<vec_type>(it + position, last, flags);
                     const auto mask = vector_tr_find<combined_cs>(block);
 
-                    if (vector_candidate_check<DFAState, min_length>(result, it, last, mask.to_ullong()))
+                    if (vector_candidate_check<DFAState, min_length, skipped>(result, it, last, mask.to_ullong()))
                         return true;
 
                     it += vec_type::size();
@@ -969,7 +997,7 @@ namespace srx::detail
                     const auto block = std::simd::partial_load<vec_type>(it + position, last, epi_mask, flags);
                     const auto mask = vector_tr_find<combined_cs>(block);
 
-                    if (vector_candidate_check<DFAState, min_length>(result, it, last, (mask & epi_mask).to_ullong()))
+                    if (vector_candidate_check<DFAState, min_length, skipped>(result, it, last, (mask & epi_mask).to_ullong()))
                         return true;
                 }
 

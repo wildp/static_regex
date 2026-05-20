@@ -11,6 +11,7 @@
 #include <meta>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <variant>
 
 
@@ -78,6 +79,24 @@ namespace srx::detail
 
     template<typename CharT>
     concept char_is_multibyte = char_is_utf8<CharT> or char_is_utf16<CharT>;
+
+
+    template<typename>
+    struct sequence_helper
+    {
+        static constexpr bool empty{ true };
+    };
+
+    template<typename T, T Head, T... Tail>
+    struct sequence_helper<std::integer_sequence<T, Head, Tail...>>
+    {
+        static constexpr bool empty{ false };
+        static constexpr T head{ Head };
+        using tail = std::integer_sequence<T, Tail...>;
+    };
+
+    template<typename T>
+    concept integer_sequence_like = template_instantiation_of<T, ^^std::integer_sequence>;
 
 
     namespace hash
