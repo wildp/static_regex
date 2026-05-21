@@ -1,14 +1,17 @@
 # News
 
+### Version 0.2.1
+
+Improved performance when searching sized contiguous ranges.
+
 ### Version 0.2.0
 
 Searching sized contiguous ranges now relies on a vectorised implementation to find the first character in a pattern.
-The previous implementation is still used when using a standard library in which `std::simd` is unavailable. 
+The previous implementation is still used when using a standard library in which `std::simd` is unavailable.
 
 API changes:
 - The namespace has been renamed to `srx`.
 - Renamed `static_regex_match_result` to `static_match_result`
-
 
 ### Version 0.1.4
 
