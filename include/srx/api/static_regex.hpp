@@ -211,10 +211,10 @@ namespace srx
     namespace detail
     {
         template<typename R>
-        concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_match_results>;
+        concept static_regex_match_view_like = is_template_instantiation_of_impl(^^std::ranges::range_value_t<R>, ^^static_match_results);
 
         template<typename Regex>
-        concept static_regex_like = template_instantiation_of<Regex, ^^static_regex>;
+        concept static_regex_like = is_template_instantiation_of_impl(^^Regex, ^^static_regex);
 
         template<typename Regex>
         concept regex_like = static_regex_like<Regex>;

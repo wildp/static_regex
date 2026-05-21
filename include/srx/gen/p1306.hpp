@@ -130,7 +130,7 @@ namespace srx::detail
 
         std::size_t count{ 0 };
         std::size_t ops{ 0 };
-        
+
         for (const auto& [sub, rng, msk] : otes)
         {
             std::size_t mask_bits{ bit_count - std::popcount(msk) };
@@ -180,8 +180,8 @@ namespace srx::detail
         if (qs.empty())
             throw std::range_error("get_edge_scores: qs is empty");
 
-        const auto edges = qs 
-                           | std::views::transform([&](std::size_t q){ 
+        const auto edges = qs
+                           | std::views::transform([&](std::size_t q){
                                  if (dfa.nodes[q].size() == 1)
                                  {
                                      const auto& cs = dfa.nodes[q].front().cs;
@@ -661,11 +661,11 @@ namespace srx::detail
             }
             else if constexpr (Count == sequence_helper<Skip>::head)
             {
-                static constexpr auto tr = DFA.nodes[DFAState].front(); 
+                static constexpr auto tr = DFA.nodes[DFAState].front();
                 register_operations<tr.op_index>(result, it);
                 [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(result, ++it, last, fallback);
             }
-            else 
+            else
             {
                 static constexpr auto tr = DFA.nodes[DFAState].front();
                 if (tr_possible<tr.cs>(*it))

@@ -37,8 +37,8 @@ namespace srx::detail
         return template_of(dealias(type)) == templ;
     }
 
-    template<typename T, std::meta::info Template>
-    concept template_instantiation_of = is_template_instantiation_of_impl(^^T, Template);
+    template<typename T, template<typename...> typename Template>
+    concept template_instantiation_of = is_template_instantiation_of_impl(^^T, ^^Template);
 
     consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
     {
@@ -96,7 +96,7 @@ namespace srx::detail
     };
 
     template<typename T>
-    concept integer_sequence_like = template_instantiation_of<T, ^^std::integer_sequence>;
+    concept integer_sequence_like = is_template_instantiation_of_impl(^^T, ^^std::integer_sequence);
 
 
     namespace hash

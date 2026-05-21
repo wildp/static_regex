@@ -452,8 +452,8 @@ namespace srx::detail
         return template_of(dealias(type)) == templ;
     }
 
-    template<typename T, std::meta::info Template>
-    concept template_instantiation_of = is_template_instantiation_of_impl(^^T, Template);
+    template<typename T, template<typename...> typename Template>
+    concept template_instantiation_of = is_template_instantiation_of_impl(^^T, ^^Template);
 
     consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
     {
@@ -509,7 +509,7 @@ namespace srx::detail
     };
 
     template<typename T>
-    concept integer_sequence_like = template_instantiation_of<T, ^^std::integer_sequence>;
+    concept integer_sequence_like = is_template_instantiation_of_impl(^^T, ^^std::integer_sequence);
 
     namespace hash
     {
@@ -1483,9 +1483,9 @@ namespace srx::detail
 
             if (not data_.empty())
             {
-                if (const auto [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                if (const auto& [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
                     --score;
-                if (const auto [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                if (const auto& [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
                     --score;
             }
 
@@ -2546,7 +2546,7 @@ namespace srx::detail
     concept charset_like = one_of<T, charset<CharT>, static_charset<CharT>>;
 
     template<typename T>
-    concept unconstrained_charset_like = template_instantiation_of<T, ^^charset> or template_instantiation_of<T, ^^static_charset>;
+    concept unconstrained_charset_like = template_instantiation_of<T, charset> or template_instantiation_of<T, static_charset>;
 
     template<typename CharT>
     class static_charset
@@ -2628,7 +2628,7 @@ namespace srx::detail
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };
-            for (const auto [first, second] : data_)
+            for (const auto& [first, second] : data_)
                 result += (second + 1 - first);
             return result;
         }
@@ -2652,9 +2652,9 @@ namespace srx::detail
 
             if (not data_.empty())
             {
-                if (const auto [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                if (const auto& [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
                     --score;
-                if (const auto [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                if (const auto& [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
                     --score;
             }
 
@@ -12191,8 +12191,8 @@ namespace srx::detail
         if (qs.empty())
             throw std::range_error("get_edge_scores: qs is empty");
 
-        const auto edges = qs 
-                           | std::views::transform([&](std::size_t q){ 
+        const auto edges = qs
+                           | std::views::transform([&](std::size_t q){
                                  if (dfa.nodes[q].size() == 1)
                                  {
                                      const auto& cs = dfa.nodes[q].front().cs;
@@ -12669,11 +12669,11 @@ namespace srx::detail
             }
             else if constexpr (Count == sequence_helper<Skip>::head)
             {
-                static constexpr auto tr = DFA.nodes[DFAState].front(); 
+                static constexpr auto tr = DFA.nodes[DFAState].front();
                 register_operations<tr.op_index>(result, it);
                 [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(result, ++it, last, fallback);
             }
-            else 
+            else
             {
                 static constexpr auto tr = DFA.nodes[DFAState].front();
                 if (tr_possible<tr.cs>(*it))
@@ -13428,10 +13428,10 @@ namespace srx
     namespace detail
     {
         template<typename R>
-        concept static_regex_match_view_like = template_instantiation_of<std::ranges::range_value_t<R>, ^^static_match_results>;
+        concept static_regex_match_view_like = is_template_instantiation_of_impl(^^std::ranges::range_value_t<R>, ^^static_match_results);
 
         template<typename Regex>
-        concept static_regex_like = template_instantiation_of<Regex, ^^static_regex>;
+        concept static_regex_like = is_template_instantiation_of_impl(^^Regex, ^^static_regex);
 
         template<typename Regex>
         concept regex_like = static_regex_like<Regex>;

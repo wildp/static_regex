@@ -27,7 +27,7 @@ namespace srx::detail
     concept charset_like = one_of<T, charset<CharT>, static_charset<CharT>>;
 
     template<typename T>
-    concept unconstrained_charset_like = template_instantiation_of<T, ^^charset> or template_instantiation_of<T, ^^static_charset>;
+    concept unconstrained_charset_like = template_instantiation_of<T, charset> or template_instantiation_of<T, static_charset>;
 
     template<typename CharT>
     class static_charset
@@ -110,7 +110,7 @@ namespace srx::detail
         [[nodiscard]] constexpr std::size_t count() const noexcept
         {
             std::size_t result{ 0 };
-            for (const auto [first, second] : data_)
+            for (const auto& [first, second] : data_)
                 result += (second + 1 - first);
             return result;
         }
@@ -134,9 +134,9 @@ namespace srx::detail
 
             if (not data_.empty())
             {
-                if (const auto [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
+                if (const auto& [beg, end] = data_.front(); beg == std::numeric_limits<char_type>::min() and end != std::numeric_limits<char_type>::min())
                     --score;
-                if (const auto [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
+                if (const auto& [beg, end] = data_.back(); end == std::numeric_limits<char_type>::max() and beg != std::numeric_limits<char_type>::max())
                     --score;
             }
 
