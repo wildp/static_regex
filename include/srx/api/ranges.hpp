@@ -877,7 +877,7 @@ namespace srx
                 }
                 else
                 {
-                    const auto result = [&](){
+                    const auto result = [&]{
                         if constexpr (not matcher_type::never_empty)
                         {
                             if (next_.begin() == next_.end())

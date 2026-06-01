@@ -69,7 +69,7 @@ namespace
     template<srx::string_literal Pattern>
     std::size_t matchcount_xpr(const xpr_pattern<Pattern>)
     {
-        auto re = []() -> boost::xpressive::cregex {
+        auto re = [] -> boost::xpressive::cregex {
             using namespace boost::xpressive;
             if constexpr (Pattern.view() == R"(Twain)")
                 return as_xpr("Twain");

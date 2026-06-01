@@ -513,8 +513,8 @@ namespace srx::detail
 
     namespace hash
     {
-        static constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
-        static constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
+        inline constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
+        inline constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
 
         consteval std::size_t init() { return fnv_offset_basis; }
 
@@ -5671,7 +5671,7 @@ namespace srx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_dot()
     {
-        static constexpr auto newline = []() consteval {
+        static constexpr auto newline = [] consteval {
             if constexpr (char_class::impl_type::is_narrow())
                 return '\n';
             else
@@ -12879,7 +12879,7 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            static constexpr auto flags = []() consteval {
+            static constexpr auto flags = [] consteval {
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
@@ -12889,7 +12889,7 @@ namespace srx::detail
             static constexpr auto [position1, position2] = get_outer_state_position_pair(DFA, states);
             using skipped = std::index_sequence<length - position1, length - position2>;
 
-            static constexpr bool avoid_simd = []() consteval {
+            static constexpr bool avoid_simd = [] consteval {
                 std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
                 std::size_t count2{ DFA.nodes[states[position2]].front().cs.count() };
 #if __cpp_lib_saturation_arithmetic >= 202603L
@@ -12951,7 +12951,7 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            static constexpr auto flags = [](){
+            static constexpr auto flags = []{
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
@@ -14865,7 +14865,7 @@ namespace srx
                 }
                 else
                 {
-                    const auto result = [&](){
+                    const auto result = [&]{
                         if constexpr (not matcher_type::never_empty)
                         {
                             if (next_.begin() == next_.end())

@@ -642,7 +642,7 @@ namespace srx::detail::parser
     template<typename CharT>
     constexpr std::size_t ll1<CharT>::sa_make_dot()
     {
-        static constexpr auto newline = []() consteval {
+        static constexpr auto newline = [] consteval {
             if constexpr (char_class::impl_type::is_narrow())
                 return '\n';
             else

@@ -18,7 +18,8 @@
 
 #include <srx/regex.hpp>
 
-namespace
+
+namespace srx::tools
 {
     using path = std::filesystem::path;
 
@@ -213,6 +214,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    amalgamator fn{ args[1] };
+    srx::tools::amalgamator fn{ args[1] };
     fn(args[3], args[2], args[4]);
 }

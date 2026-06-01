@@ -872,7 +872,7 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            static constexpr auto flags = []() consteval {
+            static constexpr auto flags = [] consteval {
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else
@@ -882,7 +882,7 @@ namespace srx::detail
             static constexpr auto [position1, position2] = get_outer_state_position_pair(DFA, states);
             using skipped = std::index_sequence<length - position1, length - position2>;
 
-            static constexpr bool avoid_simd = []() consteval {
+            static constexpr bool avoid_simd = [] consteval {
                 std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
                 std::size_t count2{ DFA.nodes[states[position2]].front().cs.count() };
 #if __cpp_lib_saturation_arithmetic >= 202603L
@@ -944,7 +944,7 @@ namespace srx::detail
             using vec_type = std::simd::vec<uchar_type>;
             using mask_type = vec_type::mask_type;
 
-            static constexpr auto flags = [](){
+            static constexpr auto flags = []{
                 if constexpr (not std::same_as<char_type, uchar_type>)
                     return std::simd::flag_convert;
                 else

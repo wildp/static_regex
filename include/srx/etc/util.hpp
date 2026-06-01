@@ -101,8 +101,8 @@ namespace srx::detail
 
     namespace hash
     {
-        static constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
-        static constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
+        inline constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
+        inline constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
 
         consteval std::size_t init() { return fnv_offset_basis; }
 
