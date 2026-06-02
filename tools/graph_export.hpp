@@ -19,7 +19,7 @@
 #include <srx/fsm/tnfa.hpp>
 
 
-namespace srx::testing
+namespace srx::tools
 {
     template<typename T>
     concept print_destination = requires (T t) { std::println(t); };

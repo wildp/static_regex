@@ -11,11 +11,11 @@
 #include <srx/fsm/tdfa.hpp>
 
 
-namespace srx::testing
+namespace srx::tools
 {
     template<typename T, typename CharT>
         requires requires (T t) { std::println(t); }
-    void dump_tdfa(T target, const detail::tagged_dfa<CharT>& dfa)
+    void dump_fsm(T target, const detail::tagged_dfa<CharT>& dfa)
     {
         using namespace detail::tdfa;
 
@@ -87,8 +87,8 @@ namespace srx::testing
     }
 
     template<typename CharT>
-    void dump_tdfa(const detail::tagged_dfa<CharT>& dfa)
+    void dump_fsm(const detail::tagged_dfa<CharT>& dfa)
     {
-        return dump_tdfa(stdout, dfa);
+        return dump_fsm(stdout, dfa);
     }
 }
