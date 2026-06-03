@@ -35,3 +35,8 @@ static_assert(search_all("ab"_test, "abaab", { { 0, 2 }, { 3, 5 } }));
 static_assert(search_all("(?:)|abc"_test, "abc", { { 0, 0 }, { 0, 3 }, { 3, 3 } }));
 static_assert(search_all("(?:)|abc"_test, "abcabc", { { 0, 0 }, { 0, 3 }, { 3, 3 }, { 3, 6 }, { 6, 6 } }));
 // TODO: add more tests
+
+/* additional search tests (for simd epilogues: also run at run-time) */
+static_assert(search_all("aa"_test, "aabbaa", { { 0, 2 }, { 4, 6 } }));
+static_assert(search_all("aa"_test, "aabbaab", { { 0, 2 }, { 4, 6 } }));
+static_assert(search_all("aa"_test, "aabbaabb", { { 0, 2 }, { 4, 6 } }));

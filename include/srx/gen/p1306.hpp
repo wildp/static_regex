@@ -919,8 +919,14 @@ namespace srx::detail
                 {
                     const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
+#if false
+                    /* potential bug involving non-mask overloads of simd::partial_load ??? */
                     const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, flags);
                     const auto block2 = std::simd::partial_load<vec_type>(it + position2, epi_size, flags);
+#else
+                    const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, epi_mask, flags);
+                    const auto block2 = std::simd::partial_load<vec_type>(it + position2, epi_size, epi_mask, flags);
+#endif
 
                     const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                     const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
@@ -988,7 +994,12 @@ namespace srx::detail
                 {
                     const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
-                    const auto block = std::simd::partial_load<vec_type>(it + position, last, epi_mask, flags);
+#if false
+                    /* potential bug involving non-mask overloads of simd::partial_load ??? */
+                    const auto block = std::simd::partial_load<vec_type>(it + position, epi_size, flags);
+#else
+                    const auto block = std::simd::partial_load<vec_type>(it + position, epi_size, epi_mask, flags);
+#endif
                     const auto mask = vector_tr_find<combined_cs>(block);
 
                     return vector_candidate_check<DFAState, min_length, skipped>(result, it, last, (mask & epi_mask).to_ullong());
