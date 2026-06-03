@@ -1,5 +1,9 @@
 # News
 
+### Version 0.2.2
+
+Added support for `$&`, `` $` ``, `$'`, and `$+` in `regex_replace`.
+
 ### Version 0.2.1
 
 Improved performance when searching sized contiguous ranges.

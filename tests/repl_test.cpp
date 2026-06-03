@@ -71,6 +71,16 @@ static_assert(test("(?:)|abc"_srx, "-", "abc", "---"));
 static_assert(test("\\b|abc"_srx, "-", "abc", "---"));
 static_assert(test("(?:)|abc"_srx, "-", "abcabc", "-----"));
 static_assert(test("\\b|abc"_srx, "-", "abcabc", "----"));
+static_assert(test("a"_srx, "[$0]", "abbab", "[a]bb[a]b"));
+static_assert(test("a"_srx, "[$&]", "abbab", "[a]bb[a]b"));
+static_assert(test("a"_srx, "[$`]", "abbab", "[]bb[bb]b"));
+static_assert(test("a"_srx, "[$']", "abbab", "[bbab]bb[b]b"));
+static_assert(test("()(a)"_srx, "[$+]", "abbab", "[a]bb[a]b"));
+static_assert(test("()(a)"_srx, "[$2]", "abbab", "[a]bb[a]b"));
+static_assert(test("(a)+(b)"_srx, "$1[$+]", "aabbaaaba", "a[b]ba[b]a"));
+static_assert(test("a"_srx, "$$", "abbab", "$bb$b"));
+static_assert(test("a"_srx, "$$0", "abbab", "$0bb$0b"));
+static_assert(test("a"_srx, "$$$0", "abbab", "$abb$ab"));
 
 /* static replace format test */
 static_assert(test("a"_srx, fmt<"x">, "abc", "xbc"));
@@ -96,6 +106,16 @@ static_assert(test("(?:)|abc"_srx, fmt<"-">, "abc", "---"));
 static_assert(test("\\b|abc"_srx, fmt<"-">, "abc", "---"));
 static_assert(test("(?:)|abc"_srx, fmt<"-">, "abcabc", "-----"));
 static_assert(test("\\b|abc"_srx, fmt<"-">, "abcabc", "----"));
+static_assert(test("a"_srx, fmt<"[$0]">, "abbab", "[a]bb[a]b"));
+static_assert(test("a"_srx, fmt<"[$&]">, "abbab", "[a]bb[a]b"));
+static_assert(test("a"_srx, fmt<"[$`]">, "abbab", "[]bb[bb]b"));
+static_assert(test("a"_srx, fmt<"[$']">, "abbab", "[bbab]bb[b]b"));
+static_assert(test("()(a)"_srx, fmt<"[$+]">, "abbab", "[a]bb[a]b"));
+static_assert(test("()(a)"_srx, fmt<"[$2]">, "abbab", "[a]bb[a]b"));
+static_assert(test("(a)+(b)"_srx, fmt<"$1[$+]">, "aabbaaaba", "a[b]ba[b]a"));
+static_assert(test("a"_srx, fmt<"$$">, "abbab", "$bb$b"));
+static_assert(test("a"_srx, fmt<"$$0">, "abbab", "$0bb$0b"));
+static_assert(test("a"_srx, fmt<"$$$0">, "abbab", "$abb$ab"));
 
 /* dynamic replace format tests (lazy) */
 static_assert(lazy_test("a"_srx, "x", "abc", "xbc"));
@@ -121,6 +141,16 @@ static_assert(lazy_test("(?:)|abc"_srx, "-", "abc", "---"));
 static_assert(lazy_test("\\b|abc"_srx, "-", "abc", "---"));
 static_assert(lazy_test("(?:)|abc"_srx, "-", "abcabc", "-----"));
 static_assert(lazy_test("\\b|abc"_srx, "-", "abcabc", "----"));
+static_assert(lazy_test("a"_srx, "[$0]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("a"_srx, "[$&]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("a"_srx, "[$`]", "abbab", "[]bb[bb]b"));
+static_assert(lazy_test("a"_srx, "[$']", "abbab", "[bbab]bb[b]b"));
+static_assert(lazy_test("()(a)"_srx, "[$+]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("()(a)"_srx, "[$2]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("(a)+(b)"_srx, "$1[$+]", "aabbaaaba", "a[b]ba[b]a"));
+static_assert(lazy_test("a"_srx, "$$", "abbab", "$bb$b"));
+static_assert(lazy_test("a"_srx, "$$0", "abbab", "$0bb$0b"));
+static_assert(lazy_test("a"_srx, "$$$0", "abbab", "$abb$ab"));
 
 /* static replace format test (lazy) */
 static_assert(lazy_test("a"_srx, fmt<"x">, "abc", "xbc"));
@@ -146,6 +176,16 @@ static_assert(lazy_test("(?:)|abc"_srx, fmt<"-">, "abc", "---"));
 static_assert(lazy_test("\\b|abc"_srx, fmt<"-">, "abc", "---"));
 static_assert(lazy_test("(?:)|abc"_srx, fmt<"-">, "abcabc", "-----"));
 static_assert(lazy_test("\\b|abc"_srx, fmt<"-">, "abcabc", "----"));
+static_assert(lazy_test("a"_srx, fmt<"[$0]">, "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("a"_srx, fmt<"[$&]">, "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("a"_srx, fmt<"[$`]">, "abbab", "[]bb[bb]b"));
+static_assert(lazy_test("a"_srx, fmt<"[$']">, "abbab", "[bbab]bb[b]b"));
+static_assert(lazy_test("()(a)"_srx, fmt<"[$+]">, "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("()(a)"_srx, fmt<"[$2]">, "abbab", "[a]bb[a]b"));
+static_assert(lazy_test("(a)+(b)"_srx, fmt<"$1[$+]">, "aabbaaaba", "a[b]ba[b]a"));
+static_assert(lazy_test("a"_srx, fmt<"$$">, "abbab", "$bb$b"));
+static_assert(lazy_test("a"_srx, fmt<"$$0">, "abbab", "$0bb$0b"));
+static_assert(lazy_test("a"_srx, fmt<"$$$0">, "abbab", "$abb$ab"));
 
 /* dynamic replace format tests (lazy, using const char*) */
 static_assert(lazy_test_cstr("a"_srx, "x", "abc", "xbc"));
@@ -171,3 +211,13 @@ static_assert(lazy_test_cstr("(?:)|abc"_srx, "-", "abc", "---"));
 static_assert(lazy_test_cstr("\\b|abc"_srx, "-", "abc", "---"));
 static_assert(lazy_test_cstr("(?:)|abc"_srx, "-", "abcabc", "-----"));
 static_assert(lazy_test_cstr("\\b|abc"_srx, "-", "abcabc", "----"));
+static_assert(lazy_test_cstr("a"_srx, "[$0]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test_cstr("a"_srx, "[$&]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test_cstr("a"_srx, "[$`]", "abbab", "[]bb[bb]b"));
+static_assert(lazy_test_cstr("a"_srx, "[$']", "abbab", "[bbab]bb[b]b"));
+static_assert(lazy_test_cstr("()(a)"_srx, "[$+]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test_cstr("()(a)"_srx, "[$2]", "abbab", "[a]bb[a]b"));
+static_assert(lazy_test_cstr("(a)+(b)"_srx, "$1[$+]", "aabbaaaba", "a[b]ba[b]a"));
+static_assert(lazy_test_cstr("a"_srx, "$$", "abbab", "$bb$b"));
+static_assert(lazy_test_cstr("a"_srx, "$$0", "abbab", "$0bb$0b"));
+static_assert(lazy_test_cstr("a"_srx, "$$$0", "abbab", "$abb$ab"));

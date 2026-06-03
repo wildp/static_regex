@@ -504,17 +504,17 @@ namespace srx {
   template<std::ranges::input_range V, string_literal Fmt>
     requires std::ranges::view<V> and /* static-regex-match-view-like<V> */
   class replace_view<V, fmt_t<Fmt>> : std::ranges::view_interface<replace_view<V, fmt_t<Fmt>>> {
-      struct iterator;
+    struct iterator;
 
   public:
-      replace_view() requires std::default_initializable<V> = default;
+    replace_view() requires std::default_initializable<V> = default;
 
-      constexpr explicit replace_view(V base, fmt_t<Fmt> fmt);
+    constexpr explicit replace_view(V base, fmt_t<Fmt> fmt);
 
-      constexpr V base() const& requires std::copy_constructible<V>;
-      constexpr V base() &&;
-      constexpr iterator begin();
-      constexpr std::default_sentinel_t end();
+    constexpr V base() const& requires std::copy_constructible<V>;
+    constexpr V base() &&;
+    constexpr iterator begin();
+    constexpr std::default_sentinel_t end();
   };
 
   template<std::ranges::input_range V, std::ranges::bidirectional_range Fmt>
@@ -524,14 +524,14 @@ namespace srx {
     struct iterator;
 
   public:
-      replace_view() requires std::default_initializable<V> and std::default_initializable<Fmt> = default;
+    replace_view() requires std::default_initializable<V> and std::default_initializable<Fmt> = default;
 
-      constexpr explicit replace_view(V base, Fmt fmt);
+    constexpr explicit replace_view(V base, Fmt fmt);
 
-      constexpr V base() const& requires std::copy_constructible<V>;
-      constexpr V base() &&;
-      constexpr iterator begin();
-      constexpr std::default_sentinel_t end();
+    constexpr V base() const& requires std::copy_constructible<V>;
+    constexpr V base() &&;
+    constexpr iterator begin();
+    constexpr std::default_sentinel_t end();
   };
 
   template<typename R, string_literal Fmt>
@@ -572,19 +572,19 @@ namespace srx {
   requires std::ranges::view<V>
   class regex_split_view<V, static_regex<Pattern, Mode>>
     : std::ranges::view_interface<regex_split_view<V, static_regex<Pattern, Mode>>> {
-      class iterator;
-      class sentinel;
+    class iterator;
+    class sentinel;
 
   public:
-      regex_split_view() requires std::default_initializable<V> = default;
-      constexpr explicit regex_split_view(V base, static_regex<Pattern, Mode> regex);
+    regex_split_view() requires std::default_initializable<V> = default;
+    constexpr explicit regex_split_view(V base, static_regex<Pattern, Mode> regex);
 
-      V base() const& requires std::copy_constructible<V>;
-      V base() && requires std::copy_constructible<V>;
+    V base() const& requires std::copy_constructible<V>;
+    V base() && requires std::copy_constructible<V>;
 
-      constexpr iterator begin();
-      constexpr sentinel end();
-      constexpr iterator end() requires std::ranges::common_range<V>;
+    constexpr iterator begin();
+    constexpr sentinel end();
+    constexpr iterator end() requires std::ranges::common_range<V>;
   };
 
   template<typename R, string_literal Pattern, mode Mode>
@@ -622,46 +622,46 @@ namespace srx {
   using regex_replace_result = std::ranges::in_out_result<I, O>;
 
   /* see below for template constraints */
-  template<typename I, typename S, typename O, /* regex-like */ Regex, typename F, typename FmtS>
+  template<typename I, typename S, typename O, typename Regex, typename F, typename FmtS>
   constexpr auto regex_replace(I first, S last, O result, Regex pattern, F fmt, FmtS fmt_last)
     -> regex_replace_result<I, O>;
 
-  template<typename R, typename O, /* regex-like */ Regex, typename FmtR>
+  template<typename R, typename O, typename Regex, typename FmtR>
   constexpr auto regex_replace(R&& r, O result, Regex pattern, FmtR&& fmt)
     -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
 
-  template<typename I, typename S, typename> O, /* regex-like */ Regex, typename CharT>
+  template<typename I, typename S, typename> O, typename Regex, typename CharT>
   constexpr auto regex_replace(I first, S last, O result, Regex pattern, std::basic_string_view<CharT> fmt)
     -> regex_replace_result<I, O>;
 
-  template<typename R, typename O, /* regex-like */ Regex, typename CharT>
+  template<typename R, typename O, typename Regex, typename CharT>
   constexpr auto regex_replace(R&& r, O result, Regex pattern, std::basic_string_view<CharT> fmt)
     -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
 
-  template<typename CharT, /* regex-like */ Regex>
-  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern,
+  template<typename CR, typename Regex>
+  constexpr auto regex_replace(CR&& cr, Regex pattern,
                                std::basic_string_view<std::type_identity_t<CharT>> fmt)
     -> std::basic_string<CharT>;
 
-  template<typename CharT, /* regex-like */ Regex>
+  template<typename CharT, typename Regex>
   constexpr auto regex_replace(const CharT* cstr, Regex pattern,
                                std::basic_string_view<std::type_identity_t<CharT>> fmt)
     -> std::basic_string<CharT>;
 
 
-  template<typename I, typename S, typename O, /* static-regex-like */ Regex, string_literal Fmt>
+  template<typename I, typename S, typename O, typename Regex, string_literal Fmt>
   constexpr auto regex_replace(I first, S last, O result, Regex pattern, fmt_t<Fmt>)
     -> regex_replace_result<I, O>;
 
-  template<typename R, typename O, /* static-regex-like */ Regex, string_literal Fmt>
+  template<typename R, typename O, typename Regex, string_literal Fmt>
   constexpr auto regex_replace(R&& r, O result, Regex pattern, fmt_t<Fmt>)
     -> regex_replace_result<std::ranges::borrowed_iterator_t<R>, O>;
 
-  template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
-  constexpr auto regex_replace(std::basic_string_view<CharT> sv, Regex pattern, fmt_t<Fmt>)
+  template<typename CR, typename Regex, string_literal Fmt>
+  constexpr auto regex_replace(CR&& cr, Regex pattern, fmt_t<Fmt>)
     ->  std::basic_string<CharT>;
 
-  template<typename CharT, /* static-regex-like */ Regex, string_literal Fmt>
+  template<typename CharT, typename Regex, string_literal Fmt>
   constexpr auto regex_replace(const CharT* cstr, Regex pattern, fmt_t<Fmt>)
     -> std::basic_string<CharT>;
 } // namespace srx
@@ -674,6 +674,13 @@ In the replacement string `fmt`, all occurences of `$N` (where `N` is a non-nega
 If `N` is greater than the number of submatches captured by `pattern`, an error is thrown.
 If `N` refers to a capturing group which was not matched, `$N` is replaced with an empty string.
 
+Additionally, the following patterns are replaced with:
+- `$&`: the entire matched substring (equivalent to `$0`).
+- `` $` ``: the input between the end of the previous match (or start of input if none exists) and the start of the current match.
+- `$'`: the rest of the input following the current match.
+- `$+`: submatch `N-1`, where `N` is the number of submatches captured by `pattern`.
+- `$$`: a literal `$`.
+
 The template contraints for `regex_replace` are as follows:
 + All overloads:
   - `std::same_as<typename Regex::char_type, CharT>` holds.
@@ -685,6 +692,10 @@ The template contraints for `regex_replace` are as follows:
 + Range overloads (2, 4, 8):
   - `R` satisfies `std::ranges::bidirectional_range`.
   - `std::same_as<std::ranges::range_value_t<R>, CharT>` holds.
++ Contiguous range overloads (5, 9):
+  - *N.B. these overloads are intended for std::string and std::string_view-like classes*
+  - `CR` satisfies `std::ranges::contiguous_range`.
+  - `std::same_as<std::ranges::range_value_t<CR>, CharT>` holds.
 + Replacement string iterator overload (1):
   - `F` satisfies `std::bidirectional_iterator`.
   - `FmtS` satisfies `std::sentinel_for<F>`.

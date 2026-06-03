@@ -125,7 +125,6 @@ namespace srx
                 }
                 else
                 {
-
                     if constexpr (result_type::continue_from_it)
                         result_ = matcher_(first_, last_, current);
                     else if constexpr (result_type::has_continue)
@@ -146,21 +145,21 @@ namespace srx
         consteval auto replace_fmt_pattern()
         {
             if constexpr (std::same_as<CharT, char>)
-                return string_literal{ R"(\$\d+)" };
+                return string_literal{ R"(\$(?:[&`'+$]|\d+))" };
             else if constexpr (std::same_as<CharT, wchar_t>)
-                return string_literal{ LR"(\$\d+)" };
+                return string_literal{ LR"(\$(?:[&`'+$]|\d+))" };
             else if constexpr (std::same_as<CharT, char8_t>)
-                return string_literal{ u8R"(\$\d+)" };
+                return string_literal{ u8R"(\$(?:[&`'+$]|\d+))" };
             else if constexpr (std::same_as<CharT, char16_t>)
-                return string_literal{ uR"(\$\d+)" };
+                return string_literal{ uR"(\$(?:[&`'+$]|\d+))" };
             else if constexpr (std::same_as<CharT, char32_t>)
-                return string_literal{ UR"(\$\d+)" };
+                return string_literal{ UR"(\$(?:[&`'+$]|\d+))" };
             else
                 return;
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        constexpr std::size_t parse_unsigned(I first, const S last)
+        constexpr std::size_t parse_unsigned(I first, const S last, const std::size_t submatch_count)
         {
             static constexpr std::size_t base{ 10 };
             std::size_t result{ 0 };
@@ -175,7 +174,41 @@ namespace srx
                 ++first;
             }
 
+            if (result >= submatch_count)
+                throw regex_error("replace_fmt: invalid replacement");
+
             return result;
+        }
+
+        namespace replace_constants
+        {
+            enum replace_constant : std::size_t
+            {
+                match       =  0uz,
+                prematch    = -1uz,
+                postmatch   = -2uz,
+                skip        = -3uz,
+            };
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        constexpr std::size_t parse_fmt_replace(I first, const S last, const std::size_t submatch_count)
+        {
+            if (first == last)
+                throw regex_error("replace_fmt: invalid replacement");
+
+            if (*first == '&')
+                return replace_constants::match;
+            else if (*first == '`')
+                return replace_constants::prematch;
+            else if (*first == '\'')
+                return replace_constants::postmatch;
+            else if (*first == '+')
+                return submatch_count - 1;
+            else if (*first == '$')
+                return replace_constants::skip;
+            else
+                return parse_unsigned(first, last, submatch_count);
         }
 
 
@@ -190,7 +223,7 @@ namespace srx
                 : subranges_{ subrange_type{} }, captures_{} {}
 
             template<std::sentinel_for<I> S>
-            constexpr replace_fmt(I first, S last)
+            constexpr replace_fmt(I first, S last, const std::size_t submatch_count)
             {
                 using matcher_type = [: detail::get_matcher_refl(mode::standard, true) :]<detail::replace_fmt_pattern<char_type>(), detail::default_fsm_flags::search_all>;
                 using result_type = matcher_type::template result<I>;
@@ -201,13 +234,14 @@ namespace srx
                 while (match_result.has_value())
                 {
                     const auto& [mfirst, mlast] = get<0>(match_result);
+                    const auto& cap = captures_.emplace_back(detail::parse_fmt_replace(std::ranges::next(mfirst), mlast, submatch_count));
 
-                    subranges_.emplace_back(first, mfirst);
-                    captures_.emplace_back(detail::parse_unsigned(std::ranges::next(mfirst), mlast));
+                    if (cap == replace_constants::skip)
+                        subranges_.emplace_back(first, std::ranges::next(mfirst));
+                    else
+                        subranges_.emplace_back(first, mfirst);
 
                     first = mlast;
-                    if (mfirst == mlast)
-                        ++first;
 
                     if constexpr (result_type::has_continue)
                         match_result = delim_matcher(first, last, match_result.continue_at_);
@@ -229,12 +263,6 @@ namespace srx
             constexpr const auto& trailing() const
             {
                 return subranges_.back();
-            }
-
-            constexpr void range_check(std::size_t n) const
-            {
-                if (std::ranges::any_of(captures_, [n](std::size_t x){ return x >= n; }))
-                    throw regex_error("replace_fmt: invalid replacement");
             }
 
             constexpr const auto& subranges() const noexcept
@@ -260,8 +288,8 @@ namespace srx
             using char_type = CharT;
             using subrange_type = detail::static_span<char_type>;
 
-            explicit consteval static_replace_fmt(std::basic_string_view<CharT> sv)
-                : static_replace_fmt(replace_fmt{ sv.begin(), sv.end() }) {}
+            explicit consteval static_replace_fmt(std::basic_string_view<CharT> sv, const std::size_t match_count)
+                : static_replace_fmt(replace_fmt{ sv.begin(), sv.end(), match_count }) {}
 
             constexpr auto zipped() const
             {
@@ -271,12 +299,6 @@ namespace srx
             constexpr const auto& trailing() const
             {
                 return subranges_.back();
-            }
-
-            constexpr void range_check(std::size_t n) const
-            {
-                if (std::ranges::any_of(captures_, [n](std::size_t x){ return x >= n; }))
-                    throw regex_error("replace_fmt: invalid replacement");
             }
 
             constexpr const auto& subranges() const noexcept
@@ -330,8 +352,7 @@ namespace srx
                 using sentinel_type = std::default_sentinel_t;
                 using result_type = iterator_type::value_type;
 
-                const replace_fmt fmt{ fmt_first, fmt_last };
-                fmt.range_check(result_type::submatch_count);
+                const replace_fmt fmt{ fmt_first, fmt_last, result_type::submatch_count };
 
                 iterator_type it{ first, last };
                 sentinel_type end{};
@@ -345,7 +366,15 @@ namespace srx
                     for (const auto& [substr, idx] : fmt.zipped())
                     {
                         result = std::ranges::copy(substr, result).out;
-                        result = std::ranges::copy(it->at(idx), result).out;
+
+                        if (idx == replace_constants::match)
+                            result = std::ranges::copy(mfirst, mlast, result).out;
+                        else if (idx == replace_constants::prematch)
+                            result = std::ranges::copy(first, mfirst, result).out;
+                        else if (idx == replace_constants::postmatch)
+                            result = std::ranges::copy(mlast, last, result).out;
+                        else if (idx != replace_constants::skip)
+                            result = std::ranges::copy(it->at(idx), result).out;
                     }
 
                     result = std::ranges::copy(fmt.trailing(), result).out;
@@ -364,10 +393,7 @@ namespace srx
                 using sentinel_type = std::default_sentinel_t;
                 using result_type = iterator_type::value_type;
 
-                static constexpr static_replace_fmt fmt{ Fmt.view() };
-                consteval {
-                    fmt.range_check(result_type::submatch_count);
-                }
+                static constexpr static_replace_fmt fmt{ Fmt.view(), result_type::submatch_count };
 
                 iterator_type it{ first, last };
                 sentinel_type end{};
@@ -380,9 +406,17 @@ namespace srx
                     // TODO: change to use constexpr structured binding when supported
                     template for (constexpr auto pair : fmt.zipped())
                     {
-                        constexpr std::size_t N{ get<1>(pair) };
+                        constexpr std::size_t idx{ get<1>(pair) };
                         result = std::ranges::copy(get<0>(pair), result).out;
-                        result = std::ranges::copy(get<N>(*it), result).out;
+
+                        if constexpr (idx == replace_constants::match)
+                            result = std::ranges::copy(mfirst, mlast, result).out;
+                        else if constexpr (idx == replace_constants::prematch)
+                            result = std::ranges::copy(first, mfirst, result).out;
+                        else if constexpr (idx == replace_constants::postmatch)
+                            result = std::ranges::copy(mlast, last, result).out;
+                        else if constexpr (idx != replace_constants::skip)
+                            result = std::ranges::copy(get<idx>(*it), result).out;
                     }
 
                     result = std::ranges::copy(fmt.trailing(), result).out;
@@ -427,12 +461,13 @@ namespace srx
                 return operator()(std::ranges::begin(r), std::ranges::end(r), result, pattern, fmt.begin(), fmt.end());
             }
 
-            template<typename CharT, typed_regex_like<CharT> Regex>
+            template<std::ranges::contiguous_range CR, regex_like Regex,
+                     std::same_as<std::ranges::range_value_t<CR>> CharT = Regex::char_type>
             static constexpr std::basic_string<CharT>
-            operator()(std::basic_string_view<CharT> sv, Regex pattern, std::basic_string_view<std::type_identity_t<CharT>> fmt)
+            operator()(CR&& cr, Regex pattern, std::basic_string_view<std::type_identity_t<CharT>> fmt)
             {
                 std::basic_string<CharT> result;
-                operator()(sv.begin(), sv.end(), std::back_inserter(result), pattern, fmt.begin(), fmt.end());
+                operator()(std::ranges::begin(cr), std::ranges::end(cr), std::back_inserter(result), pattern, fmt.begin(), fmt.end());
                 return result;
             }
 
@@ -463,13 +498,14 @@ namespace srx
                 return operator()(std::ranges::begin(r), std::ranges::end(r), result, pattern, fmt<Fmt>);
             }
 
-            template<typename CharT, typed_static_regex_like<CharT> Regex, string_literal Fmt>
+            template<std::ranges::contiguous_range CR, static_regex_like Regex, string_literal Fmt,
+                     std::same_as<std::ranges::range_value_t<CR>> CharT = Regex::char_type>
                 requires std::same_as<typename decltype(Fmt)::value_type, CharT>
             static constexpr std::basic_string<CharT>
-            operator()(std::basic_string_view<CharT> sv, Regex pattern, fmt_t<Fmt>)
+            operator()(CR&& cr, Regex pattern, fmt_t<Fmt>)
             {
                 std::basic_string<CharT> result;
-                operator()(sv.begin(), sv.end(), std::back_inserter(result), pattern, fmt<Fmt>);
+                operator()(std::ranges::begin(cr), std::ranges::end(cr), std::back_inserter(result), pattern, fmt<Fmt>);
                 return result;
             }
 

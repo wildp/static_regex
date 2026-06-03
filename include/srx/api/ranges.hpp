@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -435,7 +436,7 @@ namespace srx
         using underlying_type = std::remove_cvref_t<decltype(std::declval<V>().base().base())>;
         static_assert(std::same_as<std::ranges::range_value_t<underlying_type>, typename decltype(Fmt)::value_type>);
 
-        static constexpr detail::static_replace_fmt fmt{ Fmt.view() };
+        static constexpr detail::static_replace_fmt fmt{ Fmt.view(), submatch_limit };
         static constexpr std::size_t max_index{ fmt.subranges().size() + fmt.captures().size() };
         static constexpr std::size_t suffix_index{ -1uz };
 
@@ -535,6 +536,8 @@ namespace srx
                 {
                     if (index_ == I)
                     {
+                        namespace drc = detail::replace_constants;
+
                         if constexpr (I % 2 == 0)
                         {
                             static constexpr fmt_subrange format{ fmt.subranges()[I / 2] };
@@ -545,9 +548,29 @@ namespace srx
                                 return;
                             }
                         }
-                        else
+                        else if constexpr (constexpr auto submatch_index = fmt.captures()[I / 2]; submatch_index == drc::prematch)
                         {
-                            submatch capture{ get<fmt.captures()[I / 2]>(*current_) };
+                            const auto mfirst = get<0>(*current_).begin();
+
+                            if (mfirst != current_.base())
+                            {
+                                subrange_.template emplace<base_subrange_index>(current_.base(), mfirst);
+                                return;
+                            }
+                        }
+                        else if constexpr (submatch_index == drc::postmatch)
+                        {
+                            const auto mlast = get<0>(*current_).end();
+
+                            if (mlast != current_.end())
+                            {
+                                subrange_.template emplace<base_subrange_index>(mlast, current_.end());
+                                return;
+                            }
+                        }
+                        else if constexpr (submatch_index != drc::skip)
+                        {
+                            submatch capture{ get<submatch_index>(*current_) };
 
                             if (not capture.empty())
                             {
@@ -584,11 +607,8 @@ namespace srx
 
         constexpr explicit replace_view(V base, Fmt fmt)
             : base_{ std::move(base) }, format_input_{ std::move(fmt) }
-            , fmt_{ std::ranges::begin(format_input_), std::ranges::end(format_input_) }
-            , max_index_{ fmt_.captures().size() + fmt_.subranges().size() }
-        {
-            fmt_.range_check(submatch_limit);
-        }
+            , fmt_{ std::ranges::begin(format_input_), std::ranges::end(format_input_), submatch_limit }
+            , max_index_{ fmt_.captures().size() + fmt_.subranges().size() } {}
 
         [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
         [[nodiscard]] constexpr V base() && { return std::move(base_); }
@@ -705,6 +725,8 @@ namespace srx
                     ++index_;
                 }
 
+                namespace drc = detail::replace_constants;
+
                 if (index_ % 2 == 0)
                 {
                     const auto& format = parent_->fmt_.subranges().at(index_ / 2);
@@ -715,10 +737,29 @@ namespace srx
                         return;
                     }
                 }
-                else
+                else if (const auto submatch_index = parent_->fmt_.captures().at(index_ / 2); submatch_index == drc::prematch)
                 {
-                    const auto match_index = parent_->fmt_.captures().at(index_ / 2);
-                    submatch capture{ (*current_).at(match_index) };
+                    const auto mfirst = get<0>(*current_).begin();
+
+                    if (mfirst != current_.base())
+                    {
+                        subrange_.template emplace<base_subrange_index>(current_.base(), mfirst);
+                        return;
+                    }
+                }
+                else if (submatch_index == drc::postmatch)
+                {
+                    const auto mlast = get<0>(*current_).end();
+
+                    if (mlast != current_.end())
+                    {
+                        subrange_.template emplace<base_subrange_index>(mlast, current_.end());
+                        return;
+                    }
+                }
+                else if (submatch_index != drc::skip)
+                {
+                    submatch capture{ (*current_).at(submatch_index) };
 
                     if (not capture.empty())
                     {
