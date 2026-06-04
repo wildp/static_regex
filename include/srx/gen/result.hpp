@@ -163,7 +163,7 @@ public:
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;
 
-    template<std::ranges::bidirectional_range V, typename Regex>
+    template<std::ranges::bidirectional_range V, typename Regex, bool Sequential>
         requires std::ranges::view<V>
     friend class regex_match_view;
 

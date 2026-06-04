@@ -166,6 +166,9 @@ namespace srx {
     template<typename I, typename S> static constexpr auto range(const I first, const S last);
     template<typename R>             static constexpr auto range(R&& r);
     template<typename CharT>         static constexpr auto range(const CharT* cstr);
+    template<typename I, typename S> static constexpr auto sequential_range(const I first, const S last);
+    template<typename R>             static constexpr auto sequential_range(R&& r);
+    template<typename CharT>         static constexpr auto sequential_range(const CharT* cstr);
   };
 } // namespace srx
 ```
@@ -195,6 +198,7 @@ Depending on the regex pattern, using these functions may allow for a smaller DF
 
 `range` returns a `regex_match_view` over all substrings of the input matched by `Pattern`.
 The template parameter requirements for `range` are the same as for `match`, `prefix_match`, and `search`.
+As for `sequential_range`, it is to `prefix_match` as `range` is to `search`.
 
 Additionally, the following helpers are defined for convenience:
 
@@ -225,10 +229,13 @@ namespace srx {
 
   template<string_literal Pattern, mode Mode = mode::standard>
   constexpr auto static_regex_search_all(/* args */);
+
+  template<string_literal Pattern, mode Mode = mode::standard>
+  constexpr auto static_regex_match_consecutive(/* args */);
 } // namespace srx;
 ```
 
-Each invocation of `static_regex_foo<Pattern, Mode>()` is equivalent to calling `static_regex<Pattern, Mode>.foo()` with the same arguments, except for `search_all` which instead calls `range()`.
+Each invocation of `static_regex_foo<Pattern, Mode>()` is equivalent to calling `static_regex<Pattern, Mode>.foo()` with the same arguments, except for `search_all` and `match_consecutive` which instead call `range()` and `sequential_range()` respectively.
 
 
 ## Class template `srx::static_match_results`
@@ -415,9 +422,13 @@ namespace srx {
 
   namespace views {
     inline constexpr /* range-adaptor */ regex_match;
+    inline constexpr /* range-adaptor */ regex_sequential_match;
 
     template<string_literal Pattern, mode Mode = mode::standard>
     inline constexpr /* range-adaptor */ static_regex_match;
+
+    template<string_literal Pattern, mode Mode = mode::standard>
+    inline constexpr /* range-adaptor */ static_regex_sequential_match;
   }
 } // namespace srx
 ```
@@ -425,7 +436,12 @@ namespace srx {
 `regex_match_view` is always an input range.
 Its range value is an instantiation of `static_match_results`.
 
+`views::regex_sequential_match` produces a `regex_match_view` for which the regular expression matches are sequential.
+The range iterator for `views::regex_match` is incremented by calling `static_regex<Pattern>::search()`, whereas the range iterator for `views::regex_sequential_match` is incremented by calling `static_regex<Pattern>::partial_match()`.
+
 `views::static_regex_match<Pattern>` is equivalent to `views::regex_match(static_regex<Pattern>{})`.
+A similar equivalence exists for `views::static_regex_sequential_match`.
+
 
 ## Class template `srx::submatches_view`
 

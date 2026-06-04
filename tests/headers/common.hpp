@@ -94,6 +94,17 @@ consteval bool search_all(srx::static_regex<S, M> pattern, std::string_view str,
     return true;
 }
 
+template<srx::string_literal S, srx::mode M>
+consteval bool sequential_match(srx::static_regex<S, M> pattern, std::string_view str, const std::vector<std::vector<std::size_t>>& captures)
+{
+    for (const auto& [match, caps] : std::views::zip(pattern.sequential_range(str), captures))
+    {
+        if (not submatch_check(match, caps, str.begin()))
+            return false;
+    }
+    return true;
+}
+
 #elif COMMON_HPP_INPUT_MODE == 1 /* contiguous non-sized range */
 
 template<srx::string_literal S, srx::mode M>
@@ -140,6 +151,18 @@ consteval bool search_all(srx::static_regex<S, M> pattern, const char* cstr, con
 {
     std::string_view sv{ cstr };
     for (const auto& [match, caps] : std::views::zip(pattern.range(cstr), captures))
+    {
+        if (not submatch_check(match, caps, sv.begin()))
+            return false;
+    }
+    return true;
+}
+
+template<srx::string_literal S, srx::mode M>
+consteval bool sequential_match(srx::static_regex<S, M> pattern, const char* cstr, const std::vector<std::vector<std::size_t>>& captures)
+{
+    std::string_view sv{ cstr };
+    for (const auto& [match, caps] : std::views::zip(pattern.sequential_range(cstr), captures))
     {
         if (not submatch_check(match, caps, sv.begin()))
             return false;

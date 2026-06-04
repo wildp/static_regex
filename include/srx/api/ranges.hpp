@@ -25,8 +25,15 @@
 
 
 namespace srx {
+namespace detail {
 
-template<std::ranges::bidirectional_range V, typename Regex>
+struct sequential_match_tag_t {};
+inline constexpr sequential_match_tag_t sequential_match_tag;
+
+} // namespace detail
+
+
+template<std::ranges::bidirectional_range V, typename Regex, bool Sequential = false>
     requires std::ranges::view<V>
 class regex_match_view
 {
@@ -34,15 +41,22 @@ class regex_match_view
 };
 
 
-template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode, bool Sequential>
     requires std::ranges::view<V>
-class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>>
+class regex_match_view<V, static_regex<Pattern, Mode>, Sequential> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>, Sequential>>
 {
     class iterator;
 
 public:
     regex_match_view() requires std::default_initializable<V> = default;
     constexpr explicit regex_match_view(V base, static_regex<Pattern, Mode> /* regex */) : base_{ std::move(base) } {}
+
+    constexpr explicit regex_match_view(detail::sequential_match_tag_t) noexcept(noexcept(regex_match_view()))
+        requires Sequential and std::default_initializable<V> {};
+
+    constexpr explicit regex_match_view(detail::sequential_match_tag_t, V base, static_regex<Pattern, Mode> /* regex */)
+        requires Sequential
+        : base_{ std::move(base) } {}
 
     [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
     [[nodiscard]] constexpr V base() && { return std::move(base_); }
@@ -62,7 +76,8 @@ public:
     }
 
 private:
-    using matcher_type = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+    static constexpr auto flags = Sequential ? detail::default_fsm_flags::match_sequential : detail::default_fsm_flags::search_all;
+    using matcher_type = [: detail::get_matcher_refl(Mode, not Sequential) :]<Pattern, flags>;
     using result_type = matcher_type::template result<std::ranges::iterator_t<V>>;
 
     template<bool MatchNonEmpty = false>
@@ -103,9 +118,9 @@ private:
     result_type cached_result_;
 };
 
-template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode, bool Sequential>
     requires std::ranges::view<V>
-class regex_match_view<V, static_regex<Pattern, Mode>>::iterator
+class regex_match_view<V, static_regex<Pattern, Mode>, Sequential>::iterator
 {
 public:
     using iterator_concept  = std::input_iterator_tag;
@@ -193,7 +208,10 @@ private:
 };
 
 template<typename R, string_literal Pattern, mode Mode>
-regex_match_view(R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>>;
+regex_match_view(R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>, false>;
+
+template<typename R, string_literal Pattern, mode Mode>
+regex_match_view(detail::sequential_match_tag_t, R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>, true>;
 
 
 template<std::ranges::input_range V, int... Submatches>
@@ -1024,6 +1042,12 @@ concept can_regex_match_view = requires
     regex_match_view(std::declval<Range>(), std::declval<Regex>());
 };
 
+template<typename Range, typename Regex>
+concept can_regex_sequential_match_view = requires
+{
+    regex_match_view(srx::detail::sequential_match_tag, std::declval<Range>(), std::declval<Regex>());
+};
+
 template<typename Range, typename T>
 concept can_submatches_view = requires
 {
@@ -1069,6 +1093,35 @@ struct regex_match_adaptor
         return static_regex_match_adaptor_closure<Regex>();
     }
 };
+
+template<typename Regex>
+struct static_regex_sequential_match_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_sequential_match_adaptor_closure<Regex>>
+{
+    template<std::ranges::viewable_range Range>
+        requires detail::can_regex_match_view<Range, Regex>
+    [[nodiscard]] constexpr auto operator()(Range&& r) const
+    {
+        return regex_match_view(srx::detail::sequential_match_tag, std::forward<Range>(r), Regex{});
+    }
+};
+
+struct regex_sequential_match_adaptor
+{
+    template<std::ranges::viewable_range Range, typename Regex>
+        requires detail::can_regex_sequential_match_view<Range, Regex>
+    [[nodiscard]] constexpr auto operator()(Range&& r, Regex&& x) const
+    {
+        return regex_match_view(srx::detail::sequential_match_tag, std::forward<Range>(r), std::forward<Regex>(x));
+    }
+
+    template<typename Regex>
+        requires srx::detail::static_regex_like<Regex>
+    [[nodiscard]] consteval auto operator()(Regex /* x */) const
+    {
+        return static_regex_sequential_match_adaptor_closure<Regex>();
+    }
+};
+
 
 template<int... Submatches>
 struct static_submatches_adaptor_closure : std::ranges::range_adaptor_closure<static_submatches_adaptor_closure<Submatches...>>
@@ -1222,12 +1275,16 @@ struct regex_split_adaptor
 
 
 inline constexpr detail::regex_match_adaptor regex_match;
+inline constexpr detail::regex_sequential_match_adaptor regex_sequential_match;
 inline constexpr detail::submatches_adaptor submatches;
 inline constexpr detail::replace_adaptor replace;
 inline constexpr detail::regex_split_adaptor regex_split;
 
 template<string_literal Pattern, mode Mode = mode::standard>
 inline constexpr detail::static_regex_match_adaptor_closure<static_regex<Pattern, Mode>> static_regex_match;
+
+template<string_literal Pattern, mode Mode = mode::standard>
+inline constexpr detail::static_regex_sequential_match_adaptor_closure<static_regex<Pattern, Mode>> static_regex_sequential_match;
 
 template<int... Submatches> requires (sizeof...(Submatches) > 0)
 inline constexpr detail::static_submatches_adaptor_closure<Submatches...> static_submatches;
@@ -1247,6 +1304,14 @@ template<std::ranges::bidirectional_range R>
 constexpr auto static_regex<Pattern, Mode>::range(R&& r)
 {
     return views::regex_match(std::forward<R>(r), srx<Pattern, Mode>);
+}
+
+template<string_literal Pattern, mode Mode>
+template<std::ranges::bidirectional_range R>
+    requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type>
+constexpr auto static_regex<Pattern, Mode>::sequential_range(R&& r)
+{
+    return views::regex_sequential_match(std::forward<R>(r), srx<Pattern, Mode>);
 }
 
 } // namespace srx

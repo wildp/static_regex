@@ -63,6 +63,16 @@ inline constexpr fsm_flags search_all{
     .maybe_no_empty  = true,
 };
 
+inline constexpr fsm_flags match_sequential{
+    .is_search       = false,
+    .longest_match   = false,
+    .enable_fallback = true,
+    .is_iterator     = true,
+    .no_captures     = false,
+    .return_bool     = false,
+    .maybe_no_empty  = true,
+};
+
 } // namespace default_fsm_flags;
 
 

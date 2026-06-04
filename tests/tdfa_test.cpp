@@ -5,6 +5,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "headers/tdfa_matcher.hpp"
+#include "srx/fsm/flags.hpp"
 
 
 namespace {
@@ -74,6 +75,27 @@ consteval bool search_all(const CharT* pattern, const CharT* str, const std::vec
     expr_tree ast{ pattern };
     ast.insert_search_prefix();
     tagged_nfa nfa{ ast, default_fsm_flags::search_all };
+    nfa.rewrite_assertions();
+    if (ast.empty_match_possible())
+        nfa.add_non_empty_match_pathway();
+
+    const srx::testing::tdfa_matcher dfa{ nfa };
+    const auto match_result = dfa.match_all(str);
+
+    if (captures.empty())
+        return not match_result.empty();
+    else if (match_result.empty())
+        return false;
+    else
+        return std::ranges::equal(match_result, captures);
+}
+
+template<typename CharT>
+consteval bool sequential_match(const CharT* pattern, const CharT* str, const std::vector<std::vector<std::size_t>>& captures = {})
+{
+    using namespace srx::detail;
+    expr_tree ast{ pattern };
+    tagged_nfa nfa{ ast, default_fsm_flags::match_sequential };
     nfa.rewrite_assertions();
     if (ast.empty_match_possible())
         nfa.add_non_empty_match_pathway();

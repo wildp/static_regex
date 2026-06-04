@@ -637,6 +637,16 @@ inline constexpr fsm_flags search_all{
     .maybe_no_empty  = true,
 };
 
+inline constexpr fsm_flags match_sequential{
+    .is_search       = false,
+    .longest_match   = false,
+    .enable_fallback = true,
+    .is_iterator     = true,
+    .no_captures     = false,
+    .return_bool     = false,
+    .maybe_no_empty  = true,
+};
+
 }
 
 constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
@@ -10834,7 +10844,7 @@ public:
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;
 
-    template<std::ranges::bidirectional_range V, typename Regex>
+    template<std::ranges::bidirectional_range V, typename Regex, bool Sequential>
         requires std::ranges::view<V>
     friend class regex_match_view;
 
@@ -11880,14 +11890,12 @@ private:
     };
 
 public:
-    template<bool Full>
-    struct match
+    struct full_match
     {
         static constexpr bool never_empty{ not ast.empty_match_possible };
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr auto operator()(const I first, const S last)
-            requires (Full)
         {
             result<I> res{ first };
             staging_info<I> si{};
@@ -11903,15 +11911,22 @@ public:
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last)
-            requires (not Full)
+        static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
+    };
+
+    template<bool IsSearch, bool IsIterator>
+    struct partial_match
+    {
+    private:
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
         {
-            result<I> res{ first };
+            result<I> res{ continue_from };
             staging_info<I> si{};
-            if (I it{ first }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
+            if (state<true, ast.root_idx>::operator()(res, si, first, last, continue_from))
             {
                 apply_final_staging_info(res, si);
-                res.match_end_ = it;
+                res.match_end_ = continue_from;
 
                 if constexpr (not std::contiguous_iterator<I>)
                     res.match_success_ = true;
@@ -11920,15 +11935,8 @@ public:
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
-    };
-
-    template<bool Single>
-    struct search
-    {
-    private:
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
+            requires IsSearch
         {
             result<I> res{};
             staging_info<I> si{};
@@ -11956,6 +11964,23 @@ public:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
+        {
+            result<I> res{ continue_from };
+            staging_info<I> si{};
+            if (state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, continue_from))
+            {
+                apply_final_staging_info(res, si);
+                res.match_end_ = continue_from;
+
+                if constexpr (not std::contiguous_iterator<I>)
+                    res.match_success_ = true;
+            }
+            return res;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
+            requires IsSearch
         {
             result<I> res{ continue_from };
             staging_info<I> si{};
@@ -11993,7 +12018,7 @@ public:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr auto operator()(const I first, const S last, I continue_from)
-            requires (not Single)
+            requires IsIterator
         {
             return outer_state(first, last, continue_from);
         }
@@ -12009,7 +12034,7 @@ public:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr auto operator()(const I first, const S last, I continue_from, match_non_empty_t)
-            requires (not Single)
+            requires IsIterator
         {
             if constexpr (ast.empty_match_possible)
                 return non_empty_outer_state(first, last, continue_from);
@@ -12023,23 +12048,11 @@ public:
         if (f.longest_match)
         {
             if (not f.is_search and not f.enable_fallback and not f.is_iterator)
-                return ^^match<true>;
+                return ^^full_match;
         }
         else if (f.enable_fallback)
         {
-            if (not f.is_search)
-            {
-                if (not f.is_iterator)
-                    return ^^match<false>;
-            }
-            else if (not f.is_iterator)
-            {
-                return ^^search<true>;
-            }
-            else
-            {
-                return ^^search<false>;
-            }
+            return substitute(^^partial_match, { std::meta::reflect_constant(f.is_search), std::meta::reflect_constant(f.is_iterator) });
         }
 
         /* invalid flag combination */
@@ -13459,6 +13472,24 @@ struct static_regex
     {
         return range(std::ranges::subrange(cstr, detail::cstr_sentinel));
     }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires std::same_as<std::iter_value_t<I>, char_type>
+    [[nodiscard]] static constexpr auto sequential_range(I first, S last)
+    {
+        return range(std::ranges::subrange(first, last));
+    }
+
+    template<std::ranges::bidirectional_range R>
+        requires std::same_as<std::ranges::range_value_t<R>, char_type>
+    [[nodiscard]] static constexpr auto sequential_range(R&& r);
+
+    template<typename CharT>
+        requires std::same_as<CharT, char_type>
+    [[nodiscard]] static constexpr auto sequential_range(const CharT* cstr)
+    {
+        return range(std::ranges::subrange(cstr, detail::cstr_sentinel));
+    }
 };
 
 template<string_literal Pattern, mode Mode = mode::standard>
@@ -13481,110 +13512,63 @@ concept typed_static_regex_like = static_regex_like<Regex> and std::same_as<Char
 template<typename Regex, typename CharT>
 concept typed_regex_like = typed_static_regex_like<Regex, CharT> ;
 
-template<string_literal Pattern, mode Mode>
-struct static_match_impl
+template<typename F, bool PermitNonBorrowedRange = false>
+struct static_regex_free_function
 {
+    /* Reflecting overload sets is currently not possible,
+       so we pass a lambda as a template parameter instead */
+
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
     static constexpr auto operator()(I first, S last)
     {
-        return static_regex<Pattern, Mode>::match(first, last);
+        return std::invoke(F{}, first, last);
     }
 
     template<std::ranges::bidirectional_range R>
-        requires std::ranges::borrowed_range<R>
+        requires PermitNonBorrowedRange or std::ranges::borrowed_range<R>
     static constexpr auto operator()(R&& r)
     {
-        return static_regex<Pattern, Mode>::match(std::forward<R>(r));
+        return std::invoke(F{}, std::forward<R>(r));
     }
 
     template<typename CharT>
     static constexpr auto operator()(const CharT* cstr)
     {
-        return static_regex<Pattern, Mode>::match(cstr);
-    }
-};
-
-template<string_literal Pattern, mode Mode>
-struct static_prefix_match_impl
-{
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr auto operator()(I first, S last)
-    {
-        return static_regex<Pattern, Mode>::prefix_match(first, last);
-    }
-
-    template<std::ranges::bidirectional_range R>
-        requires std::ranges::borrowed_range<R>
-    static constexpr auto operator()(R&& r)
-    {
-        return static_regex<Pattern, Mode>::prefix_match(std::forward<R>(r));
-    }
-
-    template<typename CharT>
-    static constexpr auto operator()(const CharT* cstr)
-    {
-        return static_regex<Pattern, Mode>::prefix_match(cstr);
-    }
-};
-
-template<string_literal Pattern, mode Mode>
-struct static_search_impl
-{
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr auto operator()(I first, S last)
-    {
-        return static_regex<Pattern, Mode>::search(first, last);
-    }
-
-    template<std::ranges::bidirectional_range R>
-        requires std::ranges::borrowed_range<R>
-    static constexpr auto operator()(R&& r)
-    {
-        return static_regex<Pattern, Mode>::search(std::forward<R>(r));
-    }
-
-    template<typename CharT>
-    static constexpr auto operator()(const CharT* cstr)
-    {
-        return static_regex<Pattern, Mode>::search(cstr);
-    }
-};
-
-template<string_literal Pattern, mode Mode>
-struct static_search_all_impl
-{
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr auto operator()(I first, S last)
-    {
-        return static_regex<Pattern, Mode>::range(first, last);
-    }
-
-    template<std::ranges::bidirectional_range R>
-    static constexpr auto operator()(R&& r)
-    {
-        return static_regex<Pattern, Mode>::range(std::forward<R>(r));
-    }
-
-    template<typename CharT>
-    static constexpr auto operator()(const CharT* cstr)
-    {
-        return static_regex<Pattern, Mode>::range(cstr);
+        return std::invoke(F{}, cstr);
     }
 };
 
 }
 
 template<string_literal Pattern, mode Mode = mode::standard>
-inline constexpr detail::static_match_impl<Pattern, Mode> static_regex_match;
+inline constexpr auto static_regex_match =
+    detail::static_regex_free_function<decltype([]<typename... Ts>(Ts&&... args) static {
+        return static_regex<Pattern, Mode>::match(std::forward<Ts>(args)...);
+    })>{};
 
 template<string_literal Pattern, mode Mode = mode::standard>
-inline constexpr detail::static_prefix_match_impl<Pattern, Mode> static_regex_prefix_match;
+inline constexpr auto static_regex_prefix_match =
+    detail::static_regex_free_function<decltype([]<typename... Ts>(Ts&&... args) static {
+        return static_regex<Pattern, Mode>::prefix_match(std::forward<Ts>(args)...);
+    })>{};
 
 template<string_literal Pattern, mode Mode = mode::standard>
-inline constexpr detail::static_search_impl<Pattern, Mode> static_regex_search;
+inline constexpr auto static_regex_search =
+    detail::static_regex_free_function<decltype([]<typename... Ts>(Ts&&... args) static {
+        return static_regex<Pattern, Mode>::search(std::forward<Ts>(args)...);
+    })>{};
 
 template<string_literal Pattern, mode Mode = mode::standard>
-inline constexpr detail::static_search_all_impl<Pattern, Mode> static_regex_search_all;
+inline constexpr auto static_regex_search_all =
+    detail::static_regex_free_function<decltype([]<typename... Ts>(Ts&&... args) static {
+        return static_regex<Pattern, Mode>::range(std::forward<Ts>(args)...);
+    }), true>{};
+
+template<string_literal Pattern, mode Mode = mode::standard>
+inline constexpr auto static_regex_match_consecutive =
+    detail::static_regex_free_function<decltype([]<typename... Ts>(Ts&&... args) static {
+        return static_regex<Pattern, Mode>::sequential_range(std::forward<Ts>(args)...);
+    }), true>{};
 
 namespace literals {
 
@@ -14098,23 +14082,36 @@ inline constexpr detail::replace_impl regex_replace;
 }
 
 namespace srx {
+namespace detail {
 
-template<std::ranges::bidirectional_range V, typename Regex>
+struct sequential_match_tag_t {};
+inline constexpr sequential_match_tag_t sequential_match_tag;
+
+}
+
+template<std::ranges::bidirectional_range V, typename Regex, bool Sequential = false>
     requires std::ranges::view<V>
 class regex_match_view
 {
     static_assert("regex_match_view: invalid regex");
 };
 
-template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode, bool Sequential>
     requires std::ranges::view<V>
-class regex_match_view<V, static_regex<Pattern, Mode>> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>>>
+class regex_match_view<V, static_regex<Pattern, Mode>, Sequential> : std::ranges::view_interface<regex_match_view<V, static_regex<Pattern, Mode>, Sequential>>
 {
     class iterator;
 
 public:
     regex_match_view() requires std::default_initializable<V> = default;
     constexpr explicit regex_match_view(V base, static_regex<Pattern, Mode> /* regex */) : base_{ std::move(base) } {}
+
+    constexpr explicit regex_match_view(detail::sequential_match_tag_t) noexcept(noexcept(regex_match_view()))
+        requires Sequential and std::default_initializable<V> {};
+
+    constexpr explicit regex_match_view(detail::sequential_match_tag_t, V base, static_regex<Pattern, Mode> /* regex */)
+        requires Sequential
+        : base_{ std::move(base) } {}
 
     [[nodiscard]] constexpr V base() const& requires std::copy_constructible<V> { return base_; }
     [[nodiscard]] constexpr V base() && { return std::move(base_); }
@@ -14134,7 +14131,8 @@ public:
     }
 
 private:
-    using matcher_type = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
+    static constexpr auto flags = Sequential ? detail::default_fsm_flags::match_sequential : detail::default_fsm_flags::search_all;
+    using matcher_type = [: detail::get_matcher_refl(Mode, not Sequential) :]<Pattern, flags>;
     using result_type = matcher_type::template result<std::ranges::iterator_t<V>>;
 
     template<bool MatchNonEmpty = false>
@@ -14175,9 +14173,9 @@ private:
     result_type cached_result_;
 };
 
-template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>
+template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode, bool Sequential>
     requires std::ranges::view<V>
-class regex_match_view<V, static_regex<Pattern, Mode>>::iterator
+class regex_match_view<V, static_regex<Pattern, Mode>, Sequential>::iterator
 {
 public:
     using iterator_concept  = std::input_iterator_tag;
@@ -14265,7 +14263,10 @@ private:
 };
 
 template<typename R, string_literal Pattern, mode Mode>
-regex_match_view(R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>>;
+regex_match_view(R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>, false>;
+
+template<typename R, string_literal Pattern, mode Mode>
+regex_match_view(detail::sequential_match_tag_t, R&&, static_regex<Pattern, Mode>) -> regex_match_view<std::views::all_t<R>, static_regex<Pattern, Mode>, true>;
 
 template<std::ranges::input_range V, int... Submatches>
     requires std::ranges::view<V>
@@ -15087,6 +15088,12 @@ concept can_regex_match_view = requires
     regex_match_view(std::declval<Range>(), std::declval<Regex>());
 };
 
+template<typename Range, typename Regex>
+concept can_regex_sequential_match_view = requires
+{
+    regex_match_view(srx::detail::sequential_match_tag, std::declval<Range>(), std::declval<Regex>());
+};
+
 template<typename Range, typename T>
 concept can_submatches_view = requires
 {
@@ -15130,6 +15137,34 @@ struct regex_match_adaptor
     [[nodiscard]] consteval auto operator()(Regex /* x */) const
     {
         return static_regex_match_adaptor_closure<Regex>();
+    }
+};
+
+template<typename Regex>
+struct static_regex_sequential_match_adaptor_closure : std::ranges::range_adaptor_closure<static_regex_sequential_match_adaptor_closure<Regex>>
+{
+    template<std::ranges::viewable_range Range>
+        requires detail::can_regex_match_view<Range, Regex>
+    [[nodiscard]] constexpr auto operator()(Range&& r) const
+    {
+        return regex_match_view(srx::detail::sequential_match_tag, std::forward<Range>(r), Regex{});
+    }
+};
+
+struct regex_sequential_match_adaptor
+{
+    template<std::ranges::viewable_range Range, typename Regex>
+        requires detail::can_regex_sequential_match_view<Range, Regex>
+    [[nodiscard]] constexpr auto operator()(Range&& r, Regex&& x) const
+    {
+        return regex_match_view(srx::detail::sequential_match_tag, std::forward<Range>(r), std::forward<Regex>(x));
+    }
+
+    template<typename Regex>
+        requires srx::detail::static_regex_like<Regex>
+    [[nodiscard]] consteval auto operator()(Regex /* x */) const
+    {
+        return static_regex_sequential_match_adaptor_closure<Regex>();
     }
 };
 
@@ -15284,12 +15319,16 @@ struct regex_split_adaptor
 }
 
 inline constexpr detail::regex_match_adaptor regex_match;
+inline constexpr detail::regex_sequential_match_adaptor regex_sequential_match;
 inline constexpr detail::submatches_adaptor submatches;
 inline constexpr detail::replace_adaptor replace;
 inline constexpr detail::regex_split_adaptor regex_split;
 
 template<string_literal Pattern, mode Mode = mode::standard>
 inline constexpr detail::static_regex_match_adaptor_closure<static_regex<Pattern, Mode>> static_regex_match;
+
+template<string_literal Pattern, mode Mode = mode::standard>
+inline constexpr detail::static_regex_sequential_match_adaptor_closure<static_regex<Pattern, Mode>> static_regex_sequential_match;
 
 template<int... Submatches> requires (sizeof...(Submatches) > 0)
 inline constexpr detail::static_submatches_adaptor_closure<Submatches...> static_submatches;
@@ -15308,6 +15347,14 @@ template<std::ranges::bidirectional_range R>
 constexpr auto static_regex<Pattern, Mode>::range(R&& r)
 {
     return views::regex_match(std::forward<R>(r), srx<Pattern, Mode>);
+}
+
+template<string_literal Pattern, mode Mode>
+template<std::ranges::bidirectional_range R>
+    requires std::same_as<std::ranges::range_value_t<R>, typename static_regex<Pattern, Mode>::char_type>
+constexpr auto static_regex<Pattern, Mode>::sequential_range(R&& r)
+{
+    return views::regex_sequential_match(std::forward<R>(r), srx<Pattern, Mode>);
 }
 
 }

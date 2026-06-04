@@ -970,14 +970,12 @@ private:
     // };
 
 public:
-    template<bool Full>
-    struct match
+    struct full_match
     {
         static constexpr bool never_empty{ not ast.empty_match_possible };
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr auto operator()(const I first, const S last)
-            requires (Full)
         {
             result<I> res{ first };
             staging_info<I> si{};
@@ -993,15 +991,22 @@ public:
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last)
-            requires (not Full)
+        static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
+    };
+
+    template<bool IsSearch, bool IsIterator>
+    struct partial_match
+    {
+    private:
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
         {
-            result<I> res{ first };
+            result<I> res{ continue_from };
             staging_info<I> si{};
-            if (I it{ first }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
+            if (state<true, ast.root_idx>::operator()(res, si, first, last, continue_from))
             {
                 apply_final_staging_info(res, si);
-                res.match_end_ = it;
+                res.match_end_ = continue_from;
 
                 if constexpr (not std::contiguous_iterator<I>)
                     res.match_success_ = true;
@@ -1010,15 +1015,8 @@ public:
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
-    };
-
-    template<bool Single>
-    struct search
-    {
-    private:
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
+            requires IsSearch
         {
             result<I> res{};
             staging_info<I> si{};
@@ -1046,6 +1044,23 @@ public:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
+        {
+            result<I> res{ continue_from };
+            staging_info<I> si{};
+            if (state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, continue_from))
+            {
+                apply_final_staging_info(res, si);
+                res.match_end_ = continue_from;
+
+                if constexpr (not std::contiguous_iterator<I>)
+                    res.match_success_ = true;
+            }
+            return res;
+        }
+
+        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
+            requires IsSearch
         {
             result<I> res{ continue_from };
             staging_info<I> si{};
@@ -1083,7 +1098,7 @@ public:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr auto operator()(const I first, const S last, I continue_from)
-            requires (not Single)
+            requires IsIterator
         {
             return outer_state(first, last, continue_from);
         }
@@ -1099,7 +1114,7 @@ public:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr auto operator()(const I first, const S last, I continue_from, match_non_empty_t)
-            requires (not Single)
+            requires IsIterator
         {
             if constexpr (ast.empty_match_possible)
                 return non_empty_outer_state(first, last, continue_from);
@@ -1113,23 +1128,11 @@ public:
         if (f.longest_match)
         {
             if (not f.is_search and not f.enable_fallback and not f.is_iterator)
-                return ^^match<true>;
+                return ^^full_match;
         }
         else if (f.enable_fallback)
         {
-            if (not f.is_search)
-            {
-                if (not f.is_iterator)
-                    return ^^match<false>;
-            }
-            else if (not f.is_iterator)
-            {
-                return ^^search<true>;
-            }
-            else
-            {
-                return ^^search<false>;
-            }
+            return substitute(^^partial_match, { std::meta::reflect_constant(f.is_search), std::meta::reflect_constant(f.is_iterator) });
         }
 
         /* invalid flag combination */

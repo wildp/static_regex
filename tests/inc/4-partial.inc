@@ -40,3 +40,9 @@ static_assert(search_all("(?:)|abc"_test, "abcabc", { { 0, 0 }, { 0, 3 }, { 3, 3
 static_assert(search_all("aa"_test, "aabbaa", { { 0, 2 }, { 4, 6 } }));
 static_assert(search_all("aa"_test, "aabbaab", { { 0, 2 }, { 4, 6 } }));
 static_assert(search_all("aa"_test, "aabbaabb", { { 0, 2 }, { 4, 6 } }));
+
+/* sequential matching tests */
+static_assert(sequential_match("ab"_test, "abab", { { 0, 2 }, { 2, 4 } }));
+static_assert(sequential_match("a+b"_test, "abaab", { { 0, 2 }, { 2, 5 } }));
+static_assert(sequential_match("a*b"_test, "abaabb", { { 0, 2 }, { 2, 5 }, { 5, 6 } }));
+// TODO: add more tests

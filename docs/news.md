@@ -2,7 +2,7 @@
 
 ### Version 0.2.2
 
-Added support for `$&`, `` $` ``, `$'`, and `$+` in `regex_replace`.
+Added `sequential_range` and support for `$&`, `` $` ``, `$'`, and `$+` in `regex_replace`.
 
 ### Version 0.2.1
 
