@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 4.0)
 
 project(rx
-    VERSION 0.2.1
+    VERSION 0.2.2
     LANGUAGES CXX
 )
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 
 add_library(static_regex INTERFACE)
 target_compile_features(static_regex INTERFACE cxx_std_26)
