@@ -14,144 +14,146 @@
 #include "srx/etc/util.hpp"
 
 
-namespace srx::detail
+namespace srx::detail {
+namespace parser {
+
+template<typename CharT>
+class ll1;
+
+} // namespace parser
+
+/* types */
+
+enum class repeater_mode : unsigned char
 {
-    namespace parser
-    {
-        template<typename CharT>
-        class ll1;
-    }
+    greedy = 0,
+    lazy,
+    possessive
+};
 
-    /* types */
+enum class special_group_mode : unsigned char
+{
+    atomic_group = 0,
+    positive_lookahead,
+    negative_lookahead,
+    positive_lookbehind,
+    negative_lookbehind,
 
-    enum class repeater_mode : unsigned char
-    {
-        greedy = 0,
-        lazy,
-        possessive
-    };
+    /* backtracking control */
+    backtrack_accept,
+    backtrack_fail,
+    backtrack_mark,
+    backtrack_commit,
+    backtrack_prune,
+    backtrack_skip,
+    backtrack_then
+};
 
-    enum class special_group_mode : unsigned char
-    {
-        atomic_group = 0,
-        positive_lookahead,
-        negative_lookahead,
-        positive_lookbehind,
-        negative_lookbehind,
+struct parser_flags
+{
+    bool enable_captures    : 1 { true };
+    bool enable_start_tag   : 1 { true };
+    bool enable_possessive  : 1 { false };
+    bool enable_backrefs    : 1 { false };
+    bool enable_branchreset : 1 { false };
+    bool enable_alttocc     : 1 { true };
+};
 
-        /* backtracking control */
-        backtrack_accept,
-        backtrack_fail,
-        backtrack_mark,
-        backtrack_commit,
-        backtrack_prune,
-        backtrack_skip,
-        backtrack_then
-    };
+namespace ast_entry {
 
-    struct parser_flags
-    {
-        bool enable_captures    : 1 { true };
-        bool enable_start_tag   : 1 { true };
-        bool enable_possessive  : 1 { false };
-        bool enable_backrefs    : 1 { false };
-        bool enable_branchreset : 1 { false };
-        bool enable_alttocc     : 1 { true };
-    };
+struct alt
+{
+    std::vector<std::size_t> idxs;
+};
 
-    namespace ast_entry
-    {
-        struct alt
-        {
-            std::vector<std::size_t> idxs;
-        };
+struct concat
+{
+    std::vector<std::size_t> idxs;
+};
 
-        struct concat
-        {
-            std::vector<std::size_t> idxs;
-        };
+struct tag
+{
+    tag_number_t number;
+};
 
-        struct tag
-        {
-            tag_number_t number;
-        };
+struct repeat
+{
+    std::size_t idx;
+    int min;
+    int max;            /* use max=min for {min} or max<min for {min,} */
+    repeater_mode mode; /* default = greedy */
+};
 
-        struct repeat
-        {
-            std::size_t idx;
-            int min;
-            int max;            /* use max=min for {min} or max<min for {min,} */
-            repeater_mode mode; /* default = greedy */
-        };
+struct special
+{
+    std::size_t idx;         /* use idx=-1 to ignore when mode is backtrack_.*  */
+    special_group_mode mode; /* for backtrack_.*, treat idx as the name of a mark when not ignored */
+};
 
-        struct special
-        {
-            std::size_t idx;         /* use idx=-1 to ignore when mode is backtrack_.*  */
-            special_group_mode mode; /* for backtrack_.*, treat idx as the name of a mark when not ignored */
-        };
-    }
+} // namespace ast_entry
 
 
-    /* ast definition */
+/* ast definition */
 
-    template<typename CharT>
-    class expr_tree
-    {
-    public:
-        using char_type = CharT;
-        using sv_type = std::basic_string_view<char_type>;
+template<typename CharT>
+class expr_tree
+{
+public:
+    using char_type = CharT;
+    using sv_type = std::basic_string_view<char_type>;
 
-        using assertion     = tok::assertion;
-        using char_str      = tok::char_str<char_type>;
-        using char_class    = tok::char_class<char_type>;
-        using backref       = tok::backref;
-        using alt           = ast_entry::alt;
-        using concat        = ast_entry::concat;
-        using tag           = ast_entry::tag;
-        using repeat        = ast_entry::repeat;
-        using special       = ast_entry::special;
+    using assertion     = tok::assertion;
+    using char_str      = tok::char_str<char_type>;
+    using char_class    = tok::char_class<char_type>;
+    using backref       = tok::backref;
+    using alt           = ast_entry::alt;
+    using concat        = ast_entry::concat;
+    using tag           = ast_entry::tag;
+    using repeat        = ast_entry::repeat;
+    using special       = ast_entry::special;
 
-        using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
+    using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
-        constexpr expr_tree(sv_type sv, parser_flags flags = {});
+    constexpr expr_tree(sv_type sv, parser_flags flags = {});
 
-        friend class parser::ll1<char_type>;
+    friend class parser::ll1<char_type>;
 
-        [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
-        [[nodiscard]] constexpr std::size_t root_idx() const noexcept { return root_idx_; }
-        [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
-        [[nodiscard]] constexpr const auto& get_all_exprs() const noexcept { return expressions_; }
-        [[nodiscard]] constexpr const auto& get_capture_info() const noexcept { return capture_info_; }
+    [[nodiscard]] constexpr const type& get_expr(std::size_t i) const { return expressions_.at(i); }
+    [[nodiscard]] constexpr std::size_t root_idx() const noexcept { return root_idx_; }
+    [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
+    [[nodiscard]] constexpr const auto& get_all_exprs() const noexcept { return expressions_; }
+    [[nodiscard]] constexpr const auto& get_capture_info() const noexcept { return capture_info_; }
 
-        [[nodiscard]] constexpr std::pair<std::size_t, std::size_t> min_max_length() const;
-        [[nodiscard]] constexpr bool empty_match_possible() const;
+    [[nodiscard]] constexpr std::pair<std::size_t, std::size_t> min_max_length() const;
+    [[nodiscard]] constexpr bool empty_match_possible() const;
 
-        constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
-        constexpr void optimise_tags();
-        constexpr void insert_search_prefix();
-        constexpr void simplify_counted_repeat();
-        constexpr void optimise_exact_repeat();
-        constexpr auto tag_to_register();
+    constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
+    constexpr void optimise_tags();
+    constexpr void insert_search_prefix();
+    constexpr void simplify_counted_repeat();
+    constexpr void optimise_exact_repeat();
+    constexpr auto tag_to_register();
 
-    private:
-        template<typename T>
-        static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^type) };
+private:
+    template<typename T>
+    static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^type) };
 
-        [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
+    [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
 
-        std::size_t root_idx_{ 0 };
-        std::vector<type> expressions_;
-        capture_info capture_info_;
-        tag_number_t tag_count_{ 0 };
-        parser_flags flags_;
-    };
+    std::size_t root_idx_{ 0 };
+    std::vector<type> expressions_;
+    capture_info capture_info_;
+    tag_number_t tag_count_{ 0 };
+    parser_flags flags_;
+};
 
-    template<typename CharT>
-    expr_tree(const CharT*) -> expr_tree<CharT>;
+template<typename CharT>
+expr_tree(const CharT*) -> expr_tree<CharT>;
 
-    template<typename CharT>
-    expr_tree(const CharT*, parser_flags) -> expr_tree<CharT>;
-}
+template<typename CharT>
+expr_tree(const CharT*, parser_flags) -> expr_tree<CharT>;
+
+} // namespace srx::detail
 
 
 #include "tree.tpp"

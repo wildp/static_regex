@@ -11,84 +11,85 @@
 #include <srx/fsm/tdfa.hpp>
 
 
-namespace srx::tools
+namespace srx::tools {
+
+template<typename T, typename CharT>
+    requires requires (T t) { std::println(t); }
+void dump_fsm(T target, const detail::tagged_dfa<CharT>& dfa)
 {
-    template<typename T, typename CharT>
-        requires requires (T t) { std::println(t); }
-    void dump_fsm(T target, const detail::tagged_dfa<CharT>& dfa)
+    using namespace detail::tdfa;
+
+    auto print_regop = [](T target, const regop& op, std::string_view indent = ""){
+        if (auto* set = get_if<regop::set>(&op.op); set != nullptr)
+            std::println(target, "{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
+        else if (auto* copy = get_if<regop::copy>(&op.op); copy != nullptr)
+            std::println(target, "{}r{} <- r{}", indent, op.dst, copy->src);
+        else
+            std::unreachable();
+    };
+
+    for (std::size_t i{ 0 }, i_end{ dfa.node_count() }; i < i_end; ++i)
     {
-        using namespace detail::tdfa;
+        if (dfa.final_nodes().contains(i))
+            std::println(target, "Node {}: (ACCEPTING)", i);
+        else
+            std::println(target, "Node {}:", i);
 
-        auto print_regop = [](T target, const regop& op, std::string_view indent = ""){
-            if (auto* set = get_if<regop::set>(&op.op); set != nullptr)
-                std::println(target, "{}r{} <- {}", indent, op.dst, (set->val) ? 'p' : 'n');
-            else if (auto* copy = get_if<regop::copy>(&op.op); copy != nullptr)
-                std::println(target, "{}r{} <- r{}", indent, op.dst, copy->src);
-            else
-                std::unreachable();
-        };
-
-        for (std::size_t i{ 0 }, i_end{ dfa.node_count() }; i < i_end; ++i)
+        for (const auto& tr : dfa.get_node(i).tr)
         {
-            if (dfa.final_nodes().contains(i))
-                std::println(target, "Node {}: (ACCEPTING)", i);
+            std::print("\t{} -> Node {}:", tr.cs.get_intervals(), tr.next);
+
+            if (tr.op_index != no_transition_regops)
+                std::println(target, " [Block {}]", tr.op_index);
             else
-                std::println(target, "Node {}:", i);
-
-            for (const auto& tr : dfa.get_node(i).tr)
-            {
-                std::print("\t{} -> Node {}:", tr.cs.get_intervals(), tr.next);
-
-                if (tr.op_index != no_transition_regops)
-                    std::println(target, " [Block {}]", tr.op_index);
-                else
-                    std::println(target);
-
-                for (const auto& op : dfa.get_regops(tr.op_index))
-                    print_regop(target, op, "\t\t");
-            }
-
-            if (dfa.final_nodes().contains(i))
-            {
-                const auto& fni = dfa.final_nodes().at(i);
-
-                std::print(target, "\t'' -> ACCEPT:");
-                if (fni.final_offset != 0)
-                    std::print(target, " [Offset {}]", fni.final_offset);
-                if (fni.op_index != no_transition_regops)
-                    std::print(target, " [Block {}]", fni.op_index);
                 std::println(target);
 
-                for (const auto& op : dfa.get_regops(fni.op_index))
-                    print_regop(target, op, "\t\t");
-            }
-
-            if (dfa.fallback_nodes().contains(i))
-            {
-                const auto& fni = dfa.final_nodes().at(i);
-                const auto& fbni = dfa.fallback_nodes().at(i);
-
-                std::print(target, "\tFALLBACK -> ACCEPT:");
-                if (fni.final_offset != 0)
-                    std::print(target, " [Offset {}]", fni.final_offset);
-                if (fbni.continue_at != no_continue)
-                    std::print(target, " [Continue {}]", fbni.continue_at);
-                if (fbni.op_index != no_transition_regops)
-                    std::print(target, " [Block {}]", fbni.op_index);
-                std::println(target);
-
-                for (const auto& op : dfa.get_regops(fbni.op_index))
-                    print_regop(target, op, "\t\t");
-            }
+            for (const auto& op : dfa.get_regops(tr.op_index))
+                print_regop(target, op, "\t\t");
         }
 
-        std::println(target, "Continue states: {}", dfa.continue_nodes());
-        std::println(target, "Final Registers: {}", dfa.final_registers());
+        if (dfa.final_nodes().contains(i))
+        {
+            const auto& fni = dfa.final_nodes().at(i);
+
+            std::print(target, "\t'' -> ACCEPT:");
+            if (fni.final_offset != 0)
+                std::print(target, " [Offset {}]", fni.final_offset);
+            if (fni.op_index != no_transition_regops)
+                std::print(target, " [Block {}]", fni.op_index);
+            std::println(target);
+
+            for (const auto& op : dfa.get_regops(fni.op_index))
+                print_regop(target, op, "\t\t");
+        }
+
+        if (dfa.fallback_nodes().contains(i))
+        {
+            const auto& fni = dfa.final_nodes().at(i);
+            const auto& fbni = dfa.fallback_nodes().at(i);
+
+            std::print(target, "\tFALLBACK -> ACCEPT:");
+            if (fni.final_offset != 0)
+                std::print(target, " [Offset {}]", fni.final_offset);
+            if (fbni.continue_at != no_continue)
+                std::print(target, " [Continue {}]", fbni.continue_at);
+            if (fbni.op_index != no_transition_regops)
+                std::print(target, " [Block {}]", fbni.op_index);
+            std::println(target);
+
+            for (const auto& op : dfa.get_regops(fbni.op_index))
+                print_regop(target, op, "\t\t");
+        }
     }
 
-    template<typename CharT>
-    void dump_fsm(const detail::tagged_dfa<CharT>& dfa)
-    {
-        return dump_fsm(stdout, dfa);
-    }
+    std::println(target, "Continue states: {}", dfa.continue_nodes());
+    std::println(target, "Final Registers: {}", dfa.final_registers());
 }
+
+template<typename CharT>
+void dump_fsm(const detail::tagged_dfa<CharT>& dfa)
+{
+    return dump_fsm(stdout, dfa);
+}
+
+} // namespace srx::tools

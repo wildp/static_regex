@@ -6,39 +6,40 @@
 
 #include <srx/regex.hpp>
 
-namespace
+namespace {
+
+template<srx::string_literal S>
+consteval bool match(srx::static_regex<S> m, std::string_view str, const std::vector<std::string_view>& captures = {})
 {
-    template<srx::string_literal S>
-    consteval bool match(srx::static_regex<S> m, std::string_view str, const std::vector<std::string_view>& captures = {})
-    {
-        if (captures.empty())
-            return m.is_match(str);
-        return std::ranges::equal(m.match(str), captures);
-    }
-
-    template<srx::string_literal S>
-    consteval bool prefix_match(srx::static_regex<S> m, std::string_view str, const std::vector<std::string_view>& captures = {})
-    {
-        if (captures.empty())
-            return m.starts_with_match(str);
-        return std::ranges::equal(m.prefix_match(str), captures);
-    }
-
-    template<srx::string_literal S>
-    consteval bool search(srx::static_regex<S> m, std::string_view str, const std::vector<std::string_view>& captures = {})
-    {
-        if (captures.empty())
-            return m.contains_match(str);
-        else
-            return std::ranges::equal(m.search(str), captures);
-    }
-
-    template<srx::string_literal S, typename Ints>
-    consteval bool submatches(srx::static_regex<S> m, Ints ints, std::string_view str, const std::vector<std::string_view>& captures)
-    {
-        return std::ranges::equal(str | srx::views::regex_match(m) | srx::views::submatches(ints), captures);
-    }
+    if (captures.empty())
+        return m.is_match(str);
+    return std::ranges::equal(m.match(str), captures);
 }
+
+template<srx::string_literal S>
+consteval bool prefix_match(srx::static_regex<S> m, std::string_view str, const std::vector<std::string_view>& captures = {})
+{
+    if (captures.empty())
+        return m.starts_with_match(str);
+    return std::ranges::equal(m.prefix_match(str), captures);
+}
+
+template<srx::string_literal S>
+consteval bool search(srx::static_regex<S> m, std::string_view str, const std::vector<std::string_view>& captures = {})
+{
+    if (captures.empty())
+        return m.contains_match(str);
+    else
+        return std::ranges::equal(m.search(str), captures);
+}
+
+template<srx::string_literal S, typename Ints>
+consteval bool submatches(srx::static_regex<S> m, Ints ints, std::string_view str, const std::vector<std::string_view>& captures)
+{
+    return std::ranges::equal(str | srx::views::regex_match(m) | srx::views::submatches(ints), captures);
+}
+
+} // namespace
 
 using namespace srx::literals;
 

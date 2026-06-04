@@ -7,74 +7,75 @@
 #include "headers/pattern_to_string.hpp"
 
 
-namespace
+namespace {
+
+constexpr srx::detail::parser_flags tree_test_flags{ .enable_alttocc = false };
+
+template<typename CharT>
+consteval bool parse(const CharT* str)
 {
-    constexpr srx::detail::parser_flags tree_test_flags{ .enable_alttocc = false };
+    using namespace srx::detail;
+    const expr_tree ast{ str, tree_test_flags };
+    return (srx::testing::to_basic_string(ast) == str);
+}
 
-    template<typename CharT>
-    consteval bool parse(const CharT* str)
+template<typename CharT>
+consteval bool parse(const CharT* str, const CharT* result)
+{
+    using namespace srx::detail;
+    const expr_tree ast{ str, tree_test_flags };
+    return (srx::testing::to_basic_string(ast) == result);
+}
+
+template<typename CharT>
+consteval bool alt_to_cc(const CharT* str, const CharT* result)
+{
+    using namespace srx::detail;
+    const expr_tree ast{ str };
+    return (srx::testing::to_basic_string(ast) == result);
+}
+
+template<typename CharT>
+consteval bool equal_to(const CharT* str1, const CharT* str2)
+{
+    using namespace srx::detail;
+    const expr_tree ast1{ str1, tree_test_flags };
+    const expr_tree ast2{ str2, tree_test_flags };
+    return (srx::testing::to_basic_string(ast1) == srx::testing::to_basic_string(ast2));
+}
+
+template<typename CharT>
+consteval bool parse_error(const CharT* str)
+{
+    try
     {
         using namespace srx::detail;
         const expr_tree ast{ str, tree_test_flags };
-        return (srx::testing::to_basic_string(ast) == str);
+        return false;
     }
-
-    template<typename CharT>
-    consteval bool parse(const CharT* str, const CharT* result)
+    catch (const srx::pattern_error&)
     {
-        using namespace srx::detail;
-        const expr_tree ast{ str, tree_test_flags };
-        return (srx::testing::to_basic_string(ast) == result);
-    }
-
-    template<typename CharT>
-    consteval bool alt_to_cc(const CharT* str, const CharT* result)
-    {
-        using namespace srx::detail;
-        const expr_tree ast{ str };
-        return (srx::testing::to_basic_string(ast) == result);
-    }
-
-    template<typename CharT>
-    consteval bool equal_to(const CharT* str1, const CharT* str2)
-    {
-        using namespace srx::detail;
-        const expr_tree ast1{ str1, tree_test_flags };
-        const expr_tree ast2{ str2, tree_test_flags };
-        return (srx::testing::to_basic_string(ast1) == srx::testing::to_basic_string(ast2));
-    }
-
-    template<typename CharT>
-    consteval bool parse_error(const CharT* str)
-    {
-        try
-        {
-            using namespace srx::detail;
-            const expr_tree ast{ str, tree_test_flags };
-            return false;
-        }
-        catch (const srx::pattern_error&)
-        {
-            return true;
-        }
-    }
-
-    template<typename CharT>
-    consteval bool test(const CharT* str)
-    {
-        using namespace srx::detail;
-        const expr_tree ast{ str };
         return true;
     }
-
-    template<typename CharT>
-    consteval bool empty_match_possible(const CharT* str)
-    {
-        using namespace srx::detail;
-        const expr_tree ast{ str };
-        return ast.empty_match_possible();
-    }
 }
+
+template<typename CharT>
+consteval bool test(const CharT* str)
+{
+    using namespace srx::detail;
+    const expr_tree ast{ str };
+    return true;
+}
+
+template<typename CharT>
+consteval bool empty_match_possible(const CharT* str)
+{
+    using namespace srx::detail;
+    const expr_tree ast{ str };
+    return ast.empty_match_possible();
+}
+
+} // namespace
 
 /* single units */
 static_assert(parse(""));

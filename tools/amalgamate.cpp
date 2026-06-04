@@ -19,190 +19,191 @@
 #include <srx/regex.hpp>
 
 
-namespace srx::tools
+namespace srx::tools {
+
+using path = std::filesystem::path;
+
+class mmap_data
 {
-    using path = std::filesystem::path;
-
-    class mmap_data
+public:
+    mmap_data(const path& p)
+        : size_{ file_size(p) }
+        , data_{ ::mmap(nullptr, size_, PROT_READ, MAP_PRIVATE | MAP_POPULATE, std::ifstream{ p }.native_handle(), 0) }
     {
-    public:
-        mmap_data(const path& p)
-            : size_{ file_size(p) }
-            , data_{ ::mmap(nullptr, size_, PROT_READ, MAP_PRIVATE | MAP_POPULATE, std::ifstream{ p }.native_handle(), 0) }
+        if (data_ == MAP_FAILED)
         {
-            if (data_ == MAP_FAILED)
-            {
-                std::println(std::cerr, "error: could not open file {} for reading", p.string());
-                std::quick_exit(1);
-            }
+            std::println(std::cerr, "error: could not open file {} for reading", p.string());
+            std::quick_exit(1);
         }
+    }
 
-        mmap_data(const mmap_data&) = delete;
-        mmap_data(mmap_data&&) noexcept = default;
-        mmap_data& operator=(const mmap_data&) = delete;
-        mmap_data& operator=(mmap_data&&) noexcept = default;
-        ~mmap_data() { if (data_ != nullptr) ::munmap(data_, size_); }
+    mmap_data(const mmap_data&) = delete;
+    mmap_data(mmap_data&&) noexcept = default;
+    mmap_data& operator=(const mmap_data&) = delete;
+    mmap_data& operator=(mmap_data&&) noexcept = default;
+    ~mmap_data() { if (data_ != nullptr) ::munmap(data_, size_); }
 
-        [[nodiscard]] std::string_view view() const { return { static_cast<char*>(data_), size_ }; }
+    [[nodiscard]] std::string_view view() const { return { static_cast<char*>(data_), size_ }; }
 
-    private:
-        std::size_t size_;
-        void* data_;
-    };
+private:
+    std::size_t size_;
+    void* data_;
+};
 
-    class amalgamator
+class amalgamator
+{
+public:
+    amalgamator(const path& p)
+        : include_dirs_{ absolute(p) }
     {
-    public:
-        amalgamator(const path& p)
-            : include_dirs_{ absolute(p) }
+        for (const auto& dir : include_dirs_)
         {
-            for (const auto& dir : include_dirs_)
+            if (not is_directory(dir))
             {
-                if (not is_directory(dir))
-                {
-                    std::println(std::cerr, "error: {} is not a directory", dir.string());
-                    std::quick_exit(1);
-                }
-            }
-        }
-
-        void operator()(const path& out, const path& in, const path& licence)
-        {
-            path tmpfile = out;
-            tmpfile += ".tmp";
-
-            std::ofstream tmp{ tmpfile };
-
-            if (not tmp.is_open())
-            {
-                std::println(std::cerr, "error: could not open file {} for writing", tmpfile.string());
+                std::println(std::cerr, "error: {} is not a directory", dir.string());
                 std::quick_exit(1);
             }
-
-            visit(tmp, absolute(in));
-            tmp.flush();
-            tmp.close();
-
-            std::ofstream ofs{ out };
-
-            if (not ofs.is_open())
-            {
-                std::println(std::cerr, "error: could not open file {} for writing", out.string());
-                std::quick_exit(1);
-            }
-
-            ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::quoted(in.string()) << '\n';
-            insert_copyrights(ofs);
-            copy_licence_to(ofs, licence);
-            insert_includes(ofs);
-            copy_tmpfile_to(ofs, tmpfile);
-
-            remove(tmpfile);
         }
+    }
 
-    private:
-        static constexpr auto pattern = srx::srx<
-            R"--((?m:^#include "(.*?)"$\n?|^(#include <.*?>)$\n?|^(#pragma once)$\n?|^(// *?(?i:copyright \(c\)).*?)$|^ *?//.*?$\n?| *?//.*?$))--"
-            , srx::mode::standard>;
+    void operator()(const path& out, const path& in, const path& licence)
+    {
+        path tmpfile = out;
+        tmpfile += ".tmp";
 
-        [[nodiscard]] path find_path(const path& next, const path& current_dir) const
+        std::ofstream tmp{ tmpfile };
+
+        if (not tmp.is_open())
         {
-            auto path = current_dir / next;
-
-            if (is_regular_file(path))
-                return absolute(path);
-
-            for (const auto& dir : include_dirs_)
-            {
-                path = dir / next;
-                if (is_regular_file(path))
-                    return absolute(path);
-            }
-
-            std::println(std::cerr, "error: file {} does not exist", next.string());
+            std::println(std::cerr, "error: could not open file {} for writing", tmpfile.string());
             std::quick_exit(1);
         }
 
-        void visit(std::ofstream& ofs, const path& current)
+        visit(tmp, absolute(in));
+        tmp.flush();
+        tmp.close();
+
+        std::ofstream ofs{ out };
+
+        if (not ofs.is_open())
         {
-            if (visited_.contains(current))
-                return; /* already visited */
-
-            mmap_data data{ current };
-            const auto input = data.view();
-
-            auto saved{ input.begin() };
-
-            for (const auto& match : pattern.range(input))
-            {
-                const auto [mfirst, mlast] = get<0>(match);
-
-                ofs << std::string_view{ saved, mfirst };
-                saved = mlast;
-
-                if (const auto cap1 = get<1>(match); cap1.matched())
-                    visit(ofs, find_path(cap1.view(), current.parent_path()));
-                else if (const auto cap2 = get<2>(match); cap2.matched())
-                    to_reinsert_.emplace_back(cap2.str());
-                else if (get<3>(match).matched())
-                    visited_.emplace(current);
-                else if (const auto cap4 = get<4>(match); cap4.matched())
-                    copyrights_.emplace_back(cap4.str());
-            }
-
-            ofs << std::string_view{ saved, input.end() };
+            std::println(std::cerr, "error: could not open file {} for writing", out.string());
+            std::quick_exit(1);
         }
 
-        void insert_copyrights(std::ofstream& ofs)
+        ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::quoted(in.string()) << '\n';
+        insert_copyrights(ofs);
+        copy_licence_to(ofs, licence);
+        insert_includes(ofs);
+        copy_tmpfile_to(ofs, tmpfile);
+
+        remove(tmpfile);
+    }
+
+private:
+    static constexpr auto pattern = srx::srx<
+        R"--((?m:^#include "(.*?)"$\n?|^(#include <.*?>)$\n?|^(#pragma once)$\n?|^(// *?(?i:copyright \(c\)).*?)$|^ *?//.*?$\n?| *?//.*?$))--"
+        , srx::mode::standard>;
+
+    [[nodiscard]] path find_path(const path& next, const path& current_dir) const
+    {
+        auto path = current_dir / next;
+
+        if (is_regular_file(path))
+            return absolute(path);
+
+        for (const auto& dir : include_dirs_)
         {
-            std::ranges::sort(copyrights_);
-            const auto& [first, last]{ std::ranges::unique(copyrights_) };
-            copyrights_.erase(first, last);
-
-            for (const auto& include : copyrights_)
-                ofs << include << '\n';
-
-            ofs << "\n\n";
+            path = dir / next;
+            if (is_regular_file(path))
+                return absolute(path);
         }
 
-        void insert_includes(std::ofstream& ofs)
+        std::println(std::cerr, "error: file {} does not exist", next.string());
+        std::quick_exit(1);
+    }
+
+    void visit(std::ofstream& ofs, const path& current)
+    {
+        if (visited_.contains(current))
+            return; /* already visited */
+
+        mmap_data data{ current };
+        const auto input = data.view();
+
+        auto saved{ input.begin() };
+
+        for (const auto& match : pattern.range(input))
         {
-            std::ranges::sort(to_reinsert_);
-            const auto& [first, last]{ std::ranges::unique(to_reinsert_) };
-            to_reinsert_.erase(first, last);
+            const auto [mfirst, mlast] = get<0>(match);
 
-            ofs << "#pragma once" << "\n\n";
+            ofs << std::string_view{ saved, mfirst };
+            saved = mlast;
 
-            for (const auto& include : to_reinsert_)
-                ofs << include << '\n';
+            if (const auto cap1 = get<1>(match); cap1.matched())
+                visit(ofs, find_path(cap1.view(), current.parent_path()));
+            else if (const auto cap2 = get<2>(match); cap2.matched())
+                to_reinsert_.emplace_back(cap2.str());
+            else if (get<3>(match).matched())
+                visited_.emplace(current);
+            else if (const auto cap4 = get<4>(match); cap4.matched())
+                copyrights_.emplace_back(cap4.str());
         }
 
-        void copy_licence_to(std::ofstream& ofs, const path& file)
-        {
-            mmap_data data{ file };
-            const auto input = data.view();
+        ofs << std::string_view{ saved, input.end() };
+    }
 
-            srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
-                               srx::srx<R"((?m:^.*?\n))">, srx::fmt<"// $0">);
+    void insert_copyrights(std::ofstream& ofs)
+    {
+        std::ranges::sort(copyrights_);
+        const auto& [first, last]{ std::ranges::unique(copyrights_) };
+        copyrights_.erase(first, last);
 
-            ofs << "\n\n";
-        }
+        for (const auto& include : copyrights_)
+            ofs << include << '\n';
 
-        void copy_tmpfile_to(std::ofstream& ofs, const path& file)
-        {
-            mmap_data data{ file };
-            const auto input = data.view();
+        ofs << "\n\n";
+    }
 
-            srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
-                               srx::srx<R"(\n\s+\n)", srx::mode::linear>, srx::fmt<"\n\n">);
-        }
+    void insert_includes(std::ofstream& ofs)
+    {
+        std::ranges::sort(to_reinsert_);
+        const auto& [first, last]{ std::ranges::unique(to_reinsert_) };
+        to_reinsert_.erase(first, last);
 
-        std::vector<path> include_dirs_;
-        std::unordered_set<path> visited_;
-        std::vector<std::string> to_reinsert_;
-        std::vector<std::string> copyrights_;
-    };
-}
+        ofs << "#pragma once" << "\n\n";
+
+        for (const auto& include : to_reinsert_)
+            ofs << include << '\n';
+    }
+
+    void copy_licence_to(std::ofstream& ofs, const path& file)
+    {
+        mmap_data data{ file };
+        const auto input = data.view();
+
+        srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
+                           srx::srx<R"((?m:^.*?\n))">, srx::fmt<"// $0">);
+
+        ofs << "\n\n";
+    }
+
+    void copy_tmpfile_to(std::ofstream& ofs, const path& file)
+    {
+        mmap_data data{ file };
+        const auto input = data.view();
+
+        srx::regex_replace(input.begin(), input.end(), std::ostream_iterator<char>{ ofs },
+                           srx::srx<R"(\n\s+\n)", srx::mode::linear>, srx::fmt<"\n\n">);
+    }
+
+    std::vector<path> include_dirs_;
+    std::unordered_set<path> visited_;
+    std::vector<std::string> to_reinsert_;
+    std::vector<std::string> copyrights_;
+};
+
+} // namespace srx::tools
 
 int main(int argc, char* argv[])
 {

@@ -17,158 +17,159 @@ static const char8_t data[] = {
 static const std::string_view input{ reinterpret_cast<const char*>(data) };
 
 
-namespace
+namespace {
+
+template<srx::string_literal Pattern>
+struct xpr_pattern {};
+
+template<srx::string_literal Pattern>
+consteval xpr_pattern<Pattern> operator ""_xpr() { return {}; }
+
+template<typename Matcher>
+std::size_t matchcount_ctre(Matcher re)
 {
-    template<srx::string_literal Pattern>
-    struct xpr_pattern {};
-
-    template<srx::string_literal Pattern>
-    consteval xpr_pattern<Pattern> operator ""_xpr() { return {}; }
-
-    template<typename Matcher>
-    std::size_t matchcount_ctre(Matcher re)
-    {
-        auto view = re.multiline_range(input);
-        return std::ranges::distance(view.begin(), view.end());
-    }
-
-    template<typename Matcher>
-    std::size_t matchcount_srx(Matcher re)
-    {
-        auto view = re.range(input);
-        return std::ranges::distance(view.begin(), view.end());
-    }
-
-    std::size_t matchcount_std(const std::string_view pattern, auto flags)
-    {
-        std::basic_regex re{ std::string{ pattern }, flags };
-        std::cregex_iterator it{ input.begin(), input.end(), re };
-        std::cregex_iterator end{};
-        return std::ranges::distance(it, end);
-    }
-
-    std::size_t matchcount_boost(const std::string_view pattern)
-    {
-        boost::basic_regex re{ std::string{ pattern } };
-        boost::cregex_iterator it{ input.begin(), input.end(), re, boost::regex_constants::match_not_dot_newline };
-        boost::cregex_iterator end{};
-        return std::ranges::distance(it, end);
-    }
-
-    std::size_t matchcount_re2(const std::string_view pattern)
-    {
-        re2::RE2 re(pattern);
-        std::string_view sv(input);
-        std::size_t count{ 0 };
-        while (RE2::FindAndConsume(&sv, re))
-            ++count;
-
-        return count;
-    }
-
-    template<srx::string_literal Pattern>
-    std::size_t matchcount_xpr(const xpr_pattern<Pattern>)
-    {
-        auto re = [] -> boost::xpressive::cregex {
-            using namespace boost::xpressive;
-            if constexpr (Pattern.view() == R"(Twain)")
-                return as_xpr("Twain");
-            else if constexpr (Pattern.view() == R"((?i)Twain)")
-                return icase("Twain");
-            else if constexpr (Pattern.view() == R"([a-z]shing)")
-                return range('a', 'z') >> "shing";
-            else if constexpr (Pattern.view() == R"(Huck[a-zA-Z]+|Saw[a-zA-Z]+)")
-                return ("Huck" >> +set[range('a', 'z') | range('A', 'Z')]) | ("Saw" >> +set[range('a', 'z') | range('A', 'Z')]);
-            else if constexpr (Pattern.view() == R"(\b\w+nn\b)")
-                return _b >> +_w >> "nn" >> _b;
-            else if constexpr (Pattern.view() == R"([a-q][^u-z]{13}x)")
-                return range('a', 'q') >> repeat<13, 13>(~range('u', 'z')) >> "x";
-            else if constexpr (Pattern.view() == R"(Tom|Sawyer|Huckleberry|Finn)")
-                return as_xpr("Tom") | "Sawyer" | "Huckleberry" | "Finn";
-            else if constexpr (Pattern.view() == R"((?i)(?:Tom|Sawyer|Huckleberry|Finn))")
-                return icase(as_xpr("Tom") | "Sawyer" | "Huckleberry" | "Finn");
-            else if constexpr (Pattern.view() == R"(.{0,2}(?:Tom|Sawyer|Huckleberry|Finn))")
-                return repeat<0, 2>(~(set = '\n')) >> (as_xpr("Tom")| "Sawyer" | "Huckleberry" | "Finn");
-            else if constexpr (Pattern.view() == R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))")
-                return repeat<2, 4>(~(set = '\n')) >> (as_xpr("Tom") | "Sawyer" | "Huckleberry" | "Finn");
-            else if constexpr (Pattern.view() == R"(Tom.{10,25}river|river.{10,25}Tom)")
-                return ("Tom" >> repeat<10, 25>(~(set = '\n')) >> "river") | ("river" >> repeat<10, 25>(~(set = '\n')) >> "Tom");
-            else if constexpr (Pattern.view() == R"([a-zA-Z]+ing)")
-                return +set[range('a', 'z') | range('A', 'Z')] >> "ing";
-            else if constexpr (Pattern.view() == R"(\s[a-zA-Z]{0,12}ing\s)")
-                return _s >> repeat<0, 12>(set[range('a', 'z') | range('A', 'Z')]) >> "ing" >> _s;
-            else if constexpr (Pattern.view() == R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)")
-                return ((set[range('A', 'Z') | range('a', 'z')] >> "awyer") | (set[range('A', 'Z') | range('a', 'z')] >> "inn")) >> _s;
-            else if constexpr (Pattern.view() == R"(["'][^"']{0,30}[?!\.][\"'])")
-                return (set = '\"', '\'') >> repeat<0,30>(~(set = '\"', '\'')) >> (set= '?','!','.') >> (set = '\"', '\'');
-            else
-                static_assert("Unknown Pattern");
-        }();
-
-        boost::xpressive::cregex_iterator it{ input.begin(), input.end(), re };
-        boost::xpressive::cregex_iterator end{};
-        return std::ranges::distance(it, end);
-    }
-
-    std::size_t matchcount_pcre2(const std::string_view pattern)
-    {
-        std::size_t count{ 0 };
-        int err_num{};
-        PCRE2_SIZE err_off{};
-
-        auto* re = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pattern.data()), pattern.size(), 0, &err_num, &err_off, nullptr);
-
-        if (not re)
-            return -1;
-
-        auto* md = pcre2_match_data_create_from_pattern(re, nullptr);
-
-        PCRE2_SIZE offset{ 0 };
-
-        while ((pcre2_match(re, reinterpret_cast<PCRE2_SPTR>(input.data()), input.size(), offset, 0, md, nullptr)) >= 0)
-        {
-            ++count;
-            auto* ovec = pcre2_get_ovector_pointer(md);
-            offset = ovec[1];
-        }
-
-        pcre2_match_data_free(md);
-        pcre2_code_free(re);
-
-        return count;
-    }
-
-    std::size_t matchcount_pcre2jit(const std::string_view pattern)
-    {
-        std::size_t count{ 0 };
-        int err_num{};
-        PCRE2_SIZE err_off{};
-
-        auto* re = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pattern.data()), pattern.size(), 0, &err_num, &err_off, nullptr);
-
-        if (not re)
-            return -1;
-
-        if (pcre2_jit_compile(re, PCRE2_JIT_COMPLETE) != 0)
-            return -1;
-
-        auto* md = pcre2_match_data_create_from_pattern(re, nullptr);
-
-        PCRE2_SIZE offset{ 0 };
-
-        while ((pcre2_jit_match(re, reinterpret_cast<PCRE2_SPTR>(input.data()), input.size(), offset, 0, md, nullptr)) >= 0)
-        {
-            ++count;
-            auto* ovec = pcre2_get_ovector_pointer(md);
-            offset = ovec[1];
-        }
-
-        pcre2_match_data_free(md);
-        pcre2_code_free(re);
-
-        return count;
-    }
+    auto view = re.multiline_range(input);
+    return std::ranges::distance(view.begin(), view.end());
 }
+
+template<typename Matcher>
+std::size_t matchcount_srx(Matcher re)
+{
+    auto view = re.range(input);
+    return std::ranges::distance(view.begin(), view.end());
+}
+
+std::size_t matchcount_std(const std::string_view pattern, auto flags)
+{
+    std::basic_regex re{ std::string{ pattern }, flags };
+    std::cregex_iterator it{ input.begin(), input.end(), re };
+    std::cregex_iterator end{};
+    return std::ranges::distance(it, end);
+}
+
+std::size_t matchcount_boost(const std::string_view pattern)
+{
+    boost::basic_regex re{ std::string{ pattern } };
+    boost::cregex_iterator it{ input.begin(), input.end(), re, boost::regex_constants::match_not_dot_newline };
+    boost::cregex_iterator end{};
+    return std::ranges::distance(it, end);
+}
+
+std::size_t matchcount_re2(const std::string_view pattern)
+{
+    re2::RE2 re(pattern);
+    std::string_view sv(input);
+    std::size_t count{ 0 };
+    while (RE2::FindAndConsume(&sv, re))
+        ++count;
+
+    return count;
+}
+
+template<srx::string_literal Pattern>
+std::size_t matchcount_xpr(const xpr_pattern<Pattern>)
+{
+    auto re = [] -> boost::xpressive::cregex {
+        using namespace boost::xpressive;
+        if constexpr (Pattern.view() == R"(Twain)")
+            return as_xpr("Twain");
+        else if constexpr (Pattern.view() == R"((?i)Twain)")
+            return icase("Twain");
+        else if constexpr (Pattern.view() == R"([a-z]shing)")
+            return range('a', 'z') >> "shing";
+        else if constexpr (Pattern.view() == R"(Huck[a-zA-Z]+|Saw[a-zA-Z]+)")
+            return ("Huck" >> +set[range('a', 'z') | range('A', 'Z')]) | ("Saw" >> +set[range('a', 'z') | range('A', 'Z')]);
+        else if constexpr (Pattern.view() == R"(\b\w+nn\b)")
+            return _b >> +_w >> "nn" >> _b;
+        else if constexpr (Pattern.view() == R"([a-q][^u-z]{13}x)")
+            return range('a', 'q') >> repeat<13, 13>(~range('u', 'z')) >> "x";
+        else if constexpr (Pattern.view() == R"(Tom|Sawyer|Huckleberry|Finn)")
+            return as_xpr("Tom") | "Sawyer" | "Huckleberry" | "Finn";
+        else if constexpr (Pattern.view() == R"((?i)(?:Tom|Sawyer|Huckleberry|Finn))")
+            return icase(as_xpr("Tom") | "Sawyer" | "Huckleberry" | "Finn");
+        else if constexpr (Pattern.view() == R"(.{0,2}(?:Tom|Sawyer|Huckleberry|Finn))")
+            return repeat<0, 2>(~(set = '\n')) >> (as_xpr("Tom")| "Sawyer" | "Huckleberry" | "Finn");
+        else if constexpr (Pattern.view() == R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))")
+            return repeat<2, 4>(~(set = '\n')) >> (as_xpr("Tom") | "Sawyer" | "Huckleberry" | "Finn");
+        else if constexpr (Pattern.view() == R"(Tom.{10,25}river|river.{10,25}Tom)")
+            return ("Tom" >> repeat<10, 25>(~(set = '\n')) >> "river") | ("river" >> repeat<10, 25>(~(set = '\n')) >> "Tom");
+        else if constexpr (Pattern.view() == R"([a-zA-Z]+ing)")
+            return +set[range('a', 'z') | range('A', 'Z')] >> "ing";
+        else if constexpr (Pattern.view() == R"(\s[a-zA-Z]{0,12}ing\s)")
+            return _s >> repeat<0, 12>(set[range('a', 'z') | range('A', 'Z')]) >> "ing" >> _s;
+        else if constexpr (Pattern.view() == R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)")
+            return ((set[range('A', 'Z') | range('a', 'z')] >> "awyer") | (set[range('A', 'Z') | range('a', 'z')] >> "inn")) >> _s;
+        else if constexpr (Pattern.view() == R"(["'][^"']{0,30}[?!\.][\"'])")
+            return (set = '\"', '\'') >> repeat<0,30>(~(set = '\"', '\'')) >> (set= '?','!','.') >> (set = '\"', '\'');
+        else
+            static_assert("Unknown Pattern");
+    }();
+
+    boost::xpressive::cregex_iterator it{ input.begin(), input.end(), re };
+    boost::xpressive::cregex_iterator end{};
+    return std::ranges::distance(it, end);
+}
+
+std::size_t matchcount_pcre2(const std::string_view pattern)
+{
+    std::size_t count{ 0 };
+    int err_num{};
+    PCRE2_SIZE err_off{};
+
+    auto* re = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pattern.data()), pattern.size(), 0, &err_num, &err_off, nullptr);
+
+    if (not re)
+        return -1;
+
+    auto* md = pcre2_match_data_create_from_pattern(re, nullptr);
+
+    PCRE2_SIZE offset{ 0 };
+
+    while ((pcre2_match(re, reinterpret_cast<PCRE2_SPTR>(input.data()), input.size(), offset, 0, md, nullptr)) >= 0)
+    {
+        ++count;
+        auto* ovec = pcre2_get_ovector_pointer(md);
+        offset = ovec[1];
+    }
+
+    pcre2_match_data_free(md);
+    pcre2_code_free(re);
+
+    return count;
+}
+
+std::size_t matchcount_pcre2jit(const std::string_view pattern)
+{
+    std::size_t count{ 0 };
+    int err_num{};
+    PCRE2_SIZE err_off{};
+
+    auto* re = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pattern.data()), pattern.size(), 0, &err_num, &err_off, nullptr);
+
+    if (not re)
+        return -1;
+
+    if (pcre2_jit_compile(re, PCRE2_JIT_COMPLETE) != 0)
+        return -1;
+
+    auto* md = pcre2_match_data_create_from_pattern(re, nullptr);
+
+    PCRE2_SIZE offset{ 0 };
+
+    while ((pcre2_jit_match(re, reinterpret_cast<PCRE2_SPTR>(input.data()), input.size(), offset, 0, md, nullptr)) >= 0)
+    {
+        ++count;
+        auto* ovec = pcre2_get_ovector_pointer(md);
+        offset = ovec[1];
+    }
+
+    pcre2_match_data_free(md);
+    pcre2_code_free(re);
+
+    return count;
+}
+
+} // namespace
 
 
 template<typename Matcher>

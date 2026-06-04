@@ -7,86 +7,87 @@
 #include <srx/etc/charset.hpp>
 
 
-namespace
+namespace {
+
+consteval auto make_cs(std::string_view sv)
 {
-    consteval auto make_cs(std::string_view sv)
-    {
-        srx::detail::charset<char> result;
-        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
-            result.insert(sv[i], sv[i + 1]);
-        return result;
-    }
-
-    consteval auto make_inverted_cs(std::string_view sv)
-    {
-        srx::detail::charset<char> result;
-        char tmp{ std::numeric_limits<char>::min() };
-        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
-        {
-            result.insert(tmp, sv[i]);
-            tmp = sv[i + 1];
-        }
-        result.insert(tmp, std::numeric_limits<char>::max());
-        return result;
-    }
-
-    consteval auto make_cs_vec(const std::vector<const char*>& vec)
-    {
-        std::vector<srx::detail::charset<char>> result;
-        result.reserve(vec.size());
-        for (const char* cstr : vec)
-            result.emplace_back(make_cs(cstr));
-        return result;
-    }
-
-
-    consteval bool test_ident(const char* arg, const char* result)
-    {
-        return make_cs(arg) == make_cs(result);
-    }
-
-    consteval bool test_compl_ext(const char* arg, const char* result)
-    {
-        return (~make_cs(arg)) == make_cs(result);
-    }
-
-    consteval bool test_compl(const char* arg, const char* result)
-    {
-        return (~make_cs(arg)) == make_inverted_cs(result);
-    }
-
-    consteval bool test_union(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_cs(lhs) | make_cs(rhs)) == make_cs(result);
-    }
-
-    consteval bool test_inter(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_cs(lhs) & make_cs(rhs)) == make_cs(result);
-    }
-
-    consteval bool test_symdif(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_cs(lhs) ^ make_cs(rhs)) == make_cs(result);
-    }
-
-    consteval bool test_relcomp(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_cs(lhs) - make_cs(rhs)) == make_cs(result);
-    }
-
-    consteval bool contains(const char* arg, char c)
-    {
-        return make_cs(arg).contains(c);
-    }
-
-    consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
-    {
-        const auto input = make_cs_vec(arg);
-        const auto refs = input | std::views::transform([](const auto& b){ return std::cref(b); }) | std::ranges::to<std::vector>();
-        return srx::detail::charset<char>::partition(refs) == make_cs_vec(result);
-    }
+    srx::detail::charset<char> result;
+    for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
+        result.insert(sv[i], sv[i + 1]);
+    return result;
 }
+
+consteval auto make_inverted_cs(std::string_view sv)
+{
+    srx::detail::charset<char> result;
+    char tmp{ std::numeric_limits<char>::min() };
+    for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
+    {
+        result.insert(tmp, sv[i]);
+        tmp = sv[i + 1];
+    }
+    result.insert(tmp, std::numeric_limits<char>::max());
+    return result;
+}
+
+consteval auto make_cs_vec(const std::vector<const char*>& vec)
+{
+    std::vector<srx::detail::charset<char>> result;
+    result.reserve(vec.size());
+    for (const char* cstr : vec)
+        result.emplace_back(make_cs(cstr));
+    return result;
+}
+
+
+consteval bool test_ident(const char* arg, const char* result)
+{
+    return make_cs(arg) == make_cs(result);
+}
+
+consteval bool test_compl_ext(const char* arg, const char* result)
+{
+    return (~make_cs(arg)) == make_cs(result);
+}
+
+consteval bool test_compl(const char* arg, const char* result)
+{
+    return (~make_cs(arg)) == make_inverted_cs(result);
+}
+
+consteval bool test_union(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_cs(lhs) | make_cs(rhs)) == make_cs(result);
+}
+
+consteval bool test_inter(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_cs(lhs) & make_cs(rhs)) == make_cs(result);
+}
+
+consteval bool test_symdif(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_cs(lhs) ^ make_cs(rhs)) == make_cs(result);
+}
+
+consteval bool test_relcomp(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_cs(lhs) - make_cs(rhs)) == make_cs(result);
+}
+
+consteval bool contains(const char* arg, char c)
+{
+    return make_cs(arg).contains(c);
+}
+
+consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
+{
+    const auto input = make_cs_vec(arg);
+    const auto refs = input | std::views::transform([](const auto& b){ return std::cref(b); }) | std::ranges::to<std::vector>();
+    return srx::detail::charset<char>::partition(refs) == make_cs_vec(result);
+}
+
+} // namespace
 
 /* insertion tests */
 static_assert(test_ident("", ""));

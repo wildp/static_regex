@@ -7,41 +7,42 @@
 #include <srx/regex.hpp>
 
 
-namespace
+namespace {
+
+template<srx::string_literal Pattern, srx::mode Mode>
+consteval bool test(srx::static_regex<Pattern, Mode> pattern, std::string_view fmt, std::string_view input, std::string_view result)
 {
-    template<srx::string_literal Pattern, srx::mode Mode>
-    consteval bool test(srx::static_regex<Pattern, Mode> pattern, std::string_view fmt, std::string_view input, std::string_view result)
-    {
-        return srx::regex_replace(input, pattern, fmt) == result;
-    }
-
-    template<srx::string_literal Pattern, srx::mode Mode, srx::string_literal Fmt>
-    consteval bool test(srx::static_regex<Pattern, Mode> pattern, srx::fmt_t<Fmt>, std::string_view input, std::string_view result)
-    {
-        return srx::regex_replace(input, pattern, srx::fmt<Fmt>) == result;
-    }
-
-    template<srx::string_literal Pattern, srx::mode Mode>
-    consteval bool lazy_test(srx::static_regex<Pattern, Mode> pattern, std::string_view fmt, std::string_view input, std::string_view result)
-    {
-        auto tmp = input | srx::views::regex_match(pattern) | srx::views::replace(fmt) | std::ranges::to<std::basic_string>();
-        return tmp == result;
-    }
-
-    template<srx::string_literal Pattern, srx::mode Mode, srx::string_literal Fmt>
-    consteval bool lazy_test(srx::static_regex<Pattern, Mode> pattern, srx::fmt_t<Fmt>, std::string_view input, std::string_view result)
-    {
-        auto tmp = input | srx::views::regex_match(pattern) | srx::views::replace(srx::fmt<Fmt>) | std::ranges::to<std::basic_string>();
-        return tmp == result;
-    }
-
-    template<srx::string_literal Pattern, srx::mode Mode>
-    consteval bool lazy_test_cstr(srx::static_regex<Pattern, Mode> pattern, const char* fmt, std::string_view input, std::string_view result)
-    {
-        auto tmp = input | srx::views::regex_match(pattern) | srx::views::replace(fmt) | std::ranges::to<std::basic_string>();
-        return tmp == result;
-    }
+    return srx::regex_replace(input, pattern, fmt) == result;
 }
+
+template<srx::string_literal Pattern, srx::mode Mode, srx::string_literal Fmt>
+consteval bool test(srx::static_regex<Pattern, Mode> pattern, srx::fmt_t<Fmt>, std::string_view input, std::string_view result)
+{
+    return srx::regex_replace(input, pattern, srx::fmt<Fmt>) == result;
+}
+
+template<srx::string_literal Pattern, srx::mode Mode>
+consteval bool lazy_test(srx::static_regex<Pattern, Mode> pattern, std::string_view fmt, std::string_view input, std::string_view result)
+{
+    auto tmp = input | srx::views::regex_match(pattern) | srx::views::replace(fmt) | std::ranges::to<std::basic_string>();
+    return tmp == result;
+}
+
+template<srx::string_literal Pattern, srx::mode Mode, srx::string_literal Fmt>
+consteval bool lazy_test(srx::static_regex<Pattern, Mode> pattern, srx::fmt_t<Fmt>, std::string_view input, std::string_view result)
+{
+    auto tmp = input | srx::views::regex_match(pattern) | srx::views::replace(srx::fmt<Fmt>) | std::ranges::to<std::basic_string>();
+    return tmp == result;
+}
+
+template<srx::string_literal Pattern, srx::mode Mode>
+consteval bool lazy_test_cstr(srx::static_regex<Pattern, Mode> pattern, const char* fmt, std::string_view input, std::string_view result)
+{
+    auto tmp = input | srx::views::regex_match(pattern) | srx::views::replace(fmt) | std::ranges::to<std::basic_string>();
+    return tmp == result;
+}
+
+} // namespace
 
 
 using namespace srx::literals;

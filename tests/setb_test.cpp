@@ -7,118 +7,119 @@
 #include <srx/etc/bitcharset.hpp>
 
 
-namespace
+namespace {
+
+consteval auto make_bs(std::string_view sv)
 {
-    consteval auto make_bs(std::string_view sv)
-    {
-        srx::detail::bitcharset<char> result;
-        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
-            result.insert(sv[i], sv[i + 1]);
-        return result;
-    }
-
-    consteval auto make_inverted_bs(std::string_view sv)
-    {
-        srx::detail::bitcharset<char> result;
-        char tmp{ std::numeric_limits<char>::min() };
-        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
-        {
-            result.insert(tmp, sv[i]);
-            tmp = sv[i + 1];
-        }
-        result.insert(tmp, std::numeric_limits<char>::max());
-        return result;
-    }
-
-    consteval auto make_bs_vec(const std::vector<const char*>& vec)
-    {
-        std::vector<srx::detail::bitcharset<char>> result;
-        result.reserve(vec.size());
-        for (const char* cstr : vec)
-            result.emplace_back(make_bs(cstr));
-        return result;
-    }
-
-    consteval auto make_pairvec(std::string_view sv)
-    {
-        std::vector<srx::detail::bitcharset<char>::char_interval> result;
-        for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
-            result.emplace_back(sv[i], sv[i + 1]);
-        return result;
-    }
-
-    consteval bool test_ident(const char* arg, const char* result)
-    {
-        return make_bs(arg) == make_bs(result);
-    }
-
-    consteval bool test_compl_empty()
-    {
-        using bcs = srx::detail::bitcharset<char>;
-        return (~bcs{}) == bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max() }};
-    }
-
-    consteval bool test_compl_full()
-    {
-        using bcs = srx::detail::bitcharset<char>;
-        return (~bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max()  }}) == bcs{};
-    }
-
-    consteval bool test_compl(const char* arg, const char* result)
-    {
-        return (~make_bs(arg)) == make_inverted_bs(result);
-    }
-
-    consteval bool test_union(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_bs(lhs) | make_bs(rhs)) == make_bs(result);
-    }
-
-    consteval bool test_inter(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_bs(lhs) & make_bs(rhs)) == make_bs(result);
-    }
-
-    consteval bool test_symdif(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_bs(lhs) ^ make_bs(rhs)) == make_bs(result);
-    }
-
-    consteval bool test_relcomp(const char* lhs, const char* rhs, const char* result)
-    {
-        return (make_bs(lhs) - make_bs(rhs)) == make_bs(result);
-    }
-
-    consteval bool test_intervals(const char* arg, const char* result)
-    {
-        return make_bs(arg).get_intervals() == make_pairvec(result);
-    }
-
-    consteval bool test_interval_count(const char* arg)
-    {
-        auto bs = make_bs(arg);
-        return bs.interval_count() == bs.get_intervals().size();
-    }
-
-    consteval bool test_caseless(const char* arg, const char* result)
-    {
-        auto bs = make_bs(arg);
-        bs.make_ascii_case_insensitive();
-        return (bs == make_bs(result));
-    }
-
-    consteval bool contains(const char* arg, char c)
-    {
-        return make_bs(arg).contains(c);
-    }
-
-    consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
-    {
-        const auto input = make_bs_vec(arg);
-        const auto refs = input | std::views::transform([](const auto& b){ return std::cref(b); }) | std::ranges::to<std::vector>();
-        return srx::detail::bitcharset<char>::partition(refs) == make_bs_vec(result);
-    }
+    srx::detail::bitcharset<char> result;
+    for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
+        result.insert(sv[i], sv[i + 1]);
+    return result;
 }
+
+consteval auto make_inverted_bs(std::string_view sv)
+{
+    srx::detail::bitcharset<char> result;
+    char tmp{ std::numeric_limits<char>::min() };
+    for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
+    {
+        result.insert(tmp, sv[i]);
+        tmp = sv[i + 1];
+    }
+    result.insert(tmp, std::numeric_limits<char>::max());
+    return result;
+}
+
+consteval auto make_bs_vec(const std::vector<const char*>& vec)
+{
+    std::vector<srx::detail::bitcharset<char>> result;
+    result.reserve(vec.size());
+    for (const char* cstr : vec)
+        result.emplace_back(make_bs(cstr));
+    return result;
+}
+
+consteval auto make_pairvec(std::string_view sv)
+{
+    std::vector<srx::detail::bitcharset<char>::char_interval> result;
+    for (std::size_t i{ 0 }, i_end{ sv.size() }; i + 1 < i_end; i += 2)
+        result.emplace_back(sv[i], sv[i + 1]);
+    return result;
+}
+
+consteval bool test_ident(const char* arg, const char* result)
+{
+    return make_bs(arg) == make_bs(result);
+}
+
+consteval bool test_compl_empty()
+{
+    using bcs = srx::detail::bitcharset<char>;
+    return (~bcs{}) == bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max() }};
+}
+
+consteval bool test_compl_full()
+{
+    using bcs = srx::detail::bitcharset<char>;
+    return (~bcs{ bcs::char_interval{ std::numeric_limits<char>::min(), std::numeric_limits<char>::max()  }}) == bcs{};
+}
+
+consteval bool test_compl(const char* arg, const char* result)
+{
+    return (~make_bs(arg)) == make_inverted_bs(result);
+}
+
+consteval bool test_union(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_bs(lhs) | make_bs(rhs)) == make_bs(result);
+}
+
+consteval bool test_inter(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_bs(lhs) & make_bs(rhs)) == make_bs(result);
+}
+
+consteval bool test_symdif(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_bs(lhs) ^ make_bs(rhs)) == make_bs(result);
+}
+
+consteval bool test_relcomp(const char* lhs, const char* rhs, const char* result)
+{
+    return (make_bs(lhs) - make_bs(rhs)) == make_bs(result);
+}
+
+consteval bool test_intervals(const char* arg, const char* result)
+{
+    return make_bs(arg).get_intervals() == make_pairvec(result);
+}
+
+consteval bool test_interval_count(const char* arg)
+{
+    auto bs = make_bs(arg);
+    return bs.interval_count() == bs.get_intervals().size();
+}
+
+consteval bool test_caseless(const char* arg, const char* result)
+{
+    auto bs = make_bs(arg);
+    bs.make_ascii_case_insensitive();
+    return (bs == make_bs(result));
+}
+
+consteval bool contains(const char* arg, char c)
+{
+    return make_bs(arg).contains(c);
+}
+
+consteval bool test_part(const std::vector<const char*>& arg, const std::vector<const char*>& result)
+{
+    const auto input = make_bs_vec(arg);
+    const auto refs = input | std::views::transform([](const auto& b){ return std::cref(b); }) | std::ranges::to<std::vector>();
+    return srx::detail::bitcharset<char>::partition(refs) == make_bs_vec(result);
+}
+
+} // namespace
 
 
 /* insertion tests */

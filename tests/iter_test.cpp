@@ -15,89 +15,90 @@
 #include <vector>
 
 
-namespace
+namespace {
+
+template<int... Is>
+using ints = std::integer_sequence<int, Is...>;
+
+template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
+constexpr int match_count(T input)
 {
-    template<int... Is>
-    using ints = std::integer_sequence<int, Is...>;
-
-    template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
-    constexpr int match_count(T input)
-    {
-        int count{ 0 };
-        for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}))
-            ++count;
-        return count;
-    }
-
-    template<srx::string_literal Pattern, typename CharT>
-    constexpr int match_count(const CharT* input)
-    {
-        return match_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
-    }
-
-    template<srx::string_literal Pattern, typename Ints, std::ranges::bidirectional_range T>
-    constexpr int submatch_count(T input)
-    {
-        int count{ 0 };
-        for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}) | srx::views::submatches(Ints{}))
-            ++count;
-        return count;
-    }
-
-    template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
-    constexpr int submatch_count(T input, const std::vector<int>& vec)
-    {
-        int count{ 0 };
-        for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}) | srx::views::submatches(vec))
-            ++count;
-        return count;
-    }
-
-    template<srx::string_literal Pattern, typename Ints, typename CharT>
-    constexpr int submatch_count(const CharT* input)
-    {
-        return submatch_count<Pattern, Ints>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
-    }
-
-    template<srx::string_literal Pattern, typename CharT>
-    constexpr int submatch_count(const CharT* input, const std::vector<int>& vec)
-    {
-        return submatch_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel), vec);
-    }
-
-    template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
-    constexpr int split_count(T input)
-    {
-        int count{ 0 };
-        for (const auto& _ : input | srx::views::regex_split(srx::static_regex<Pattern>{}))
-            ++count;
-        return count;
-    }
-
-    template<srx::string_literal Pattern, typename CharT>
-    constexpr int split_count(const CharT* input)
-    {
-        return split_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
-    }
-
-    template<std::size_t I, std::ranges::bidirectional_range R>
-    constexpr bool test(R&& r)
-    {
-        using namespace srx::literals;
-        auto matcher = "(Hello)|(World)"_srx;
-        auto result = matcher.match(std::forward<R>(r));
-        return result and get<0>(result) == get<I>(result);
-    }
-
-    template<std::size_t I, std::ranges::bidirectional_range R>
-    constexpr bool owning_test(R r)
-    {
-        using namespace srx::literals;
-        auto matcher = "(Hello)|(World)"_srx;
-        auto result = matcher.match(r);
-        return result and get<0>(result) == get<I>(result);
-    }
+    int count{ 0 };
+    for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}))
+        ++count;
+    return count;
 }
+
+template<srx::string_literal Pattern, typename CharT>
+constexpr int match_count(const CharT* input)
+{
+    return match_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
+}
+
+template<srx::string_literal Pattern, typename Ints, std::ranges::bidirectional_range T>
+constexpr int submatch_count(T input)
+{
+    int count{ 0 };
+    for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}) | srx::views::submatches(Ints{}))
+        ++count;
+    return count;
+}
+
+template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
+constexpr int submatch_count(T input, const std::vector<int>& vec)
+{
+    int count{ 0 };
+    for (const auto& _ : input | srx::views::regex_match(srx::static_regex<Pattern>{}) | srx::views::submatches(vec))
+        ++count;
+    return count;
+}
+
+template<srx::string_literal Pattern, typename Ints, typename CharT>
+constexpr int submatch_count(const CharT* input)
+{
+    return submatch_count<Pattern, Ints>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
+}
+
+template<srx::string_literal Pattern, typename CharT>
+constexpr int submatch_count(const CharT* input, const std::vector<int>& vec)
+{
+    return submatch_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel), vec);
+}
+
+template<srx::string_literal Pattern, std::ranges::bidirectional_range T>
+constexpr int split_count(T input)
+{
+    int count{ 0 };
+    for (const auto& _ : input | srx::views::regex_split(srx::static_regex<Pattern>{}))
+        ++count;
+    return count;
+}
+
+template<srx::string_literal Pattern, typename CharT>
+constexpr int split_count(const CharT* input)
+{
+    return split_count<Pattern>(std::ranges::subrange(input, srx::detail::cstr_sentinel));
+}
+
+template<std::size_t I, std::ranges::bidirectional_range R>
+constexpr bool test(R&& r)
+{
+    using namespace srx::literals;
+    auto matcher = "(Hello)|(World)"_srx;
+    auto result = matcher.match(std::forward<R>(r));
+    return result and get<0>(result) == get<I>(result);
+}
+
+template<std::size_t I, std::ranges::bidirectional_range R>
+constexpr bool owning_test(R r)
+{
+    using namespace srx::literals;
+    auto matcher = "(Hello)|(World)"_srx;
+    auto result = matcher.match(r);
+    return result and get<0>(result) == get<I>(result);
+}
+
+} // namespace
 
 
 using namespace std::literals;

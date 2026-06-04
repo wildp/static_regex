@@ -16,237 +16,238 @@
 #include "srx/etc/util.hpp"
 
 
-namespace srx
+namespace srx {
+namespace detail {
+
+template<std::bidirectional_iterator Iter>
+class submatch_factory;
+
+} // namespace detail
+
+
+template<std::bidirectional_iterator I>
+class submatch
 {
-    namespace detail
+public:
+    using iterator               = I;
+    using reverse_iterator       = std::reverse_iterator<iterator>;
+#if __cpp_lib_ranges_as_const >= 202311L
+    using const_iterator         = std::const_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+#endif
+    using value_type             = std::iter_value_t<iterator>;
+    using size_type              = std::size_t;
+    using string_type            = std::basic_string<value_type>;
+    using view_type              = std::basic_string_view<value_type>;
+
+    constexpr submatch() = default;
+
+    /* observers */
+
+    [[nodiscard]] constexpr bool matched() const noexcept
     {
-        template<std::bidirectional_iterator Iter>
-        class submatch_factory;
+        if constexpr (std::contiguous_iterator<I>)
+            return std::to_address(first_) != std::to_address(I{});
+        else
+            return match_;
     }
 
-
-    template<std::bidirectional_iterator I>
-    class submatch
+    [[nodiscard]] constexpr explicit(false) operator bool() const noexcept
     {
-    public:
-        using iterator               = I;
-        using reverse_iterator       = std::reverse_iterator<iterator>;
-#if __cpp_lib_ranges_as_const >= 202311L
-        using const_iterator         = std::const_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-#endif
-        using value_type             = std::iter_value_t<iterator>;
-        using size_type              = std::size_t;
-        using string_type            = std::basic_string<value_type>;
-        using view_type              = std::basic_string_view<value_type>;
+        return this->matched();
+    }
 
-        constexpr submatch() = default;
+    [[nodiscard]] constexpr bool empty() const noexcept
+    {
+        return first_ == last_;
+    }
 
-        /* observers */
+    [[nodiscard]] constexpr size_type size() const
+    {
+        return static_cast<size_type>(std::ranges::distance(first_, last_));
+    }
 
-        [[nodiscard]] constexpr bool matched() const noexcept
-        {
-            if constexpr (std::contiguous_iterator<I>)
-                return std::to_address(first_) != std::to_address(I{});
-            else
-                return match_;
-        }
+    [[nodiscard]] constexpr size_type length() const
+    {
+        return this->size();
+    }
 
-        [[nodiscard]] constexpr explicit(false) operator bool() const noexcept
-        {
-            return this->matched();
-        }
+    /* iterators */
 
-        [[nodiscard]] constexpr bool empty() const noexcept
-        {
-            return first_ == last_;
-        }
+    [[nodiscard]] constexpr iterator begin() const noexcept
+    {
+        return first_;
+    }
 
-        [[nodiscard]] constexpr size_type size() const
-        {
-            return static_cast<size_type>(std::ranges::distance(first_, last_));
-        }
+    [[nodiscard]] constexpr iterator end() const noexcept
+    {
+        return last_;
+    }
 
-        [[nodiscard]] constexpr size_type length() const
-        {
-            return this->size();
-        }
+    [[nodiscard]] constexpr reverse_iterator rbegin() const noexcept
+    {
+        return std::make_reverse_iterator(this->end());
+    }
 
-        /* iterators */
-
-        [[nodiscard]] constexpr iterator begin() const noexcept
-        {
-            return first_;
-        }
-
-        [[nodiscard]] constexpr iterator end() const noexcept
-        {
-            return last_;
-        }
-
-        [[nodiscard]] constexpr reverse_iterator rbegin() const noexcept
-        {
-            return std::make_reverse_iterator(this->end());
-        }
-
-        [[nodiscard]] constexpr reverse_iterator rend() const noexcept
-        {
-            return std::make_reverse_iterator(this->begin());
-        }
+    [[nodiscard]] constexpr reverse_iterator rend() const noexcept
+    {
+        return std::make_reverse_iterator(this->begin());
+    }
 
 #if __cpp_lib_ranges_as_const >= 202311L
-        [[nodiscard]] constexpr const_iterator cbegin() const noexcept
-            requires std::bidirectional_iterator<const_iterator>
-        {
-            return std::make_const_iterator(this->begin());
-        }
+    [[nodiscard]] constexpr const_iterator cbegin() const noexcept
+        requires std::bidirectional_iterator<const_iterator>
+    {
+        return std::make_const_iterator(this->begin());
+    }
 
-        [[nodiscard]] constexpr const_iterator cend() const noexcept
-            requires std::bidirectional_iterator<const_iterator>
-        {
-            return std::make_const_iterator(this->end());
-        }
+    [[nodiscard]] constexpr const_iterator cend() const noexcept
+        requires std::bidirectional_iterator<const_iterator>
+    {
+        return std::make_const_iterator(this->end());
+    }
 
-        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
-            requires std::bidirectional_iterator<const_iterator>
-        {
-            return std::make_reverse_iterator(this->cend());
-        }
+    [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept
+        requires std::bidirectional_iterator<const_iterator>
+    {
+        return std::make_reverse_iterator(this->cend());
+    }
 
-        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept
-            requires std::bidirectional_iterator<const_iterator>
-        {
-            return std::make_reverse_iterator(this->cbegin());
-        }
+    [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept
+        requires std::bidirectional_iterator<const_iterator>
+    {
+        return std::make_reverse_iterator(this->cbegin());
+    }
 #endif
 
-        /* structured binding support */
+    /* structured binding support */
 
-        template<std::size_t N>
-            requires (N < 2)
-        [[nodiscard]] friend constexpr const auto& get(const submatch& s) noexcept
-        {
-            if constexpr (N == 0)
-                return s.first_;
-            if constexpr (N == 1)
-                return s.last_;
-        }
+    template<std::size_t N>
+        requires (N < 2)
+    [[nodiscard]] friend constexpr const auto& get(const submatch& s) noexcept
+    {
+        if constexpr (N == 0)
+            return s.first_;
+        if constexpr (N == 1)
+            return s.last_;
+    }
 
-        template<std::size_t N>
-            requires (N < 2)
-        [[nodiscard]] friend constexpr auto&& get(submatch&& s) noexcept
-        {
-            if constexpr (N == 0)
-                return std::move(s).first_;
-            if constexpr (N == 1)
-                return std::move(s).last_;
-        }
+    template<std::size_t N>
+        requires (N < 2)
+    [[nodiscard]] friend constexpr auto&& get(submatch&& s) noexcept
+    {
+        if constexpr (N == 0)
+            return std::move(s).first_;
+        if constexpr (N == 1)
+            return std::move(s).last_;
+    }
 
-        /* conversion */
+    /* conversion */
 
-        [[nodiscard]] constexpr string_type str() const
-        {
-            return { first_, last_ };
-        }
+    [[nodiscard]] constexpr string_type str() const
+    {
+        return { first_, last_ };
+    }
 
-        [[nodiscard]] constexpr view_type view() const
-            requires std::contiguous_iterator<I>
-        {
-            return { first_, last_ };
-        }
+    [[nodiscard]] constexpr view_type view() const
+        requires std::contiguous_iterator<I>
+    {
+        return { first_, last_ };
+    }
 
-        [[nodiscard]] constexpr explicit(false) operator string_type() const
-        {
-            return this->str();
-        }
+    [[nodiscard]] constexpr explicit(false) operator string_type() const
+    {
+        return this->str();
+    }
 
-        [[nodiscard]] constexpr explicit(false) operator view_type() const
-            requires std::contiguous_iterator<I>
-        {
-            return this->view();
-        }
+    [[nodiscard]] constexpr explicit(false) operator view_type() const
+        requires std::contiguous_iterator<I>
+    {
+        return this->view();
+    }
 
 #if __cpp_lib_ranges_as_const >= 202311L
-        [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() const &
-            requires (not std::same_as<const_iterator, iterator>)
-        {
-            return { first_, last_ };
-        }
+    [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() const &
+        requires (not std::same_as<const_iterator, iterator>)
+    {
+        return { first_, last_ };
+    }
 
-        [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() &&
-            requires (not std::same_as<const_iterator, iterator>)
-        {
-            return { std::move(first_), std::move(last_) };
-        }
+    [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() &&
+        requires (not std::same_as<const_iterator, iterator>)
+    {
+        return { std::move(first_), std::move(last_) };
+    }
 #endif
 
-        /* operators */
+    /* operators */
 
-        [[nodiscard]] friend constexpr bool operator==(const submatch& lhs, const submatch& rhs)
-        {
-            return (lhs and rhs)
-                   ? std::ranges::equal(lhs, rhs)
-                   : lhs.matched() == rhs.matched();
-        }
+    [[nodiscard]] friend constexpr bool operator==(const submatch& lhs, const submatch& rhs)
+    {
+        return (lhs and rhs)
+               ? std::ranges::equal(lhs, rhs)
+               : lhs.matched() == rhs.matched();
+    }
 
-        [[nodiscard]] friend constexpr bool operator==(const submatch& sub, const view_type view)
-        {
-            return sub
-                   ? std::ranges::equal(sub, view)
-                   : false;
-        }
+    [[nodiscard]] friend constexpr bool operator==(const submatch& sub, const view_type view)
+    {
+        return sub
+               ? std::ranges::equal(sub, view)
+               : false;
+    }
 
-        [[nodiscard]] friend constexpr auto operator<=>(const submatch& lhs, const submatch& rhs)
-        {
-            return (lhs and rhs)
-                   ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end())
-                   : lhs.matched() <=> rhs.matched();
-        }
+    [[nodiscard]] friend constexpr auto operator<=>(const submatch& lhs, const submatch& rhs)
+    {
+        return (lhs and rhs)
+               ? std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end())
+               : lhs.matched() <=> rhs.matched();
+    }
 
-        [[nodiscard]] friend constexpr auto operator<=>(const submatch& sub, const view_type view)
-        {
-            return sub
-                   ? std::lexicographical_compare_three_way(sub.begin(), sub.end(), view.begin(), view.end())
-                   : std::strong_ordering::less;
-        }
+    [[nodiscard]] friend constexpr auto operator<=>(const submatch& sub, const view_type view)
+    {
+        return sub
+               ? std::lexicographical_compare_three_way(sub.begin(), sub.end(), view.begin(), view.end())
+               : std::strong_ordering::less;
+    }
 
-        template<typename CharT, typename Traits>
-        [[nodiscard]] friend std::basic_ostream<CharT, Traits> operator<<(std::basic_ostream<CharT, Traits>& os, const submatch& sub)
-        {
-            if constexpr (std::contiguous_iterator<I>)
-                return os << sub.view();
-            else
-                return os << sub.str();
-        }
+    template<typename CharT, typename Traits>
+    [[nodiscard]] friend std::basic_ostream<CharT, Traits> operator<<(std::basic_ostream<CharT, Traits>& os, const submatch& sub)
+    {
+        if constexpr (std::contiguous_iterator<I>)
+            return os << sub.view();
+        else
+            return os << sub.str();
+    }
 
-        /* misc */
+    /* misc */
 
-        friend constexpr void swap(submatch& x, submatch& y) noexcept(std::is_nothrow_swappable_v<I>)
-        {
-            std::ranges::swap(x.first_, y.first_);
-            std::ranges::swap(x.last_, y.last_);
-        }
+    friend constexpr void swap(submatch& x, submatch& y) noexcept(std::is_nothrow_swappable_v<I>)
+    {
+        std::ranges::swap(x.first_, y.first_);
+        std::ranges::swap(x.last_, y.last_);
+    }
 
 #if __cpp_lib_ranges_as_const >= 202311L
-        template<std::bidirectional_iterator OtherI>
-        friend class submatch;
+    template<std::bidirectional_iterator OtherI>
+    friend class submatch;
 #endif
 
-    private:
-        static constexpr bool use_bool{ not std::contiguous_iterator<I> };
-        using maybe_bool = detail::maybe_type_t<use_bool, bool>;
+private:
+    static constexpr bool use_bool{ not std::contiguous_iterator<I> };
+    using maybe_bool = detail::maybe_type_t<use_bool, bool>;
 
-        constexpr submatch(I first, I last) noexcept(std::is_nothrow_move_constructible_v<I>)
-            : first_{ std::move(first) }, last_{ std::move(last) }, match_{ true } {}
+    constexpr submatch(I first, I last) noexcept(std::is_nothrow_move_constructible_v<I>)
+        : first_{ std::move(first) }, last_{ std::move(last) }, match_{ true } {}
 
-        friend class detail::submatch_factory<I>;
+    friend class detail::submatch_factory<I>;
 
-        I first_{};
-        I last_{};
+    I first_{};
+    I last_{};
 
-        [[no_unique_address]] maybe_bool match_{ false };
-    };
-}
+    [[no_unique_address]] maybe_bool match_{ false };
+};
+
+} // namespace srx
 
 
 /* structured binding support for submatch */
@@ -278,23 +279,24 @@ constexpr bool std::ranges::disable_sized_range<srx::submatch<I>> = not std::siz
 
 /* submatch factory implementation */
 
-namespace srx::detail
-{
-    template<std::bidirectional_iterator I>
-    class submatch_factory
-    {
-    public:
-        [[nodiscard]] static constexpr submatch<I> make_submatch(I first, I last)
-            noexcept(std::is_nothrow_move_constructible_v<I>)
-        {
-            return { first, last };
-        }
+namespace srx::detail {
 
-        template<std::sentinel_for<I> S>
-            requires (not std::same_as<I, S>)
-        [[nodiscard]] static constexpr submatch<I> make_submatch(I first, S last)
-        {
-            return { first, std::ranges::next(first, last) };
-        }
-    };
-}
+template<std::bidirectional_iterator I>
+class submatch_factory
+{
+public:
+    [[nodiscard]] static constexpr submatch<I> make_submatch(I first, I last)
+        noexcept(std::is_nothrow_move_constructible_v<I>)
+    {
+        return { first, last };
+    }
+
+    template<std::sentinel_for<I> S>
+        requires (not std::same_as<I, S>)
+    [[nodiscard]] static constexpr submatch<I> make_submatch(I first, S last)
+    {
+        return { first, std::ranges::next(first, last) };
+    }
+};
+
+} // namespace srx::detail

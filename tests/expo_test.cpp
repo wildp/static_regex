@@ -7,24 +7,25 @@
 #include "headers/tree_matcher.hpp"
 
 
-namespace
+namespace {
+
+constexpr srx::detail::parser_flags expo_test_flags{ .enable_possessive = true, .enable_backrefs = true, .enable_branchreset = true };
+
+template<typename CharT>
+consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
 {
-    constexpr srx::detail::parser_flags expo_test_flags{ .enable_possessive = true, .enable_backrefs = true, .enable_branchreset = true };
+    const srx::testing::tree_matcher ast{ pattern, expo_test_flags };
+    const auto match_result = ast.match(str);
 
-    template<typename CharT>
-    consteval bool match(const CharT* pattern, const CharT* str, const std::vector<std::size_t>& captures = {})
-    {
-        const srx::testing::tree_matcher ast{ pattern, expo_test_flags };
-        const auto match_result = ast.match(str);
-
-        if (captures.empty())
-            return match_result.has_value();
-        else if (match_result.has_value())
-            return std::ranges::equal(*match_result | std::views::drop(2), captures);
-        else
-            return false;
-    }
+    if (captures.empty())
+        return match_result.has_value();
+    else if (match_result.has_value())
+        return std::ranges::equal(*match_result | std::views::drop(2), captures);
+    else
+        return false;
 }
+
+} // namespace
 
 using srx::detail::no_tag;
 
