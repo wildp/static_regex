@@ -544,10 +544,10 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == rep.max)
+            requires (rep.reps.min == rep.reps.max)
         {
             using next_sequence_t = [: [] consteval {
-                std::vector vec(rep.min, std::meta::reflect_constant(rep.idx));
+                std::vector vec(rep.reps.min, std::meta::reflect_constant(rep.idx));
                 return substitute(^^std::index_sequence, vec);
             }() :];
 
@@ -564,7 +564,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::greedy)
+            requires (rep.reps.min == 0 and rep.reps.max < 0 and rep.mode == repeater_mode::greedy)
         {
             if (auto saved_it = it; state<Fwd, rep.idx, Expr, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -576,7 +576,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::lazy)
+            requires (rep.reps.min == 0 and rep.reps.max < 0 and rep.mode == repeater_mode::lazy)
         {
             if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -588,7 +588,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::possessive)
+            requires (rep.reps.min == 0 and rep.reps.max < 0 and rep.mode == repeater_mode::possessive)
         {
             while (true)
             {
@@ -604,7 +604,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::greedy)
+            requires (rep.reps.min == 0 and rep.reps.max == 1 and rep.mode == repeater_mode::greedy)
         {
             if (auto saved_it = it; state<Fwd, rep.idx, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -616,7 +616,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::lazy)
+            requires (rep.reps.min == 0 and rep.reps.max == 1 and rep.mode == repeater_mode::lazy)
         {
             if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -628,7 +628,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::possessive)
+            requires (rep.reps.min == 0 and rep.reps.max == 1 and rep.mode == repeater_mode::possessive)
         {
             if (auto saved_it = it; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
                 it = saved_it;

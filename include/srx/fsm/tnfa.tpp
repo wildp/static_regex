@@ -284,8 +284,8 @@ constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast)
                 throw tnfa_error("Possessive repetition is unimplemented");
 
             /* reminder: max < min denotes infinity */
-            int max{ (rep.max < rep.min) ? rep.min - 1 : rep.max };
-            int min{ rep.min };
+            int max{ (rep.reps.max < rep.reps.min) ? rep.reps.min - 1 : rep.reps.max };
+            int min{ rep.reps.min };
             const bool lazy{ rep.mode == repeater_mode::lazy };
 
             while (true)

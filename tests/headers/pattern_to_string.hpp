@@ -183,9 +183,10 @@ template<typename CharT>
         case index_in_variant(^^typename ast_t::repeat, ^^typename ast_t::type):
         {
             const auto& rep = std::get<typename ast_t::repeat>(entry);
+            const auto& [min, max] = rep.reps;
             if (reps == 0)
             {
-                if (not (rep.min == 0 and rep.max == 0))
+                if (not (min == 0 and max == 0))
                 {
                     cont.emplace_back(pos, reps + 1);
                     cont.emplace_back(rep.idx);
@@ -193,26 +194,26 @@ template<typename CharT>
             }
             else
             {
-                if (rep.min == 0 and rep.max < 0)
+                if (min == 0 and max < 0)
                 {
                     result += '*';
                 }
-                else if (rep.min == 1 and rep.max < 1)
+                else if (min == 1 and max < 1)
                 {
                     result += '+';
                 }
-                else if ((rep.min == 0 and rep.max == 1))
+                else if (min == 0 and max == 1)
                 {
                     result += '?';
                 }
                 else
                 {
                     result += '{';
-                    append_int(result, rep.min);
-                    if (rep.max != rep.min)
+                    append_int(result, min);
+                    if (max != min)
                         result += ',';
-                    if (rep.max > rep.min)
-                        append_int(result, rep.max);
+                    if (max > min)
+                        append_int(result, max);
                     result += '}';
                 }
 

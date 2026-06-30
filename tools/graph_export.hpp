@@ -130,6 +130,7 @@ constexpr void graph_export(T target, const detail::expr_tree<CharT>& ast)
                 return std::format("\\{}", bref.number);
             },
             [&](const ast_t::repeat& rep) -> std::string {
+                const auto& [min, max] = rep.reps;
                 to_visit.emplace_back(rep.idx);
                 edges.emplace_back(current_idx, rep.idx);
 
@@ -137,18 +138,18 @@ constexpr void graph_export(T target, const detail::expr_tree<CharT>& ast)
                 if (rep.mode == detail::repeater_mode::lazy) qualifier = "?";
                 else if (rep.mode == detail::repeater_mode::possessive) qualifier = "+";
 
-                if (rep.min == 0 and rep.max < 0)
+                if (min == 0 and max < 0)
                     return std::format("*{}", qualifier);
-                else if (rep.min == 1 and rep.max < 1)
+                else if (min == 1 and max < 1)
                     return std::format("+{}", qualifier);
-                else if ((rep.min == 0 and rep.max == 1))
+                else if (min == 0 and max == 1)
                     return std::format("?{}", qualifier);
-                else if (rep.max == rep.min)
-                    return std::format("{{{}}}{}", rep.min, qualifier);
-                else if (rep.max < rep.min)
-                    return std::format("{{{},}}{}", rep.min, qualifier);
+                else if (max == min)
+                    return std::format("{{{}}}{}", min, qualifier);
+                else if (max < min)
+                    return std::format("{{{},}}{}", min, qualifier);
                 else
-                    return std::format("{{{},{}}}{}", rep.min, rep.max, qualifier);
+                    return std::format("{{{},{}}}{}", min, max, qualifier);
             },
             [&](const ast_t::char_str& lit) -> std::string {
                 return std::format("{:?}", lit.data);

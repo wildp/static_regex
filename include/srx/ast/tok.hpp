@@ -62,11 +62,15 @@ namespace tok
     {
         int min;
         int max; /* use max=min for {min} or max<min for {min,} */
+
+        friend constexpr bool operator==(const repeat_n_m& x, const repeat_n_m& y) = default;
     };
 
     struct assertion
     {
         assert_type type;
+
+        friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
     };
 
     template<typename CharT>
@@ -79,6 +83,8 @@ namespace tok
 
         template<typename... Args>
         constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
+
+        friend constexpr bool operator==(const char_class& x, const char_class& y) = default;
     };
 
     template<typename CharT>
@@ -118,11 +124,15 @@ namespace tok
                 return data.front();
             return {};
         }
+
+        friend constexpr bool operator==(const char_str& x, const char_str& y) = default;
     };
 
     struct backref
     {
         unsigned int number;
+
+        friend constexpr bool operator==(const backref& x, const backref& y) = default;
     };
 }
 
@@ -587,6 +597,11 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
     else if (rep.max > counted_repetition_limit)
     {
         throw pattern_error("Finite upper bound of counted repetitions exceeds limit");
+    }
+    else if (rep.max < 0)
+    {
+        /* normalise for merging purposes */
+        rep.max = rep.min - 1;
     }
 
     return rep;

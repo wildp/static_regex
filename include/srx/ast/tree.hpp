@@ -79,8 +79,7 @@ struct tag
 struct repeat
 {
     std::size_t idx;
-    int min;
-    int max;            /* use max=min for {min} or max<min for {min,} */
+    tok::repeat_n_m reps;
     repeater_mode mode; /* default = greedy */
 };
 
@@ -139,6 +138,7 @@ private:
     static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^type) };
 
     [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
+    [[nodiscard]] constexpr std::vector<std::size_t> subtrees_equivalent(std::size_t x, std::size_t y) const;
 
     std::size_t root_idx_{ 0 };
     std::vector<type> expressions_;

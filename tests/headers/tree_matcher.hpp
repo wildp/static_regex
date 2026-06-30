@@ -227,20 +227,22 @@ template<std::random_access_iterator I>
                 [&](const typename tree_matcher::repeat& rep) -> bool {
                     using detail::repeater_mode;
 
-                    if (rep.min == rep.max)
+                    const auto& [min, max] = rep.reps;
+
+                    if (min == max)
                     {
                         /* fixed number of repetitions - don't insert repeated */
-                        s.cont.insert(s.cont.end(), /* count = */ rep.min, /* value = */ rep.idx);
+                        s.cont.insert(s.cont.end(), /* count = */ min, /* value = */ rep.idx);
                         return true;
                     }
 
                     const auto rep_count = raw_data.reps();
 
-                    if (std::cmp_less(rep_count, rep.min))
+                    if (std::cmp_less(rep_count, min))
                     {
                         /* perform fixed number of repetitions and then revisit  */
-                        s.cont.emplace_back(pos, rep.min);
-                        s.cont.insert(s.cont.end(), /* count = */ rep.min - rep_count, /* value = */ rep.idx);
+                        s.cont.emplace_back(pos, min);
+                        s.cont.insert(s.cont.end(), /* count = */ min - rep_count, /* value = */ rep.idx);
                         return true;
                     }
 
@@ -249,7 +251,7 @@ template<std::random_access_iterator I>
                         /* try to match repeated pattern first */
                         state_t s_copy{ s };
 
-                        if (rep.max < rep.min or rep_count < rep.max - 1)
+                        if (max < min or rep_count < max - 1)
                             s_copy.cont.emplace_back(pos, rep_count, 1);
                         s_copy.cont.push_back(rep.idx);
 
@@ -270,14 +272,14 @@ template<std::random_access_iterator I>
                             return true;
                         }
 
-                        if (rep.max < rep.min or rep_count < rep.max - 1)
+                        if (max < min or rep_count < max - 1)
                             s.cont.emplace_back(pos, rep_count, 1);
                         s.cont.push_back(rep.idx);
                     }
                     else /* if (rep.mode == repeater_mode::possessive) */
                     {
                         /* check rep in a copy of state */
-                        if (rep.max < rep.min)
+                        if (max < min)
                         {
                             while (true)
                             {
@@ -290,7 +292,7 @@ template<std::random_access_iterator I>
                         }
                         else
                         {
-                            for (auto count = rep_count; count < rep.max; ++count)
+                            for (auto count = rep_count; count < max; ++count)
                             {
                                 state_t s_tmp{ s.it, s.tags, rep.idx };
                                 if (not rec(s_tmp))

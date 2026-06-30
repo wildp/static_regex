@@ -165,6 +165,36 @@ static_assert(parse("a{1,}?", "a+?"));
 static_assert(parse("a{0,1}?", "a??"));
 static_assert(test("a{1,512}"));
 
+/* repeat merging optimisation */
+static_assert(parse("a{2}a{2}", "a{4}"));
+static_assert(parse("a{1,}a{2,}", "a{3,}"));
+static_assert(parse("a{2,}a{0,}", "a{2,}"));
+static_assert(parse("a{0,1}a{0,1}", "a{0,2}"));
+static_assert(parse("a{0,2}a{2}", "a{2,4}"));
+static_assert(parse("a{2,}a{0,2}", "a{2,}"));
+static_assert(parse("a{2}?a{0,2}?", "a{2,4}?"));
+static_assert(parse("a{2}a{0,2}?", "a{2,4}?"));
+static_assert(parse("a*a*", "a*"));
+static_assert(parse("a*a*a*a*", "a*"));
+static_assert(parse("a+a*", "a+"));
+static_assert(parse("a+a+", "a{2,}"));
+static_assert(parse("a+a+a+a+", "a{4,}"));
+static_assert(parse("a?a?", "a{0,2}"));
+static_assert(parse("a?a?a?a?", "a{0,4}"));
+static_assert(parse("a{0,2}a?a?", "a{0,4}"));
+static_assert(parse("a{0,2}a{2}a{0,2}", "a{2,6}"));
+static_assert(parse("a{2}b{2}", "a{2}b{2}"));
+static_assert(parse("(a){2}(a){2}", "(a){2}(a){2}"));
+static_assert(parse("(?:a){2}(?:a){2}", "a{4}"));
+static_assert(parse("(?:abc){2}(?:abc){2}", "abc{4}"));
+static_assert(parse("(?:a){2}(?:a){2}(?:a){2}", "a{6}"));
+static_assert(parse("(?:a|b){2}(?:a|b){2}", "a|b{4}")); /* note: the pretty printer produces unparenthesised regexes; for these cases what is printed is incorrect */
+static_assert(parse("(?:a?b+c){2}(?:a?b+c){2}", "a?b+c{4}"));
+static_assert(parse("(?:b{0,}c){2}(?:b*c){2,3}", "b*c{4,5}"));
+static_assert(parse("(?:b{1,}c){2}(?:b+c){2,3}", "b+c{4,5}"));
+static_assert(parse("(?:b{0,1}c){2}(?:b?c){2,3}", "b?c{4,5}"));
+static_assert(parse("(?:a{2,4}?){2}(?:a{2,4}?){2}", "a{2,4}?{4}"));
+
 /* escape sequences */
 static_assert(parse(R"(\33)", "\33"));
 static_assert(parse(R"(\033)", "\033"));

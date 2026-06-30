@@ -90,6 +90,19 @@ private:
         }
     }
 
+    constexpr bool subtrees_equivalent(std::size_t lhs_idx, std::size_t& rhs_idx)
+    {
+        const auto result = ref_.get().subtrees_equivalent(lhs_idx, rhs_idx);
+
+        if (result.empty())
+            return false;
+
+        /* if subtrees are equivalent, rhs_idx is no longer valid */
+        rhs_idx = lhs_idx;
+        overwritable_.append_range(result);
+        return true;
+    }
+
     std::reference_wrapper<ast_t> ref_;
     std::vector<std::size_t> overwritable_;
     lexer<char_type> lex_;
@@ -917,6 +930,32 @@ constexpr std::size_t ll1<CharT>::sa_make_alt(const std::size_t lhs_idx, const s
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, const std::size_t rhs_idx)
 {
+    static constexpr auto merge_char_str = [](type& lhs, type& rhs){
+        auto& target = get<char_str>(rhs).data;
+        auto& lhs_str = get<char_str>(lhs).data;
+        lhs_str.append(target);
+        std::ranges::swap(lhs_str, target);
+    };
+
+    auto merge_repeats = [this](type& lhs, type& rhs){
+        auto& target = get<repeat>(rhs);
+        auto& lhs_rep = get<repeat>(lhs);
+
+        if (lhs_rep.mode != target.mode and (lhs_rep.reps.min != lhs_rep.reps.max or target.reps.min == target.reps.max))
+            return false;
+
+        if (not subtrees_equivalent(lhs_rep.idx, target.idx))
+            return false;
+
+        if (target.reps.min == target.reps.max)
+            target.mode = lhs_rep.mode;
+
+        const bool unbounded_max{ target.reps.max < target.reps.min or lhs_rep.reps.max < lhs_rep.reps.min };
+        target.reps.min += lhs_rep.reps.min;
+        target.reps.max = unbounded_max ? (target.reps.min - 1) : (target.reps.max + lhs_rep.reps.max);
+        return true;
+    };
+
     if (type& ast{ get_expr(lhs_idx) }; holds_alternative<concat>(ast))
     {
         /* append rhs into existing concat */
@@ -945,7 +984,6 @@ constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, cons
     {
         /* insert lhs into existing concat */
         auto& ast_concat = get<concat>(ast);
-        bool merged{ false };
 
         if (not ast_concat.idxs.empty())
         {
@@ -955,21 +993,24 @@ constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, cons
             if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
             {
                 /* merge lhs string with first entry of rhs (also a string) */
-                auto& target = get<char_str>(rhs).data;
-                auto& lhs_str = get<char_str>(lhs).data;
-                lhs_str.append(target);
-                std::ranges::swap(lhs_str, target);
+                merge_char_str(lhs, rhs);
                 overwritable_.push_back(lhs_idx);
-                merged = true;
+                return rhs_idx;
+
+            }
+            else if (holds_alternative<repeat>(rhs) and holds_alternative<repeat>(lhs))
+            {
+                /* lhs and rhs are both repeats: attempt to merge if contents are identical */
+                if (merge_repeats(lhs, rhs))
+                {
+                    overwritable_.push_back(lhs_idx);
+                    return rhs_idx;
+                }
             }
         }
 
-        if (not merged)
-        {
-            /* insert lhs into existing concat */
-            ast_concat.idxs.insert(ast_concat.idxs.begin(), lhs_idx);
-        }
-
+        /* insert lhs into existing concat */
+        ast_concat.idxs.insert(ast_concat.idxs.begin(), lhs_idx);
         return rhs_idx;
     }
     else
@@ -980,18 +1021,22 @@ constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, cons
         if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
         {
             /* lhs and rhs are both strings: merge strings into one instead of creating concat  */
-            auto& target = get<char_str>(rhs).data;
-            auto& lhs_str = get<char_str>(lhs).data;
-            lhs_str.append(target);
-            std::ranges::swap(lhs_str, target);
+            merge_char_str(lhs, rhs);
             overwritable_.push_back(lhs_idx);
             return rhs_idx;
         }
-        else
+        else if (holds_alternative<repeat>(rhs) and holds_alternative<repeat>(lhs))
         {
-            /* create new concat */
-            return new_expression<concat>(std::vector{ lhs_idx, rhs_idx });
+            /* lhs and rhs are both repeats: attempt to merge if contents are identical */
+            if (merge_repeats(lhs, rhs))
+            {
+                overwritable_.push_back(lhs_idx);
+                return rhs_idx;
+            }
         }
+
+        /* create new concat */
+        return new_expression<concat>(std::vector{ lhs_idx, rhs_idx });
     }
 }
 
@@ -1013,25 +1058,25 @@ constexpr std::size_t ll1<CharT>::sa_make_bref(const backref bref)
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_star(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, 0, -1, mode);
+    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 0, .max = -1 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_plus(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, 1, 0, mode);
+    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 1, .max = 0 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_quest(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, 0, 1, mode);
+    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 0, .max = 1 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_repeat(const std::size_t child_idx, const tok::repeat_n_m rep, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, rep.min, rep.max, mode);
+    return new_expression<repeat>(child_idx, rep, mode);
 }
 
 template<typename CharT>

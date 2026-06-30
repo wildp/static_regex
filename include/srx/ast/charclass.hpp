@@ -71,6 +71,8 @@ public:
 
     static consteval bool is_narrow() noexcept { return IsNarrow; }
 
+    friend constexpr bool operator==(const char_class_impl& x, const char_class_impl& y) = default;
+
 private:
     underlying_type data_;
 };

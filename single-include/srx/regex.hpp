@@ -2852,6 +2852,8 @@ public:
 
     static consteval bool is_narrow() noexcept { return IsNarrow; }
 
+    friend constexpr bool operator==(const char_class_impl& x, const char_class_impl& y) = default;
+
 private:
     underlying_type data_;
 };
@@ -2982,11 +2984,15 @@ namespace tok
     {
         int min;
         int max; /* use max=min for {min} or max<min for {min,} */
+
+        friend constexpr bool operator==(const repeat_n_m& x, const repeat_n_m& y) = default;
     };
 
     struct assertion
     {
         assert_type type;
+
+        friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
     };
 
     template<typename CharT>
@@ -2999,6 +3005,8 @@ namespace tok
 
         template<typename... Args>
         constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
+
+        friend constexpr bool operator==(const char_class& x, const char_class& y) = default;
     };
 
     template<typename CharT>
@@ -3036,11 +3044,15 @@ namespace tok
                 return data.front();
             return {};
         }
+
+        friend constexpr bool operator==(const char_str& x, const char_str& y) = default;
     };
 
     struct backref
     {
         unsigned int number;
+
+        friend constexpr bool operator==(const backref& x, const backref& y) = default;
     };
 }
 
@@ -3497,6 +3509,11 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
     else if (rep.max > counted_repetition_limit)
     {
         throw pattern_error("Finite upper bound of counted repetitions exceeds limit");
+    }
+    else if (rep.max < 0)
+    {
+        /* normalise for merging purposes */
+        rep.max = rep.min - 1;
     }
 
     return rep;
@@ -4115,8 +4132,7 @@ struct tag
 struct repeat
 {
     std::size_t idx;
-    int min;
-    int max;            /* use max=min for {min} or max<min for {min,} */
+    tok::repeat_n_m reps;
     repeater_mode mode; /* default = greedy */
 };
 
@@ -4174,6 +4190,7 @@ private:
     static constexpr std::size_t ast_index{ index_in_variant(^^T, ^^type) };
 
     [[nodiscard]] constexpr std::vector<std::optional<std::size_t>> make_const_len_vec();
+    [[nodiscard]] constexpr std::vector<std::size_t> subtrees_equivalent(std::size_t x, std::size_t y) const;
 
     std::size_t root_idx_{ 0 };
     std::vector<type> expressions_;
@@ -4288,19 +4305,20 @@ constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length()
 
             if (pos == 1)
             {
-                const auto& [min, max] = lengths.at(rep.idx);
+                const auto& [lmin, lmax] = lengths.at(rep.idx);
+                const auto& [rmin, rmax] = rep.reps;
 
-                if (rep.min > rep.max) /* unbounded repetition */
+                if (rmin > rmax) /* unbounded repetition */
 #if __cpp_lib_saturation_arithmetic >= 202603L
-                    lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(min, rep.min), no_upper_bound };
+                    lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(lmin, rmin), no_upper_bound };
 #else
-                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(min, rep.min), no_upper_bound };
+                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(lmin, rmin), no_upper_bound };
 #endif
                 else
 #if __cpp_lib_saturation_arithmetic >= 202603L
-                    lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(min, rep.min), std::saturating_mul<min_max_t::second_type>(max, rep.max) };
+                    lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(lmin, rmin), std::saturating_mul<min_max_t::second_type>(lmax, rmax) };
 #else
-                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(min, rep.min), std::mul_sat<min_max_t::second_type>(max, rep.max) };
+                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(lmin, rmin), std::mul_sat<min_max_t::second_type>(lmax, rmax) };
 #endif
 
                 stack.pop_back();
@@ -4538,8 +4556,8 @@ constexpr std::vector<std::optional<std::size_t>> expr_tree<CharT>::make_const_l
 
             if (pos == 1)
             {
-                if (rep.min == rep.max and const_len.at(rep.idx))
-                    const_len.at(idx) = *const_len.at(rep.idx) * rep.min;
+                if (rep.reps.min == rep.reps.max and const_len.at(rep.idx))
+                    const_len.at(idx) = *const_len.at(rep.idx) * rep.reps.min;
 
                 stack.pop_back();
             }
@@ -4642,13 +4660,15 @@ constexpr void expr_tree<CharT>::optimise_tags()
 template<typename CharT>
 constexpr void expr_tree<CharT>::insert_search_prefix()
 {
+    using tok::repeat_n_m;
+
     /* make true wildcard */
     const std::size_t wildcard_idx{ expressions_.size() };
     expressions_.emplace_back(std::in_place_type<char_class>, char_class{ negated_cc_tag });
 
     /* make lazy repeater of wildcard */
     const std::size_t repeater_idx{ expressions_.size() };
-    expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, 0, -1, repeater_mode::lazy);
+    expressions_.emplace_back(std::in_place_type<repeat>, wildcard_idx, repeat_n_m{ .min = 0, .max = -1 }, repeater_mode::lazy);
 
     /* conditionally make start tag */
     const std::size_t start_tag_idx{ expressions_.size() };
@@ -4688,63 +4708,66 @@ constexpr void expr_tree<CharT>::insert_search_prefix()
 template<typename CharT>
 constexpr void expr_tree<CharT>::simplify_counted_repeat()
 {
+    using tok::repeat_n_m;
+
     for (std::size_t i{ 0 }, i_end{ expressions_.size() }; i < i_end; ++i)
     {
         if (not holds_alternative<repeat>(expressions_[i]))
             continue;
 
         repeat rep{ get<repeat>(expressions_[i]) };
+        auto& [min, max] = rep.reps;
 
         /* here we simplify `a{n,m}` into 3 primitives: `a{n}`, `a*`, and `a?` */
 
-        if (rep.min == 0)
+        if (min == 0)
         {
-            if (rep.max > 1)
+            if (max > 1)
             {
                 std::size_t cat{ rep.idx };
 
-                for (auto i = rep.min + 1; i < rep.max; ++i)
+                for (auto i = min + 1; i < max; ++i)
                 {
                     const std::size_t quest{ expressions_.size() };
-                    expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
+                    expressions_.emplace_back(std::in_place_type<repeat>, cat, repeat_n_m{ .min = 0, .max = 1 }, rep.mode);
 
                     cat = expressions_.size();
                     expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
                 }
 
-                expressions_[i].template emplace<repeat>(cat, 0, 1, rep.mode);
+                expressions_[i].template emplace<repeat>(cat, repeat_n_m{ .min = 0, .max = 1 }, rep.mode);
             }
         }
-        else if (rep.min < rep.max)
+        else if (min < max)
         {
             /* simplify `a{n,m}`, where 0 < n < m */
 
             const std::size_t fixed_rep{ expressions_.size() };
-            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
+            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, repeat_n_m{ .min = min, .max = min }, rep.mode);
 
             std::size_t quest{ expressions_.size() };
-            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, 1, rep.mode);
+            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, repeat_n_m{ .min = 0, .max = 1 }, rep.mode);
 
-            for (auto i = rep.min + 1; i < rep.max; ++i)
+            for (auto i = min + 1; i < max; ++i)
             {
                 const std::size_t cat{ expressions_.size() };
                 expressions_.emplace_back(std::in_place_type<concat>, std::vector{ rep.idx, quest });
 
                 quest = expressions_.size();
-                expressions_.emplace_back(std::in_place_type<repeat>, cat, 0, 1, rep.mode);
+                expressions_.emplace_back(std::in_place_type<repeat>, cat, repeat_n_m{ .min = 0, .max = 1 }, rep.mode);
             }
 
             expressions_[i].template emplace<concat>(std::vector{ fixed_rep, quest });
         }
-        else if (rep.min > rep.max)
+        else if (min > max)
         {
             /* simplify `a{n,}` and `a+`, where n > 0 */
 
             const std::size_t fixed_rep{ expressions_.size() };
-            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, rep.min, rep.min, rep.mode);
+            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, repeat_n_m{ .min = min, .max = min }, rep.mode);
 
             const std::size_t star{ expressions_.size() };
-            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, 0, -1, rep.mode);
+            expressions_.emplace_back(std::in_place_type<repeat>, rep.idx, repeat_n_m{ .min = 0, .max = -1 }, rep.mode);
 
             expressions_[i].template emplace<concat>(std::vector{ fixed_rep, star });
         }
@@ -4761,14 +4784,14 @@ constexpr void expr_tree<CharT>::optimise_exact_repeat()
 
         repeat rep{ get<repeat>(expressions_[i]) };
 
-        if (rep.min != rep.max or not holds_alternative<char_str>(expressions_.at(rep.idx)))
+        if (rep.reps.min != rep.reps.max or not holds_alternative<char_str>(expressions_.at(rep.idx)))
             continue;
 
         auto& cs = expressions_[i].template emplace<char_str>();
 
         const auto& old = get<char_str>(expressions_[rep.idx]);
-        cs.data.reserve(rep.min * old.data.size());
-        for (int j{ 0 }; j < rep.min; ++j)
+        cs.data.reserve(rep.reps.min * old.data.size());
+        for (int j{ 0 }; j < rep.reps.min; ++j)
             cs.data += old.data;
     }
 }
@@ -4870,6 +4893,122 @@ constexpr auto expr_tree<CharT>::tag_to_register()
      * only lhs tag for capturing groups which contain a
      * backreference to themselves need to be staged                      */
     return capture_info_.get_staged_tags();
+}
+
+/* helper for parser */
+
+template<typename CharT>
+constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::size_t x, std::size_t y) const
+{
+    /* always same size */
+    std::vector lhs{ x };
+    std::vector rhs{ y };
+
+    std::vector<std::ptrdiff_t> overlap_idxs{};
+
+    for (std::size_t i{ 0 }; i < lhs.size(); ++i)
+    {
+        const auto index1 = lhs.at(i);
+        const auto index2 = rhs.at(i);
+
+        if (index1 == index2)
+        {
+            overlap_idxs.emplace_back(i);
+            continue;
+        }
+
+        const auto& ref1 = expressions_.at(index1);
+        const auto& ref2 = expressions_.at(index2);
+
+        if (ref1.index() != ref2.index())
+            return {};
+
+        switch (ref1.index())
+        {
+        case ast_index<assertion>:
+            if (get<assertion>(ref1) != get<assertion>(ref2))
+                return {};
+            break;
+
+        case ast_index<tag>:
+            if (get<tag>(ref1).number != get<tag>(ref2).number)
+                return {};
+            break;
+
+        case ast_index<char_str>:
+            if (get<char_str>(ref1) != get<char_str>(ref2))
+                return {};
+            break;
+
+        case ast_index<char_class>:
+            if (get<char_class>(ref1) != get<char_class>(ref2))
+                return {};
+            break;
+
+        case ast_index<backref>:
+         if (get<backref>(ref1) != get<backref>(ref2))
+                return {};
+            break;
+
+        case ast_index<concat>:
+        {
+            const auto& cat1 = get<concat>(ref1);
+            const auto& cat2 = get<concat>(ref2);
+
+            if (cat1.idxs.size() != cat2.idxs.size())
+                return {};
+
+            lhs.append_range(cat1.idxs);
+            rhs.append_range(cat2.idxs);
+            break;
+        }
+
+        case ast_index<alt>:
+        {
+            const auto& alt1 = get<alt>(ref1);
+            const auto& alt2 = get<alt>(ref2);
+
+            if (alt1.idxs.size() != alt2.idxs.size())
+                return {};
+
+            lhs.append_range(alt1.idxs);
+            rhs.append_range(alt2.idxs);
+            break;
+        }
+
+        case ast_index<repeat>:
+        {
+            const auto& rep1 = get<repeat>(ref1);
+            const auto& rep2 = get<repeat>(ref2);
+
+            if (rep1.reps != rep2.reps or rep1.mode != rep2.mode)
+                return {};
+
+            lhs.emplace_back(rep1.idx);
+            rhs.emplace_back(rep2.idx);
+            break;
+        }
+
+        default:
+            throw tree_error("Invalid tree");
+        }
+    }
+
+    if (overlap_idxs.empty())
+        return rhs;
+
+    std::vector<std::size_t> result;
+    std::ptrdiff_t pos{ 0 };
+    overlap_idxs.emplace_back(rhs.size());
+
+    for (const auto skipped_idx : overlap_idxs)
+    {
+        /* assume overlap_idxs is sorted and unique */
+        result.insert(result.end(), rhs.cbegin() + pos, rhs.cbegin() + skipped_idx);
+        pos = skipped_idx + 1;
+    }
+
+    return result;
 }
 
 }
@@ -5147,6 +5286,19 @@ private:
             exprs.at(idx) = T{ std::forward<Args>(args)... };
             return idx;
         }
+    }
+
+    constexpr bool subtrees_equivalent(std::size_t lhs_idx, std::size_t& rhs_idx)
+    {
+        const auto result = ref_.get().subtrees_equivalent(lhs_idx, rhs_idx);
+
+        if (result.empty())
+            return false;
+
+        /* if subtrees are equivalent, rhs_idx is no longer valid */
+        rhs_idx = lhs_idx;
+        overwritable_.append_range(result);
+        return true;
     }
 
     std::reference_wrapper<ast_t> ref_;
@@ -5972,6 +6124,32 @@ constexpr std::size_t ll1<CharT>::sa_make_alt(const std::size_t lhs_idx, const s
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, const std::size_t rhs_idx)
 {
+    static constexpr auto merge_char_str = [](type& lhs, type& rhs){
+        auto& target = get<char_str>(rhs).data;
+        auto& lhs_str = get<char_str>(lhs).data;
+        lhs_str.append(target);
+        std::ranges::swap(lhs_str, target);
+    };
+
+    auto merge_repeats = [this](type& lhs, type& rhs){
+        auto& target = get<repeat>(rhs);
+        auto& lhs_rep = get<repeat>(lhs);
+
+        if (lhs_rep.mode != target.mode and (lhs_rep.reps.min != lhs_rep.reps.max or target.reps.min == target.reps.max))
+            return false;
+
+        if (not subtrees_equivalent(lhs_rep.idx, target.idx))
+            return false;
+
+        if (target.reps.min == target.reps.max)
+            target.mode = lhs_rep.mode;
+
+        const bool unbounded_max{ target.reps.max < target.reps.min or lhs_rep.reps.max < lhs_rep.reps.min };
+        target.reps.min += lhs_rep.reps.min;
+        target.reps.max = unbounded_max ? (target.reps.min - 1) : (target.reps.max + lhs_rep.reps.max);
+        return true;
+    };
+
     if (type& ast{ get_expr(lhs_idx) }; holds_alternative<concat>(ast))
     {
         /* append rhs into existing concat */
@@ -6000,7 +6178,6 @@ constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, cons
     {
         /* insert lhs into existing concat */
         auto& ast_concat = get<concat>(ast);
-        bool merged{ false };
 
         if (not ast_concat.idxs.empty())
         {
@@ -6010,21 +6187,24 @@ constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, cons
             if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
             {
                 /* merge lhs string with first entry of rhs (also a string) */
-                auto& target = get<char_str>(rhs).data;
-                auto& lhs_str = get<char_str>(lhs).data;
-                lhs_str.append(target);
-                std::ranges::swap(lhs_str, target);
+                merge_char_str(lhs, rhs);
                 overwritable_.push_back(lhs_idx);
-                merged = true;
+                return rhs_idx;
+
+            }
+            else if (holds_alternative<repeat>(rhs) and holds_alternative<repeat>(lhs))
+            {
+                /* lhs and rhs are both repeats: attempt to merge if contents are identical */
+                if (merge_repeats(lhs, rhs))
+                {
+                    overwritable_.push_back(lhs_idx);
+                    return rhs_idx;
+                }
             }
         }
 
-        if (not merged)
-        {
-            /* insert lhs into existing concat */
-            ast_concat.idxs.insert(ast_concat.idxs.begin(), lhs_idx);
-        }
-
+        /* insert lhs into existing concat */
+        ast_concat.idxs.insert(ast_concat.idxs.begin(), lhs_idx);
         return rhs_idx;
     }
     else
@@ -6035,18 +6215,22 @@ constexpr std::size_t ll1<CharT>::sa_make_concat(const std::size_t lhs_idx, cons
         if (holds_alternative<char_str>(rhs) and holds_alternative<char_str>(lhs))
         {
             /* lhs and rhs are both strings: merge strings into one instead of creating concat  */
-            auto& target = get<char_str>(rhs).data;
-            auto& lhs_str = get<char_str>(lhs).data;
-            lhs_str.append(target);
-            std::ranges::swap(lhs_str, target);
+            merge_char_str(lhs, rhs);
             overwritable_.push_back(lhs_idx);
             return rhs_idx;
         }
-        else
+        else if (holds_alternative<repeat>(rhs) and holds_alternative<repeat>(lhs))
         {
-            /* create new concat */
-            return new_expression<concat>(std::vector{ lhs_idx, rhs_idx });
+            /* lhs and rhs are both repeats: attempt to merge if contents are identical */
+            if (merge_repeats(lhs, rhs))
+            {
+                overwritable_.push_back(lhs_idx);
+                return rhs_idx;
+            }
         }
+
+        /* create new concat */
+        return new_expression<concat>(std::vector{ lhs_idx, rhs_idx });
     }
 }
 
@@ -6068,25 +6252,25 @@ constexpr std::size_t ll1<CharT>::sa_make_bref(const backref bref)
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_star(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, 0, -1, mode);
+    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 0, .max = -1 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_plus(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, 1, 0, mode);
+    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 1, .max = 0 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_quest(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, 0, 1, mode);
+    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 0, .max = 1 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_repeat(const std::size_t child_idx, const tok::repeat_n_m rep, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, rep.min, rep.max, mode);
+    return new_expression<repeat>(child_idx, rep, mode);
 }
 
 template<typename CharT>
@@ -6794,8 +6978,8 @@ constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast)
                 throw tnfa_error("Possessive repetition is unimplemented");
 
             /* reminder: max < min denotes infinity */
-            int max{ (rep.max < rep.min) ? rep.min - 1 : rep.max };
-            int min{ rep.min };
+            int max{ (rep.reps.max < rep.reps.min) ? rep.reps.min - 1 : rep.reps.max };
+            int min{ rep.reps.min };
             const bool lazy{ rep.mode == repeater_mode::lazy };
 
             while (true)
@@ -11555,10 +11739,10 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == rep.max)
+            requires (rep.reps.min == rep.reps.max)
         {
             using next_sequence_t = [: [] consteval {
-                std::vector vec(rep.min, std::meta::reflect_constant(rep.idx));
+                std::vector vec(rep.reps.min, std::meta::reflect_constant(rep.idx));
                 return substitute(^^std::index_sequence, vec);
             }() :];
 
@@ -11571,7 +11755,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::greedy)
+            requires (rep.reps.min == 0 and rep.reps.max < 0 and rep.mode == repeater_mode::greedy)
         {
             if (auto saved_it = it; state<Fwd, rep.idx, Expr, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -11583,7 +11767,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::lazy)
+            requires (rep.reps.min == 0 and rep.reps.max < 0 and rep.mode == repeater_mode::lazy)
         {
             if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -11595,7 +11779,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max < 0 and rep.mode == repeater_mode::possessive)
+            requires (rep.reps.min == 0 and rep.reps.max < 0 and rep.mode == repeater_mode::possessive)
         {
             while (true)
             {
@@ -11611,7 +11795,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::greedy)
+            requires (rep.reps.min == 0 and rep.reps.max == 1 and rep.mode == repeater_mode::greedy)
         {
             if (auto saved_it = it; state<Fwd, rep.idx, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -11623,7 +11807,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::lazy)
+            requires (rep.reps.min == 0 and rep.reps.max == 1 and rep.mode == repeater_mode::lazy)
         {
             if (auto saved_it = it; state<Fwd, Cont...>::operator()(res, si, first, last, it))
                 return true;
@@ -11635,7 +11819,7 @@ private:
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
-            requires (rep.min == 0 and rep.max == 1 and rep.mode == repeater_mode::possessive)
+            requires (rep.reps.min == 0 and rep.reps.max == 1 and rep.mode == repeater_mode::possessive)
         {
             if (auto saved_it = it; not state<Fwd, rep.idx>::operator()(res, si, first, last, it))
                 it = saved_it;
