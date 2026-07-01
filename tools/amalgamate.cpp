@@ -32,7 +32,11 @@ public:
     {
         if (data_ == MAP_FAILED)
         {
+#if __cpp_lib_format_path >= 202403L
+            std::println(std::cerr, "error: could not open file {} for reading", p);
+#else
             std::println(std::cerr, "error: could not open file {} for reading", p.string());
+#endif
             std::quick_exit(1);
         }
     }
@@ -60,7 +64,11 @@ public:
         {
             if (not is_directory(dir))
             {
+#if __cpp_lib_format_path >= 202403L
+                std::println(std::cerr, "error: {} is not a directory", dir);
+#else
                 std::println(std::cerr, "error: {} is not a directory", dir.string());
+#endif
                 std::quick_exit(1);
             }
         }
@@ -75,7 +83,11 @@ public:
 
         if (not tmp.is_open())
         {
+#if __cpp_lib_format_path >= 202403L
+            std::println(std::cerr, "error: could not open file {} for writing", tmpfile);
+#else
             std::println(std::cerr, "error: could not open file {} for writing", tmpfile.string());
+#endif
             std::quick_exit(1);
         }
 
@@ -87,11 +99,19 @@ public:
 
         if (not ofs.is_open())
         {
+#if __cpp_lib_format_path >= 202403L
+            std::println(std::cerr, "error: could not open file {} for writing", out);
+#else
             std::println(std::cerr, "error: could not open file {} for writing", out.string());
+#endif
             std::quick_exit(1);
         }
 
+#if __cpp_lib_format_path >= 202506L
+        ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::quoted(in.display_string()) << '\n';
+#else
         ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::quoted(in.string()) << '\n';
+#endif
         insert_copyrights(ofs);
         copy_licence_to(ofs, licence);
         insert_includes(ofs);
@@ -119,7 +139,11 @@ private:
                 return absolute(path);
         }
 
+#if __cpp_lib_format_path >= 202403L
+        std::println(std::cerr, "error: file {} does not exist", next);
+#else
         std::println(std::cerr, "error: file {} does not exist", next.string());
+#endif
         std::quick_exit(1);
     }
 
@@ -177,7 +201,7 @@ private:
             ofs << include << '\n';
     }
 
-    void copy_licence_to(std::ofstream& ofs, const path& file)
+    static void copy_licence_to(std::ofstream& ofs, const path& file)
     {
         mmap_data data{ file };
         const auto input = data.view();
@@ -188,7 +212,7 @@ private:
         ofs << "\n\n";
     }
 
-    void copy_tmpfile_to(std::ofstream& ofs, const path& file)
+    static void copy_tmpfile_to(std::ofstream& ofs, const path& file)
     {
         mmap_data data{ file };
         const auto input = data.view();
@@ -207,9 +231,10 @@ private:
 
 int main(int argc, char* argv[])
 {
+    static constexpr std::size_t expected_arg_count{ 5 };
     std::span args(argv, argc);
 
-    if (args.size() != 5)
+    if (args.size() != expected_arg_count)
     {
         std::println(std::cerr, "usage: amalgamate include_dir input output licence");
         return 1;
