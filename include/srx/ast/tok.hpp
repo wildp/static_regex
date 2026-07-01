@@ -136,6 +136,13 @@ namespace tok
     };
 }
 
+template<typename CharT>
+using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
+                                tok::lparen, tok::rparen, tok::vert,
+                                tok::star, tok::plus, tok::quest, tok::repeat_n_m,
+                                tok::char_str<CharT>, tok::char_class<CharT>,
+                                tok::backref, tok::assertion>;
+
 
 /* lexer class definition */
 
@@ -146,16 +153,13 @@ class lexer
     using it_type = sv_type::const_iterator;
 
 public:
-    using token_t = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
-                                 tok::lparen, tok::rparen, tok::vert,
-                                 tok::star, tok::plus, tok::quest, tok::repeat_n_m,
-                                 tok::char_str<CharT>, tok::char_class<CharT>,
-                                 tok::backref, tok::assertion>;
+    using token_t = token_type<CharT>;
 
     // TODO: rangify API?
 
     constexpr explicit lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}
-    constexpr token_t nexttok();
+    [[nodiscard]] constexpr token_t nexttok();
+    [[nodiscard]] constexpr bool empty() { return it_ == end_; }
 
     friend class parser::ll1<CharT>;
 

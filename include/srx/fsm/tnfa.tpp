@@ -25,13 +25,6 @@
 
 namespace srx::detail {
 
-struct stack_elem
-{
-    tnfa::state_t q0, qf;
-    std::size_t idx;
-};
-
-
 /* graph helper functions */
 
 template<typename CharT>
@@ -49,12 +42,32 @@ constexpr auto tagged_nfa<CharT>::node_copy(const state_t q) -> state_t
     auto& new_n = nodes_.emplace_back();
     const auto& old_n = nodes_.at(q);
 
-    new_n.is_final = old_n.is_final;
-    new_n.is_fallback = old_n.is_fallback;
+    new_n.is_final     = old_n.is_final;
+    new_n.is_fallback  = old_n.is_fallback;
     new_n.final_offset = old_n.final_offset;
-    new_n.continue_at = old_n.continue_at;
+    new_n.continue_at  = old_n.continue_at;
+    new_n.lexer_alt = old_n.lexer_alt;
+
+    if (new_n.is_final)
+        final_nodes_.emplace_back(p);
 
     return p;
+}
+
+template<typename CharT>
+constexpr void tagged_nfa<CharT>::node_copy_to(const state_t q_old, const state_t q_new)
+{
+    auto& new_n = nodes_.at(q_new);
+    const auto& old_n = nodes_.at(q_old);
+
+    if (old_n.is_final and not new_n.is_final)
+        final_nodes_.emplace_back(q_new);
+
+    new_n.is_final     = old_n.is_final;
+    new_n.is_fallback  = old_n.is_fallback;
+    new_n.final_offset = old_n.final_offset;
+    new_n.continue_at  = old_n.continue_at;
+    new_n.lexer_alt = old_n.lexer_alt;
 }
 
 
@@ -140,13 +153,9 @@ constexpr void tagged_nfa<CharT>::make_ntags(state_t q0, const state_t qf, const
 }
 
 template<typename CharT>
-constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast)
+constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast, const tag_vec_t& tag_vec, const tnfa::stack_elem& initial)
 {
-    std::vector<std::vector<int>> tag_vec{};
-    if (tag_count_ > 1) ast.make_tag_vec(tag_vec);
-
-    std::vector<stack_elem> stack;
-    stack.emplace_back(default_start_node, default_final_node, ast.root_idx());
+    std::vector stack{ initial };
 
     while (not stack.empty())
     {
@@ -235,6 +244,8 @@ constexpr void tagged_nfa<CharT>::thompson(const expr_tree<char_type>& ast)
                 }
                 else
                 {
+                    // TODO: rewrite this section?
+
                     /* generate tag-aware nfa */
                     for (std::size_t i{ 0 }, i_end{ alt.idxs.size() }; i < i_end; ++i)
                     {
@@ -554,13 +565,7 @@ constexpr void tagged_nfa<CharT>::remove_dead_and_unreachable_states()
 
     /* determine live states */
 
-    std::vector<state_t> final_nodes{};
-
-    for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
-        if (nodes_[q].is_final)
-            final_nodes.emplace_back(q);
-
-    const auto live_nodes = backwards_epsilon_closure<false>(std::move(final_nodes), tnfa::reachable_predicate{});
+    const auto live_nodes = backwards_epsilon_closure<false>(final_nodes_, tnfa::reachable_predicate{});
 
     /* remove transitions containing dead and unreachable nodes */
 
@@ -687,13 +692,11 @@ constexpr void tagged_nfa<CharT>::rewrite_sof_anchors()
 template<typename CharT>
 constexpr void tagged_nfa<CharT>::rewrite_eof_anchors()
 {
-    /* NOTE: this function must be called before any other function which adds final nodes */
-
     static constexpr auto pred = [](const tnfa::transition<char_type>& tr) static {
         return not holds_alternative<normal_tr>(tr.type) and not holds_alternative<lookahead_1_tr>(tr.type);
     };
 
-    const auto bec = backwards_epsilon_closure<false>({ default_final_node }, pred);
+    const auto bec = backwards_epsilon_closure<false>(final_nodes_, pred);
 
     std::vector<state_t> initial;
     std::vector<tr_index> to_revisit;
@@ -879,14 +882,10 @@ constexpr void tagged_nfa<CharT>::rewrite_sc_lookahead()
 
                 if (not offset_end.has_value())
                 {
-                    /* create new offset end node */
-                    const auto saved_cont = node.continue_at;
-                    offset_end = node_create();
-                    auto& n = nodes_.at(*offset_end);
-                    n.is_final = true;
-                    n.is_fallback = true;
-                    n.final_offset = 1;
-                    n.continue_at = saved_cont;
+                    /* create new offset copy of end node */
+                    const state_t oq{ node_copy(q) };
+                    nodes_[oq].final_offset = 1;
+                    offset_end = oq;
                 }
 
                 make_transition(p, *offset_end, edge);
@@ -966,7 +965,7 @@ constexpr void tagged_nfa<CharT>::rewrite_sc_lookbehind()
         continue_state = cont_info_.front().value;
 
     std::vector<state_t> fallback_states;
-    for (state_t q{ 0 }, q_end{ nodes_.size() }; q < q_end; ++q)
+    for (const state_t q : final_nodes_)
         if (const auto& node = nodes_[q]; node.is_final and node.is_fallback and not node.in_tr.empty())
             fallback_states.emplace_back(q);
 
@@ -1268,13 +1267,8 @@ constexpr void tagged_nfa<CharT>::rewrite_sc_lookbehind()
                 if (it2 == mapped_states.end())
                     continue;
 
-                const auto& old_n = nodes_.at(qf);
-                auto& new_n = nodes_.at(it2->second);
-
-                new_n.is_final = old_n.is_final;
-                new_n.is_fallback = old_n.is_fallback;
-                new_n.final_offset = old_n.final_offset;
-                new_n.continue_at = continue_at;
+                node_copy_to(qf, it2->second);
+                nodes_[it2->second].continue_at = continue_at;
             }
         }
     }
@@ -1511,6 +1505,8 @@ template<typename CharT>
 constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags)
     : capture_info_{ ast.get_capture_info() }, tag_count_{ ast.tag_count() }, flags_{ flags }
 {
+    using tnfa::stack_elem;
+
     auto& dfn = nodes_.at(default_final_node);
     dfn.is_final = true;
     dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
@@ -1518,7 +1514,77 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
     if (flags_.is_iterator)
         cont_info_.emplace_back(default_start_node, ~charset_type{});
 
-    thompson(ast);
+    std::vector<std::vector<int>> tag_vec{};
+    if (tag_count_ > 1)
+        ast.make_tag_vec(tag_vec);
+
+    if (not ast.is_lexer_mode())
+    {
+        thompson(ast, tag_vec, stack_elem{ .q0 = default_start_node, .qf = default_final_node, .idx = ast.root_idx() });
+        return;
+    }
+
+
+    /* lexer mode implementation */
+
+    const std::size_t root_idx{ ast.root_idx() };
+    const auto& root = std::get<typename ast_t::alt>(ast.get_expr(root_idx));
+    const std::size_t branch_count{ root.idxs.size() };
+
+    if (branch_count > 1)
+    {
+        const tnfa::node dfn_copy{ dfn };
+        std::ranges::fill_n(std::back_inserter(nodes_), branch_count - 1, dfn_copy);
+        std::ranges::copy(std::views::iota(1uz, branch_count), std::back_inserter(final_nodes_));
+        std::uint_least32_t i{ 0 };
+        for (auto& new_final_node : nodes_ | std::views::drop(2))
+            new_final_node.lexer_alt = ++i;
+    }
+
+    for (std::size_t i{ 0 }; i < branch_count; ++i)
+    {
+        state_t q0{ node_create() };
+        state_t qf{ default_final_node + i };
+        make_epsilon(default_start_node, q0, i);
+
+        /* generate tag-aware nfa if necessary */
+        if (tag_vec.empty() or tag_vec.at(root_idx).empty())
+        {
+            /* insert ntags beforehand */
+            std::vector<int> ntags_before;
+            for (std::size_t j{ 0 }; j < i; ++j)
+                std::ranges::copy(tag_vec.at(root.idxs[j]), std::back_inserter(ntags_before));
+
+            std::ranges::sort(ntags_before);
+            auto [_, before_last] = std::ranges::unique(ntags_before);
+            ntags_before.erase(before_last, ntags_before.end());
+
+            if (not ntags_before.empty())
+            {
+                const state_t q1{ node_create() };
+                make_ntags(q0, q1, ntags_before);
+                q0 = q1;
+            }
+
+            /* insert ntags after */
+            std::vector<int> ntags_after;
+            for (std::size_t j{ i + 1 }; j < branch_count; ++j)
+                std::ranges::copy(tag_vec.at(root.idxs[j]), std::back_inserter(ntags_after));
+
+            std::ranges::sort(ntags_after);
+            auto [_, after_last] = std::ranges::unique(ntags_after);
+            ntags_after.erase(after_last, ntags_after.end());
+
+            if (not ntags_before.empty())
+            {
+                const state_t qe{ node_create() };
+                make_ntags(qe, qf, ntags_after);
+                qf = qe;
+            }
+        }
+
+        thompson(ast, tag_vec, stack_elem{ .q0 = q0, .qf = qf, .idx = root.idxs[i] });
+    }
 }
 
 } // namespace srx::detail

@@ -41,6 +41,13 @@ namespace assert_category
     inline constexpr lookbehind1_tag_t lookbehind1_tag{};
 }
 
+struct stack_elem
+{
+    tnfa::state_t q0, qf;
+    std::size_t idx;
+};
+
+
 /* tnfa transitions */
 
 template<typename CharT>
@@ -116,9 +123,11 @@ struct node
     std::vector<tr_index> out_tr;
 
     bool is_final{ false };
-    bool is_fallback{ false };             /* must equal false if not is_final */
-    std::uint_least16_t final_offset{ 0 }; /* only meaningful if is_final */
-    continue_at_t continue_at{ 0 };        /* only meaningful if is_final */
+    bool is_fallback{ false };              /* must equal false if not is_final */
+
+    std::uint_least16_t final_offset{ 0 };  /* only meaningful if is_final */
+    continue_at_t       continue_at{ 0 };   /* only meaningful if is_final */
+    std::uint_least16_t lexer_alt{ 0 };     /* only meaningful if is_final */
 };
 
 template<typename CharT>
@@ -195,6 +204,7 @@ public:
 
 private:
     using ast_t = expr_tree<char_type>;
+    using tag_vec_t = std::vector<std::vector<int>>;
     using transition_info = tnfa::transition<char_type>::transition_type;
 
     template<typename T>
@@ -204,6 +214,7 @@ private:
 
     constexpr state_t node_create();
     constexpr state_t node_copy(state_t q);
+    constexpr void node_copy_to(state_t q_old, state_t q_new);
 
     template<typename... Args>
     constexpr void transition_create(state_t q0, state_t qf, Args&&... args);
@@ -229,7 +240,7 @@ private:
 
     constexpr void make_ntags(state_t q0, state_t qf, const std::vector<int>& ntags);
 
-    constexpr void thompson(const expr_tree<char_type>& ast);
+    constexpr void thompson(const expr_tree<char_type>& ast, const tag_vec_t& tag_vec, const tnfa::stack_elem& initial);
 
     template<bool B, typename Vec, typename Pred, typename NodeProj, typename TrProj>
     [[nodiscard]] constexpr auto closure_impl(Vec&& qs, Pred pred, NodeProj node_proj, TrProj tr_proj) const;
@@ -259,7 +270,8 @@ private:
     std::size_t                                 tag_count_;
     state_t                                     start_node_{ default_start_node };
     std::vector<tnfa::continue_info<char_type>> cont_info_;
-    std::vector<tnfa::state_t>                  additional_cont_;
+    std::vector<state_t>                        additional_cont_;
+    std::vector<state_t>                        final_nodes_{ default_final_node };
 
     fsm_flags flags_;
 

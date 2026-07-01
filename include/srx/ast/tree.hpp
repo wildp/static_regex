@@ -114,6 +114,7 @@ public:
     using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
     constexpr expr_tree(sv_type sv, parser_flags flags = {});
+    constexpr expr_tree(const std::vector<sv_type>& svs, parser_flags flags = {});
 
     friend class parser::ll1<char_type>;
 
@@ -125,6 +126,7 @@ public:
 
     [[nodiscard]] constexpr std::pair<std::size_t, std::size_t> min_max_length() const;
     [[nodiscard]] constexpr bool empty_match_possible() const;
+    [[nodiscard]] constexpr bool is_lexer_mode() const { return lexer_mode_; }
 
     constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
     constexpr void optimise_tags();
@@ -145,6 +147,7 @@ private:
     capture_info capture_info_;
     tag_number_t tag_count_{ 0 };
     parser_flags flags_;
+    bool lexer_mode_{ false };
 };
 
 template<typename CharT>

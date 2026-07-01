@@ -26,8 +26,11 @@ public:
     using sv_type = std::basic_string_view<char_type>;
 
     constexpr ll1(ast_t& ast, sv_type sv);
+    constexpr ll1(ast_t& ast, const std::vector<sv_type>& svs);
 
 private:
+    [[nodiscard]] constexpr std::size_t parse();
+
     using assertion  = ast_t::assertion;
     using alt        = ast_t::alt;
     using concat     = ast_t::concat;
@@ -63,7 +66,6 @@ private:
     [[nodiscard]] constexpr parser_flags& flags() { return ref_.get().flags_; }
     [[nodiscard]] constexpr const parser_flags& flags() const { return ref_.get().flags_; }
     [[nodiscard]] constexpr type& get_expr(std::size_t idx) { return ref_.get().expressions_.at(idx); }
-    [[nodiscard]] constexpr std::size_t& root_idx() { return ref_.get().root_idx_; }
     [[nodiscard]] constexpr capture_info& get_capture_info() { return ref_.get().capture_info_; }
     [[nodiscard]] constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
@@ -200,20 +202,40 @@ private:
 };
 
 
-/* parser implemenation */
+/* constructors for ll1 */
 
 template<typename CharT>
 constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv)
     : ref_{ ast }, lex_{ sv }
 {
+    ast.root_idx_ = parse();
+}
+
+template<typename CharT>
+constexpr ll1<CharT>::ll1(ast_t& ast, const std::vector<sv_type>& svs)
+    : ref_{ ast }
+{
+    ast.root_idx_ = new_expression<alt>();
+
+    for (const auto& sv : svs)
+    {
+        lex_ = lexer{ sv };
+        const std::size_t subtree_root = parse();
+        const auto& root = std::get<alt>(get_expr(ast.root_idx_));
+        root.idxs.emplace_back(subtree_root);
+    }
+}
+
+
+/* parser implementation */
+
+template<typename CharT>
+constexpr std::size_t ll1<CharT>::parse()
+{
     using terminal = ll1_stack<char_type>::terminal;
 
-    if (sv.empty())
-    {
-        /* ensure expressions is non-empty */
-        std::ignore = new_expression<char_str>(/* empty string */);
-        return;
-    }
+    if (lex_.empty()) /* ensure expressions is non-empty */
+        return new_expression<char_str>(/* empty string */);
 
     ll1_stack<char_type> stack;
     semantic_stack<char_type> semstack;
@@ -640,8 +662,10 @@ constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv)
     if (not holds_alternative<tok::end_of_input>(token))
         throw pattern_error("Parse Error");
 
-    if (not semstack.empty())
-        root_idx() = get<std::size_t>(semstack.pop());
+    if (semstack.empty())
+        throw pattern_error("Parse Error: Empty Semstack");
+
+    return get<std::size_t>(semstack.pop());
 }
 
 
@@ -1284,13 +1308,20 @@ constexpr void ll1<CharT>::sa_begin_alt()
 } // namespace parser
 
 
-/* constructor for tree */
+/* constructors for tree */
 
 template<typename CharT>
 constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags)
     : flags_{ flags }
 {
     parser::ll1<char_type> ll1_parser(*this, sv);
+}
+
+template<typename CharT>
+constexpr expr_tree<CharT>::expr_tree(const std::vector<sv_type>& svs, const parser_flags flags)
+    : flags_{ flags }, lexer_mode_{ true }
+{
+    parser::ll1<char_type> ll1_parser(*this, svs);
 }
 
 } // namespace srx::detail

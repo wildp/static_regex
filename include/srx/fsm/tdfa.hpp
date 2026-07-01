@@ -70,6 +70,7 @@ struct final_node_info
 {
     std::size_t         op_index;
     std::uint_least16_t final_offset;
+    std::uint_least32_t lexer_alt;
 
     friend constexpr bool operator==(const final_node_info&, const final_node_info&) noexcept = default;
     friend constexpr auto operator<=>(const final_node_info&, const final_node_info&) noexcept = default;
