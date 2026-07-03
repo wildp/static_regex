@@ -15,7 +15,8 @@
 #include <variant>
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<class... Ts>
 struct overloads : Ts... { using Ts::operator()...; };
@@ -99,50 +100,51 @@ template<typename T>
 concept integer_sequence_like = is_template_instantiation_of_impl(^^T, ^^std::integer_sequence);
 
 
-namespace hash
+namespace hash {
+
+inline constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
+inline constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
+
+consteval std::size_t init() { return fnv_offset_basis; }
+
+template<typename T>
+concept memberwise_hashable = std::is_class_v<T> and not std::ranges::range<T>;
+
+template<std::integral T>
+constexpr void append(std::size_t& hash, const T& value);
+
+template<std::ranges::range T>
+constexpr void append(std::size_t& hash, T&& value);
+
+template<memberwise_hashable T>
+constexpr void append(std::size_t& hash, const T& value);
+
+template<std::integral T>
+constexpr void append(std::size_t& hash, const T& value)
 {
-    inline constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
-    inline constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
-
-    consteval std::size_t init() { return fnv_offset_basis; }
-
-    template<typename T>
-    concept memberwise_hashable = std::is_class_v<T> and not std::ranges::range<T>;
-
-    template<std::integral T>
-    constexpr void append(std::size_t& hash, const T& value);
-
-    template<std::ranges::range T>
-    constexpr void append(std::size_t& hash, T&& value);
-
-    template<memberwise_hashable T>
-    constexpr void append(std::size_t& hash, const T& value);
-
-    template<std::integral T>
-    constexpr void append(std::size_t& hash, const T& value)
+    for (unsigned char byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(value))
     {
-        for (unsigned char byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(value))
-        {
-            hash ^= byte;
-            hash *= fnv_prime;
-        }
+        hash ^= byte;
+        hash *= fnv_prime;
     }
+}
 
-    template<std::ranges::range T>
-    constexpr void append(std::size_t& hash, T&& value)
-    {
-        for (auto&& elem : value)
-            append(hash, elem);
-    }
+template<std::ranges::range T>
+constexpr void append(std::size_t& hash, T&& value)
+{
+    for (auto&& elem : value)
+        append(hash, elem);
+}
 
-    template<memberwise_hashable T>
-    constexpr void append(std::size_t& hash, const T& value)
-    {
-        template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
-            append(hash, value.[:member
-                :]); // line break to fix syntax highlighting
-    }
-};
+template<memberwise_hashable T>
+constexpr void append(std::size_t& hash, const T& value)
+{
+    template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
+        append(hash, value.[: member // line break to avoid breaking syntax highlighting
+                            :]);
+}
+
+} // namespace hash
 
 
 inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
@@ -172,4 +174,5 @@ using maybe_type_t = std::conditional_t<Enabled, T, terminal_object>;
 template<bool Const, typename T>
 using maybe_const_t = std::conditional_t<Const, const T, T>;
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

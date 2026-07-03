@@ -19,7 +19,8 @@
 #include <srx/regex.hpp>
 
 
-namespace srx::tools {
+namespace srx {
+namespace tools {
 
 using path = std::filesystem::path;
 
@@ -227,7 +228,8 @@ private:
     std::vector<std::string> copyrights_;
 };
 
-} // namespace srx::tools
+} // namespace tools
+} // namespace srx
 
 int main(int argc, char* argv[])
 {

@@ -29,7 +29,8 @@
 #include "srx/gen/result.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 struct optimised_tr_edge
@@ -254,7 +255,7 @@ template<static_charset Sc>
     {
         static constexpr bool inverted{ false /* Sc.should_invert() */ };
 
-        template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Sc, inverted)))
+        template for (constexpr auto ote : define_static_array(make_optimised_edges(Sc, inverted)))
         {
             uchar_type d{ c };
 
@@ -313,7 +314,7 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
         static constexpr bool inverted{ Sc.should_invert() };
         mask_type result{ inverted };
 
-        template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Sc, inverted)))
+        template for (constexpr auto ote : define_static_array(make_optimised_edges(Sc, inverted)))
         {
             auto d_vec{ c_vec };
 
@@ -354,8 +355,8 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
 template<std::meta::info DFARefl>
 struct p1306dfa
 {
-    static constexpr tdfa_info DFA{ [:DFARefl
-        :] }; // line break avoid breaking syntax highlighting
+    static constexpr tdfa_info DFA{ [: DFARefl // line break avoid breaking syntax highlighting
+                                     :] };
     using char_type = decltype(DFA)::char_type;
 
     static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
@@ -864,7 +865,7 @@ private:
     static constexpr bool vector_outer_state(Result result, I it, const S last)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
-        static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState));
+        static constexpr auto states = define_static_array(get_flattened_states(DFA, DFAState));
 
         using uchar_type = std::make_unsigned_t<char_type>;
         using vec_type = std::simd::vec<uchar_type>;
@@ -942,7 +943,7 @@ private:
     static constexpr bool vector_outer_state(Result result, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
-        static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState, true));
+        static constexpr auto states = define_static_array(get_flattened_states(DFA, DFAState, true));
 
         using uchar_type = std::make_unsigned_t<char_type>;
         using vec_type = std::simd::vec<uchar_type>;
@@ -1221,4 +1222,5 @@ using p1306_matcher = p1306dfa<(^^re<Pattern, pack_flags(Flags)>)>::matcher;
 template<string_literal Pattern, fsm_flags Flags>
 using p1306_searcher = p1306dfa<(^^re<Pattern, pack_flags(adapt_searcher_flags_to_matcher(Flags))>)>::searcher;
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

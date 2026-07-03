@@ -19,7 +19,8 @@
 #include <srx/fsm/tnfa.hpp>
 
 
-namespace srx::tools {
+namespace srx {
+namespace tools {
 
 template<typename T>
 concept print_destination = requires (T t) { std::println(t); };
@@ -328,4 +329,5 @@ void graph_export(T target, const detail::tagged_dfa<CharT>& dfa)
     std::println(target, "}}");
 }
 
-} // namespace srx::tools
+} // namespace tools
+} // namespace srx

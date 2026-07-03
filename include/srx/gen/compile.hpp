@@ -20,7 +20,8 @@
 #include "srx/fsm/tnfa.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 struct final_capture_info
 {
@@ -261,4 +262,5 @@ inline constexpr auto re = compile_pattern(P.view(), unpack_flags(F));
 struct match_non_empty_t {};
 inline constexpr match_non_empty_t match_non_empty;
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

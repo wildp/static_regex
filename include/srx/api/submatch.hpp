@@ -279,7 +279,8 @@ constexpr bool std::ranges::disable_sized_range<srx::submatch<I>> = not std::siz
 
 /* submatch factory implementation */
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<std::bidirectional_iterator I>
 class submatch_factory
@@ -299,4 +300,5 @@ public:
     }
 };
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

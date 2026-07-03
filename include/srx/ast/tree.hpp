@@ -14,7 +14,8 @@
 #include "srx/etc/util.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace parser {
 
 template<typename CharT>
@@ -156,7 +157,8 @@ expr_tree(const CharT*) -> expr_tree<CharT>;
 template<typename CharT>
 expr_tree(const CharT*, parser_flags) -> expr_tree<CharT>;
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx
 
 
 #include "tree.tpp"

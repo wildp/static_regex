@@ -23,7 +23,8 @@
 #include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 /* graph helper functions */
 
@@ -1587,4 +1588,5 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
     }
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

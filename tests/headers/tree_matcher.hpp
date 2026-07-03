@@ -20,7 +20,8 @@
 #include "cdarray.hpp"
 
 
-namespace srx::testing {
+namespace srx {
+namespace testing {
 
 template<typename CharT>
 class tree_matcher : public detail::expr_tree<CharT>
@@ -399,4 +400,5 @@ template<std::random_access_iterator I>
     return res;
 }
 
-} // namespace srx::testing
+} // namespace testing
+} // namespace srx

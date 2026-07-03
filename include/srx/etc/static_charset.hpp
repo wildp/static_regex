@@ -18,7 +18,8 @@
 #include "srx/etc/util.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 class static_charset;
@@ -51,15 +52,7 @@ public:
     constexpr explicit static_charset(Args... args)
     {
         charset_type tmp;
-
-        template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-        {
-            if constexpr (std::convertible_to<Args...[i], char_type>)
-                tmp.insert(args...[i]);
-            else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                tmp.insert(args...[i].first, args...[i].second);
-        }
-
+        ([&]{ tmp.insert(args); }(), ...);
         data_ = static_span{ tmp.data_ };
     }
 
@@ -262,4 +255,5 @@ struct nontransient_constexpr_version_of<static_charset<CharT>>
 template<typename T>
 using nontransient_constexpr_version_of_t = nontransient_constexpr_version_of<T>::type;
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

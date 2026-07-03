@@ -21,7 +21,8 @@
 #include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace tdfa {
 
 constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
@@ -2078,4 +2079,5 @@ constexpr void tagged_dfa<CharT>::de_default_edges()
     }
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
     }
 
     auto mode = [](std::string_view sv) -> std::optional<graph_export_option> {
-        template for (constexpr std::meta::info r : std::define_static_array(enumerators_of(^^graph_export_option)))
+        template for (constexpr std::meta::info r : define_static_array(enumerators_of(^^graph_export_option)))
             if (sv == identifier_of(r))
                 return [: r :];
         return {};
@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
         else if (sv.starts_with("m"))
         {
             [&]{
-                template for (constexpr std::meta::info r : std::define_static_array(enumerators_of(^^match_type_option)))
+                template for (constexpr std::meta::info r : define_static_array(enumerators_of(^^match_type_option)))
                 {
                     if (sv == identifier_of(r))
                     {

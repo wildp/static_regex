@@ -12,7 +12,8 @@
 #include <ranges>
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 struct fsm_flags
 {
@@ -135,4 +136,5 @@ constexpr fsm_flags unpack_flags(ff f)
     return result;
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

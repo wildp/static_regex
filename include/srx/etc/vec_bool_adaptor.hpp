@@ -7,7 +7,8 @@
     #include <boost/dynamic_bitset.hpp>
 #endif
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 #ifndef SRX_USE_BOOST_DYNAMIC_BITSET
 class vec_bool_adaptor
@@ -168,4 +169,5 @@ using bitset_t = boost::dynamic_bitset<std::size_t>;
 using bitset_t = vec_bool_adaptor;
 #endif
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

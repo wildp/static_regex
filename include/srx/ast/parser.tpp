@@ -14,7 +14,8 @@
 #include "srx/ast/capstack.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace parser {
 
 template<typename CharT>
@@ -1324,4 +1325,5 @@ constexpr expr_tree<CharT>::expr_tree(const std::vector<sv_type>& svs, const par
     parser::ll1<char_type> ll1_parser(*this, svs);
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

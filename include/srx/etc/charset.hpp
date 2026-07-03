@@ -20,7 +20,8 @@
 #include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename T, typename CharT>
 concept charset_interval_range = std::ranges::contiguous_range<T>
@@ -39,13 +40,7 @@ public:
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
     constexpr explicit charset(Args... args)
     {
-        template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-        {
-            if constexpr (std::convertible_to<Args...[i], char_type>)
-                insert(args...[i]);
-            else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                insert(args...[i].first, args...[i].second);
-        }
+        ([&]{ insert(args); }(), ...);
     }
 
 
@@ -270,6 +265,8 @@ private:
     static constexpr void part_sort_and_dedup(partitioned_intervals& sorted_part);
     static constexpr void part_merge_intervals(partitioned_intervals& sorted_part);
     static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<bitset_t, charset>;
+
+    constexpr void insert(char_interval ci) { return insert(ci.first, ci.second); }
 
     underlying_t data_;
 };
@@ -975,4 +972,5 @@ constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>
     return result;
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

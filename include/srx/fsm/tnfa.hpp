@@ -18,7 +18,8 @@
 #include "srx/fsm/flags.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace tnfa {
 
 using state_t = std::size_t;
@@ -28,24 +29,26 @@ using continue_at_t = std::uint_least16_t;
 template<typename CharT>
 using charset_t = std::conditional_t<sizeof(CharT) == 1, bitcharset<CharT>, charset<CharT>>;
 
-namespace assert_category
-{
-    struct eof_tag_t { explicit eof_tag_t() = default; };
-    struct sof_tag_t { explicit sof_tag_t() = default; };
-    struct lookahead1_tag_t { explicit lookahead1_tag_t() = default; };
-    struct lookbehind1_tag_t { explicit lookbehind1_tag_t() = default; };
-
-    inline constexpr eof_tag_t         eof_tag{};
-    inline constexpr sof_tag_t         sof_tag{};
-    inline constexpr lookahead1_tag_t  lookahead1_tag{};
-    inline constexpr lookbehind1_tag_t lookbehind1_tag{};
-}
-
 struct stack_elem
 {
     tnfa::state_t q0, qf;
     std::size_t idx;
 };
+
+
+namespace assert_category {
+
+struct eof_tag_t { explicit eof_tag_t() = default; };
+struct sof_tag_t { explicit sof_tag_t() = default; };
+struct lookahead1_tag_t { explicit lookahead1_tag_t() = default; };
+struct lookbehind1_tag_t { explicit lookbehind1_tag_t() = default; };
+
+inline constexpr eof_tag_t         eof_tag{};
+inline constexpr sof_tag_t         sof_tag{};
+inline constexpr lookahead1_tag_t  lookahead1_tag{};
+inline constexpr lookbehind1_tag_t lookbehind1_tag{};
+
+} // namespace assert_category
 
 
 /* tnfa transitions */
@@ -281,6 +284,7 @@ private:
     bool has_lookbehind_1_ : 1 { false };
 };
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx
 
 #include "tnfa.tpp"

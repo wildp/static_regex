@@ -15,7 +15,8 @@
 #include "srx/etc/static_charset.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 enum class named_character_class : unsigned char
 {
@@ -159,4 +160,5 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     }
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

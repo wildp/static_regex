@@ -20,7 +20,8 @@
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 /* RE2 limits counted repetitions to 1000 - we do the same here */
 inline constexpr int counted_repetition_limit{ 1000 };
@@ -45,96 +46,98 @@ class ll1;
 
 /* token definitions */
 
-namespace tok
+namespace tok {
+
+struct end_of_input {};
+struct vert {};
+struct dot {};
+struct hat {};
+struct dollar {};
+struct lparen {};
+struct rparen {};
+struct star {};
+struct plus {};
+struct quest {};
+
+struct repeat_n_m
 {
-    struct end_of_input {};
-    struct vert {};
-    struct dot {};
-    struct hat {};
-    struct dollar {};
-    struct lparen {};
-    struct rparen {};
-    struct star {};
-    struct plus {};
-    struct quest {};
+    int min;
+    int max; /* use max=min for {min} or max<min for {min,} */
 
-    struct repeat_n_m
+    friend constexpr bool operator==(const repeat_n_m& x, const repeat_n_m& y) = default;
+};
+
+struct assertion
+{
+    assert_type type;
+
+    friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
+};
+
+template<typename CharT>
+struct char_class
+{
+    using impl_type = char_class_impl<std::same_as<char, CharT>>;
+    using underlying_char_type = impl_type::char_type;
+
+    impl_type data;
+
+    template<typename... Args>
+    constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
+
+    friend constexpr bool operator==(const char_class& x, const char_class& y) = default;
+};
+
+template<typename CharT>
+struct char_str
+{
+    std::basic_string<CharT> data;
+
+    constexpr explicit char_str() : data{} {} /* empty string */
+    constexpr explicit char_str(CharT c) : data{ c } {}
+
+    template<std::input_iterator I, std::sentinel_for<I> S>
+        requires std::convertible_to<std::iter_value_t<I>, CharT>
+    constexpr explicit char_str(I first, S last) : data(first, last) {}
+
+    constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
     {
-        int min;
-        int max; /* use max=min for {min} or max<min for {min,} */
+        data += c;
+    }
 
-        friend constexpr bool operator==(const repeat_n_m& x, const repeat_n_m& y) = default;
-    };
-
-    struct assertion
+    constexpr explicit char_str(std::size_t parse_result)
     {
-        assert_type type;
-
-        friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
-    };
-
-    template<typename CharT>
-    struct char_class
-    {
-        using impl_type = char_class_impl<std::same_as<char, CharT>>;
-        using underlying_char_type = impl_type::char_type;
-
-        impl_type data;
-
-        template<typename... Args>
-        constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
-
-        friend constexpr bool operator==(const char_class& x, const char_class& y) = default;
-    };
-
-    template<typename CharT>
-    struct char_str
-    {
-        std::basic_string<CharT> data;
-
-        constexpr explicit char_str() : data{} {} /* empty string */
-        constexpr explicit char_str(CharT c) : data{ c } {}
-
-        template<std::input_iterator I, std::sentinel_for<I> S>
-            requires std::convertible_to<std::iter_value_t<I>, CharT>
-        constexpr explicit char_str(I first, S last) : data(first, last) {}
-
-        constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
+        if (parse_result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
         {
-            data += c;
+            data = static_cast<CharT>(parse_result);
         }
-
-        constexpr explicit char_str(std::size_t parse_result)
+        else
         {
-            if (parse_result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-            {
-                data = static_cast<CharT>(parse_result);
-            }
-            else
-            {
-                // TODO: construct string corresponding to multibyte char
-                throw pattern_error("Multibyte characters are unimplemented");
-            }
+            // TODO: construct string corresponding to multibyte char
+            throw pattern_error("Multibyte characters are unimplemented");
         }
+    }
 
-        [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
-        {
-            // TODO: update this to be aware of multibyte characters
-            if (data.size() == 1)
-                return data.front();
-            return {};
-        }
-
-        friend constexpr bool operator==(const char_str& x, const char_str& y) = default;
-    };
-
-    struct backref
+    [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
     {
-        unsigned int number;
+        // TODO: update this to be aware of multibyte characters
+        if (data.size() == 1)
+            return data.front();
+        return {};
+    }
 
-        friend constexpr bool operator==(const backref& x, const backref& y) = default;
-    };
-}
+    friend constexpr bool operator==(const char_str& x, const char_str& y) = default;
+};
+
+struct backref
+{
+    unsigned int number;
+
+    friend constexpr bool operator==(const backref& x, const backref& y) = default;
+};
+
+} // namespace tok
+
 
 template<typename CharT>
 using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
@@ -959,4 +962,5 @@ constexpr named_character_class lexer<CharT>::parse_posix_char_class()
     throw pattern_error("Invalid POSIX Character Class");
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

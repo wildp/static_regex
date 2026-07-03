@@ -14,7 +14,8 @@
 #include <type_traits>
 
 
-namespace srx::testing {
+namespace srx {
+namespace testing {
 
 /* WARNING: cdarray is NOT thread-safe */
 template<typename T, typename Allocator = std::allocator<T>>
@@ -334,4 +335,5 @@ private:
     size_type*     use_count_ptr_{ nullptr };
 };
 
-} // namespace srx::testing
+} // namespace testing
+} // namespace srx

@@ -20,7 +20,8 @@
 #include "srx/etc/captures.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 /* observer for non empty match */
 
@@ -829,4 +830,5 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
     return result;
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

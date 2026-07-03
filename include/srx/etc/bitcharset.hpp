@@ -21,7 +21,8 @@
 #include "srx/etc/vec_bool_adaptor.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 class bitcharset
@@ -48,13 +49,7 @@ public:
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
     constexpr explicit bitcharset(Args... args) noexcept
     {
-        template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-        {
-            if constexpr (std::convertible_to<Args...[i], char_type>)
-                insert(args...[i]);
-            else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                insert(args...[i].first, args...[i].second);
-        }
+        ([&]{ insert(args); }(), ...);
     }
 
 
@@ -417,6 +412,8 @@ public:
     [[nodiscard]] static constexpr auto partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>;
 
 private:
+    constexpr void insert(char_interval ci) noexcept { return insert(ci.first, ci.second); }
+
     std::array<integer_type, array_size> data_{};
 };
 
@@ -582,4 +579,5 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
     return result;
 }
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

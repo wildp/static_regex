@@ -13,7 +13,9 @@
 #include <vector>
 
 
-namespace srx::detail::parser {
+namespace srx {
+namespace detail {
+namespace parser {
 
 struct capture_flags
 {
@@ -157,7 +159,8 @@ public:
         if (elem.mode == cse::modes::flag_assigning)
         {
             template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
-                if (elem.flags.[: e :] != cf::inherit)
+                if (elem.flags.[: e // line break to avoid breaking syntax highlighting
+                                :] != cf::inherit)
                     target.flags.[: e :] = elem.flags.[: e :];
         }
 
@@ -177,7 +180,8 @@ private:
     [[nodiscard]] constexpr bool get() const
     {
         for (const auto& elem : elems_ | std::views::reverse)
-            if (elem.flags.[: CaptureFlagReflection :] != cf::inherit)
+            if (elem.flags.[: CaptureFlagReflection // line break to avoid breaking syntax highlighting
+                            :] != cf::inherit)
                 return elem.flags.[: CaptureFlagReflection :] == cf::enabled;
         return base_.flags.[: CaptureFlagReflection :] == cf::enabled;
     }
@@ -210,4 +214,6 @@ private:
     cse              base_{};
 };
 
-} // namespace srx::detail::parser
+} // namespace parser
+} // namespace detail
+} // namespace srx

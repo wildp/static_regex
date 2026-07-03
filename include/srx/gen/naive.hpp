@@ -21,7 +21,8 @@
 #include "srx/gen/result.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 struct tree_info
@@ -288,7 +289,7 @@ private:
                 std::ranges::sort(vec);
                 auto [it, _] = std::ranges::unique(vec);
                 vec.erase(it, vec.end());
-                return std::define_static_array(vec);
+                return define_static_array(vec);
             }();
 
             template for (constexpr auto tagnum : staged)
@@ -819,7 +820,7 @@ private:
                 std::ranges::sort(vec);
                 auto [it, _] = std::ranges::unique(vec);
                 vec.erase(it, vec.end());
-                return std::define_static_array(vec);
+                return define_static_array(vec);
             }();
 
 
@@ -1157,4 +1158,5 @@ struct naive_matcher_adaptor<Pattern, Flags>
     }
 };
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

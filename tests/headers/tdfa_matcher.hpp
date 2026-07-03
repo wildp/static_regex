@@ -18,7 +18,8 @@
 #include <srx/fsm/tdfa.hpp>
 
 
-namespace srx::testing {
+namespace srx {
+namespace testing {
 
 template<typename CharT>
 class tdfa_matcher : public detail::tagged_dfa<CharT>
@@ -283,4 +284,5 @@ constexpr void tdfa_matcher<CharT>::regops_implementation(I it, std::size_t op_i
     }
 }
 
-} // namespace srx::testing
+} // namespace testing
+} // namespace srx

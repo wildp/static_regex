@@ -20,7 +20,8 @@
 // TODO: replace with constexpr std::format specialization
 // TODO: add unicode transcoding support
 
-namespace srx::testing {
+namespace srx {
+namespace testing {
 
 template<typename CharT>
 [[nodiscard]] constexpr std::basic_string<CharT> to_basic_string(const detail::expr_tree<CharT>& ast)
@@ -279,4 +280,5 @@ template<typename CharT>
     return to_basic_string(ast);
 }
 
-} // namespace srx::testing
+} // namespace testing
+} // namespace srx

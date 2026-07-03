@@ -19,7 +19,8 @@
 #include "cdarray.hpp"
 
 
-namespace srx::testing {
+namespace srx {
+namespace testing {
 
 template<typename CharT>
 class tnfa_matcher : public detail::tagged_nfa<CharT>
@@ -206,4 +207,5 @@ constexpr auto tnfa_matcher<CharT>::make_submatch_results(const tag_vector& v, s
     return result;
 }
 
-} // namespace srx::testing
+} // namespace testing
+} // namespace srx

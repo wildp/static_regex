@@ -18,7 +18,8 @@
 #include "srx/fsm/tnfa.hpp"
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace tdfa {
 
 template<typename CharT>
@@ -179,6 +180,7 @@ private:
     fsm_flags               flags_;
 };
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx
 
 #include "tdfa.tpp"

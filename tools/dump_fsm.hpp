@@ -13,7 +13,8 @@
 #include "graph_export.hpp"
 
 
-namespace srx::tools {
+namespace srx {
+namespace tools {
 
 template<typename T, typename CharT>
     requires requires (T t) { std::println(t); }
@@ -108,4 +109,5 @@ void dump_fsm(const detail::tagged_dfa<CharT>& dfa)
     return dump_fsm(stdout, dfa);
 }
 
-} // namespace srx::tools
+} // namespace tools
+} // namespace srx

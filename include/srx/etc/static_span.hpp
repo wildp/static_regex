@@ -18,7 +18,8 @@
 #include <type_traits>
 
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename T>
 class static_span
@@ -192,4 +193,5 @@ public:
 template<typename K, typename V, typename C, typename KeyCont, typename MappedCont>
 static_map(const std::flat_map<const K, V, C, KeyCont, MappedCont>& mapped_cont) -> static_map<const K, V, C>;
 
-} // namespace srx::detail
+} // namespace detail
+} // namespace srx

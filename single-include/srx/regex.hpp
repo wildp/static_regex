@@ -409,29 +409,31 @@
 #include <vector>
 
 
-namespace srx
+namespace srx {
+
+template<typename CharT, std::size_t N>
+struct string_literal
 {
-    template<typename CharT, std::size_t N>
-    struct string_literal
+    static_assert(N != 0);
+    using value_type = CharT;
+
+    consteval string_literal(const value_type (&str)[N])
     {
-        static_assert(N != 0);
-        using value_type = CharT;
+        std::ranges::copy_n(str, N, value_);
+    }
 
-        consteval string_literal(const value_type (&str)[N])
-        {
-            std::ranges::copy_n(str, N, value_);
-        }
+    [[nodiscard]] constexpr std::basic_string_view<value_type> view() const
+    {
+        return { value_, N - 1 };
+    }
 
-        [[nodiscard]] constexpr std::basic_string_view<value_type> view() const
-        {
-            return { value_, N - 1 };
-        }
+    value_type value_[N]{};
+};
 
-        value_type value_[N]{};
-    };
 }
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<class... Ts>
 struct overloads : Ts... { using Ts::operator()...; };
@@ -512,50 +514,51 @@ struct sequence_helper<std::integer_sequence<T, Head, Tail...>>
 template<typename T>
 concept integer_sequence_like = is_template_instantiation_of_impl(^^T, ^^std::integer_sequence);
 
-namespace hash
+namespace hash {
+
+inline constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
+inline constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
+
+consteval std::size_t init() { return fnv_offset_basis; }
+
+template<typename T>
+concept memberwise_hashable = std::is_class_v<T> and not std::ranges::range<T>;
+
+template<std::integral T>
+constexpr void append(std::size_t& hash, const T& value);
+
+template<std::ranges::range T>
+constexpr void append(std::size_t& hash, T&& value);
+
+template<memberwise_hashable T>
+constexpr void append(std::size_t& hash, const T& value);
+
+template<std::integral T>
+constexpr void append(std::size_t& hash, const T& value)
 {
-    inline constexpr std::size_t fnv_offset_basis{ 0xcbf29ce484222325 };
-    inline constexpr std::size_t fnv_prime{ 0xcbf29ce484222325 };
-
-    consteval std::size_t init() { return fnv_offset_basis; }
-
-    template<typename T>
-    concept memberwise_hashable = std::is_class_v<T> and not std::ranges::range<T>;
-
-    template<std::integral T>
-    constexpr void append(std::size_t& hash, const T& value);
-
-    template<std::ranges::range T>
-    constexpr void append(std::size_t& hash, T&& value);
-
-    template<memberwise_hashable T>
-    constexpr void append(std::size_t& hash, const T& value);
-
-    template<std::integral T>
-    constexpr void append(std::size_t& hash, const T& value)
+    for (unsigned char byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(value))
     {
-        for (unsigned char byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(value))
-        {
-            hash ^= byte;
-            hash *= fnv_prime;
-        }
+        hash ^= byte;
+        hash *= fnv_prime;
     }
+}
 
-    template<std::ranges::range T>
-    constexpr void append(std::size_t& hash, T&& value)
-    {
-        for (auto&& elem : value)
-            append(hash, elem);
-    }
+template<std::ranges::range T>
+constexpr void append(std::size_t& hash, T&& value)
+{
+    for (auto&& elem : value)
+        append(hash, elem);
+}
 
-    template<memberwise_hashable T>
-    constexpr void append(std::size_t& hash, const T& value)
-    {
-        template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
-            append(hash, value.[:member
-                :]);
-    }
-};
+template<memberwise_hashable T>
+constexpr void append(std::size_t& hash, const T& value)
+{
+    template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
+        append(hash, value.[: member
+                            :]);
+}
+
+}
 
 inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };
 
@@ -583,8 +586,10 @@ template<bool Const, typename T>
 using maybe_const_t = std::conditional_t<Const, const T, T>;
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 struct fsm_flags
 {
@@ -705,6 +710,7 @@ constexpr fsm_flags unpack_flags(ff f)
 }
 
 }
+}
 
 namespace srx {
 
@@ -744,7 +750,8 @@ public:
     #include <boost/dynamic_bitset.hpp>
 #endif
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 #ifndef SRX_USE_BOOST_DYNAMIC_BITSET
 class vec_bool_adaptor
@@ -906,8 +913,10 @@ using bitset_t = vec_bool_adaptor;
 #endif
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 class bitcharset
@@ -934,13 +943,7 @@ public:
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
     constexpr explicit bitcharset(Args... args) noexcept
     {
-        template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-        {
-            if constexpr (std::convertible_to<Args...[i], char_type>)
-                insert(args...[i]);
-            else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                insert(args...[i].first, args...[i].second);
-        }
+        ([&]{ insert(args); }(), ...);
     }
 
     /* observers */
@@ -1298,6 +1301,8 @@ public:
     [[nodiscard]] static constexpr auto partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>;
 
 private:
+    constexpr void insert(char_interval ci) noexcept { return insert(ci.first, ci.second); }
+
     std::array<integer_type, array_size> data_{};
 };
 
@@ -1464,8 +1469,10 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
 }
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename T, typename CharT>
 concept charset_interval_range = std::ranges::contiguous_range<T>
@@ -1484,13 +1491,7 @@ public:
         requires (sizeof...(Args) >= 1) and ((std::convertible_to<Args, char_type> or std::convertible_to<Args, char_interval>) and ...)
     constexpr explicit charset(Args... args)
     {
-        template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-        {
-            if constexpr (std::convertible_to<Args...[i], char_type>)
-                insert(args...[i]);
-            else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                insert(args...[i].first, args...[i].second);
-        }
+        ([&]{ insert(args); }(), ...);
     }
 
     /* observers */
@@ -1710,6 +1711,8 @@ private:
     static constexpr void part_sort_and_dedup(partitioned_intervals& sorted_part);
     static constexpr void part_merge_intervals(partitioned_intervals& sorted_part);
     static constexpr auto part_make_map(const partitioned_intervals& part) -> std::flat_map<bitset_t, charset>;
+
+    constexpr void insert(char_interval ci) { return insert(ci.first, ci.second); }
 
     underlying_t data_;
 };
@@ -2415,8 +2418,10 @@ constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>
 }
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename T>
 class static_span
@@ -2589,8 +2594,10 @@ template<typename K, typename V, typename C, typename KeyCont, typename MappedCo
 static_map(const std::flat_map<const K, V, C, KeyCont, MappedCont>& mapped_cont) -> static_map<const K, V, C>;
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 class static_charset;
@@ -2623,15 +2630,7 @@ public:
     constexpr explicit static_charset(Args... args)
     {
         charset_type tmp;
-
-        template for (constexpr std::size_t i : std::views::iota(0uz, sizeof...(Args)))
-        {
-            if constexpr (std::convertible_to<Args...[i], char_type>)
-                tmp.insert(args...[i]);
-            else if constexpr (std::convertible_to<Args...[i], char_interval>)
-                tmp.insert(args...[i].first, args...[i].second);
-        }
-
+        ([&]{ tmp.insert(args); }(), ...);
         data_ = static_span{ tmp.data_ };
     }
 
@@ -2831,8 +2830,10 @@ template<typename T>
 using nontransient_constexpr_version_of_t = nontransient_constexpr_version_of<T>::type;
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 enum class named_character_class : unsigned char
 {
@@ -2975,10 +2976,12 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
 }
 
 }
+}
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 /* RE2 limits counted repetitions to 1000 - we do the same here */
 inline constexpr int counted_repetition_limit{ 1000 };
@@ -3002,93 +3005,94 @@ class ll1;
 
 /* token definitions */
 
-namespace tok
+namespace tok {
+
+struct end_of_input {};
+struct vert {};
+struct dot {};
+struct hat {};
+struct dollar {};
+struct lparen {};
+struct rparen {};
+struct star {};
+struct plus {};
+struct quest {};
+
+struct repeat_n_m
 {
-    struct end_of_input {};
-    struct vert {};
-    struct dot {};
-    struct hat {};
-    struct dollar {};
-    struct lparen {};
-    struct rparen {};
-    struct star {};
-    struct plus {};
-    struct quest {};
+    int min;
+    int max; /* use max=min for {min} or max<min for {min,} */
 
-    struct repeat_n_m
+    friend constexpr bool operator==(const repeat_n_m& x, const repeat_n_m& y) = default;
+};
+
+struct assertion
+{
+    assert_type type;
+
+    friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
+};
+
+template<typename CharT>
+struct char_class
+{
+    using impl_type = char_class_impl<std::same_as<char, CharT>>;
+    using underlying_char_type = impl_type::char_type;
+
+    impl_type data;
+
+    template<typename... Args>
+    constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
+
+    friend constexpr bool operator==(const char_class& x, const char_class& y) = default;
+};
+
+template<typename CharT>
+struct char_str
+{
+    std::basic_string<CharT> data;
+
+    constexpr explicit char_str() : data{} {} /* empty string */
+    constexpr explicit char_str(CharT c) : data{ c } {}
+
+    template<std::input_iterator I, std::sentinel_for<I> S>
+        requires std::convertible_to<std::iter_value_t<I>, CharT>
+    constexpr explicit char_str(I first, S last) : data(first, last) {}
+
+    constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
     {
-        int min;
-        int max; /* use max=min for {min} or max<min for {min,} */
+        data += c;
+    }
 
-        friend constexpr bool operator==(const repeat_n_m& x, const repeat_n_m& y) = default;
-    };
-
-    struct assertion
+    constexpr explicit char_str(std::size_t parse_result)
     {
-        assert_type type;
-
-        friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
-    };
-
-    template<typename CharT>
-    struct char_class
-    {
-        using impl_type = char_class_impl<std::same_as<char, CharT>>;
-        using underlying_char_type = impl_type::char_type;
-
-        impl_type data;
-
-        template<typename... Args>
-        constexpr explicit char_class(Args&&... args) : data{ std::forward<Args>(args)... } {}
-
-        friend constexpr bool operator==(const char_class& x, const char_class& y) = default;
-    };
-
-    template<typename CharT>
-    struct char_str
-    {
-        std::basic_string<CharT> data;
-
-        constexpr explicit char_str() : data{} {} /* empty string */
-        constexpr explicit char_str(CharT c) : data{ c } {}
-
-        template<std::input_iterator I, std::sentinel_for<I> S>
-            requires std::convertible_to<std::iter_value_t<I>, CharT>
-        constexpr explicit char_str(I first, S last) : data(first, last) {}
-
-        constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
+        if (parse_result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
         {
-            data += c;
+            data = static_cast<CharT>(parse_result);
         }
-
-        constexpr explicit char_str(std::size_t parse_result)
+        else
         {
-            if (parse_result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-            {
-                data = static_cast<CharT>(parse_result);
-            }
-            else
-            {
-                throw pattern_error("Multibyte characters are unimplemented");
-            }
+            throw pattern_error("Multibyte characters are unimplemented");
         }
+    }
 
-        [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
-        {
-            if (data.size() == 1)
-                return data.front();
-            return {};
-        }
-
-        friend constexpr bool operator==(const char_str& x, const char_str& y) = default;
-    };
-
-    struct backref
+    [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
     {
-        unsigned int number;
+        if (data.size() == 1)
+            return data.front();
+        return {};
+    }
 
-        friend constexpr bool operator==(const backref& x, const backref& y) = default;
-    };
+    friend constexpr bool operator==(const char_str& x, const char_str& y) = default;
+};
+
+struct backref
+{
+    unsigned int number;
+
+    friend constexpr bool operator==(const backref& x, const backref& y) = default;
+};
+
 }
 
 template<typename CharT>
@@ -3905,8 +3909,10 @@ constexpr named_character_class lexer<CharT>::parse_posix_char_class()
 }
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 using tag_number_t = int; /* note: tags must be non-negative */
 inline constexpr tag_number_t start_of_input_tag{ std::numeric_limits<tag_number_t>::min() };
@@ -4105,8 +4111,10 @@ private:
 };
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace parser {
 
 template<typename CharT>
@@ -4248,8 +4256,10 @@ template<typename CharT>
 expr_tree(const CharT*, parser_flags) -> expr_tree<CharT>;
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 /* observer for non empty match */
 
@@ -5054,8 +5064,11 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
 }
 
 }
+}
 
-namespace srx::detail::parser {
+namespace srx {
+namespace detail {
+namespace parser {
 
 struct capture_flags
 {
@@ -5199,7 +5212,8 @@ public:
         if (elem.mode == cse::modes::flag_assigning)
         {
             template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
-                if (elem.flags.[: e :] != cf::inherit)
+                if (elem.flags.[: e
+                                :] != cf::inherit)
                     target.flags.[: e :] = elem.flags.[: e :];
         }
 
@@ -5219,7 +5233,8 @@ private:
     [[nodiscard]] constexpr bool get() const
     {
         for (const auto& elem : elems_ | std::views::reverse)
-            if (elem.flags.[: CaptureFlagReflection :] != cf::inherit)
+            if (elem.flags.[: CaptureFlagReflection
+                            :] != cf::inherit)
                 return elem.flags.[: CaptureFlagReflection :] == cf::enabled;
         return base_.flags.[: CaptureFlagReflection :] == cf::enabled;
     }
@@ -5253,8 +5268,11 @@ private:
 };
 
 }
+}
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace parser {
 
 template<typename CharT>
@@ -6559,8 +6577,10 @@ constexpr expr_tree<CharT>::expr_tree(const std::vector<sv_type>& svs, const par
 }
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace tnfa {
 
 using state_t = std::size_t;
@@ -6570,24 +6590,25 @@ using continue_at_t = std::uint_least16_t;
 template<typename CharT>
 using charset_t = std::conditional_t<sizeof(CharT) == 1, bitcharset<CharT>, charset<CharT>>;
 
-namespace assert_category
-{
-    struct eof_tag_t { explicit eof_tag_t() = default; };
-    struct sof_tag_t { explicit sof_tag_t() = default; };
-    struct lookahead1_tag_t { explicit lookahead1_tag_t() = default; };
-    struct lookbehind1_tag_t { explicit lookbehind1_tag_t() = default; };
-
-    inline constexpr eof_tag_t         eof_tag{};
-    inline constexpr sof_tag_t         sof_tag{};
-    inline constexpr lookahead1_tag_t  lookahead1_tag{};
-    inline constexpr lookbehind1_tag_t lookbehind1_tag{};
-}
-
 struct stack_elem
 {
     tnfa::state_t q0, qf;
     std::size_t idx;
 };
+
+namespace assert_category {
+
+struct eof_tag_t { explicit eof_tag_t() = default; };
+struct sof_tag_t { explicit sof_tag_t() = default; };
+struct lookahead1_tag_t { explicit lookahead1_tag_t() = default; };
+struct lookbehind1_tag_t { explicit lookbehind1_tag_t() = default; };
+
+inline constexpr eof_tag_t         eof_tag{};
+inline constexpr sof_tag_t         sof_tag{};
+inline constexpr lookahead1_tag_t  lookahead1_tag{};
+inline constexpr lookbehind1_tag_t lookbehind1_tag{};
+
+}
 
 /* tnfa transitions */
 
@@ -6806,8 +6827,10 @@ private:
 };
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 /* graph helper functions */
 
@@ -8339,8 +8362,10 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
 }
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace tdfa {
 
 template<typename CharT>
@@ -8499,8 +8524,10 @@ private:
 };
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 namespace tdfa {
 
 constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, reg_t regcount);
@@ -10523,8 +10550,10 @@ constexpr void tagged_dfa<CharT>::de_default_edges()
 }
 
 }
+}
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 struct final_capture_info
 {
@@ -10761,6 +10790,7 @@ inline constexpr auto re = compile_pattern(P.view(), unpack_flags(F));
 struct match_non_empty_t {};
 inline constexpr match_non_empty_t match_non_empty;
 
+}
 }
 
 namespace srx {
@@ -11021,7 +11051,8 @@ constexpr bool std::ranges::disable_sized_range<srx::submatch<I>> = not std::siz
 
 /* submatch factory implementation */
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<std::bidirectional_iterator I>
 class submatch_factory
@@ -11041,6 +11072,7 @@ public:
     }
 };
 
+}
 }
 
 namespace srx {
@@ -11415,7 +11447,8 @@ struct std::tuple_element<N, srx::static_match_results<Iter, Captures>>
     using type = srx::static_match_results<Iter, Captures>::submatch_type;
 };
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 struct tree_info
@@ -11664,7 +11697,7 @@ private:
                 std::ranges::sort(vec);
                 auto [it, _] = std::ranges::unique(vec);
                 vec.erase(it, vec.end());
-                return std::define_static_array(vec);
+                return define_static_array(vec);
             }();
 
             template for (constexpr auto tagnum : staged)
@@ -12165,7 +12198,7 @@ private:
                 std::ranges::sort(vec);
                 auto [it, _] = std::ranges::unique(vec);
                 vec.erase(it, vec.end());
-                return std::define_static_array(vec);
+                return define_static_array(vec);
             }();
 
             using saved_t = std::conditional_t<std::contiguous_iterator<I>, I, bool>;
@@ -12417,12 +12450,14 @@ struct naive_matcher_adaptor<Pattern, Flags>
 };
 
 }
+}
 
 #if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     #include <simd>
 #endif
 
-namespace srx::detail {
+namespace srx {
+namespace detail {
 
 template<typename CharT>
 struct optimised_tr_edge
@@ -12643,7 +12678,7 @@ template<static_charset Sc>
     {
         static constexpr bool inverted{ false /* Sc.should_invert() */ };
 
-        template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Sc, inverted)))
+        template for (constexpr auto ote : define_static_array(make_optimised_edges(Sc, inverted)))
         {
             uchar_type d{ c };
 
@@ -12702,7 +12737,7 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
         static constexpr bool inverted{ Sc.should_invert() };
         mask_type result{ inverted };
 
-        template for (constexpr auto ote : std::define_static_array(make_optimised_edges(Sc, inverted)))
+        template for (constexpr auto ote : define_static_array(make_optimised_edges(Sc, inverted)))
         {
             auto d_vec{ c_vec };
 
@@ -12742,8 +12777,8 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
 template<std::meta::info DFARefl>
 struct p1306dfa
 {
-    static constexpr tdfa_info DFA{ [:DFARefl
-        :] };
+    static constexpr tdfa_info DFA{ [: DFARefl
+                                     :] };
     using char_type = decltype(DFA)::char_type;
 
     static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
@@ -13250,7 +13285,7 @@ private:
     static constexpr bool vector_outer_state(Result result, I it, const S last)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
-        static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState));
+        static constexpr auto states = define_static_array(get_flattened_states(DFA, DFAState));
 
         using uchar_type = std::make_unsigned_t<char_type>;
         using vec_type = std::simd::vec<uchar_type>;
@@ -13328,7 +13363,7 @@ private:
     static constexpr bool vector_outer_state(Result result, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
-        static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState, true));
+        static constexpr auto states = define_static_array(get_flattened_states(DFA, DFAState, true));
 
         using uchar_type = std::make_unsigned_t<char_type>;
         using vec_type = std::simd::vec<uchar_type>;
@@ -13604,6 +13639,7 @@ using p1306_matcher = p1306dfa<(^^re<Pattern, pack_flags(Flags)>)>::matcher;
 template<string_literal Pattern, fsm_flags Flags>
 using p1306_searcher = p1306dfa<(^^re<Pattern, pack_flags(adapt_searcher_flags_to_matcher(Flags))>)>::searcher;
 
+}
 }
 
 namespace srx {

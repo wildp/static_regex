@@ -9,24 +9,25 @@
 #include <algorithm>
 #include <string_view>
 
-namespace srx
+namespace srx {
+
+template<typename CharT, std::size_t N>
+struct string_literal
 {
-    template<typename CharT, std::size_t N>
-    struct string_literal
+    static_assert(N != 0);
+    using value_type = CharT;
+
+    consteval string_literal(const value_type (&str)[N])
     {
-        static_assert(N != 0);
-        using value_type = CharT;
+        std::ranges::copy_n(str, N, value_);
+    }
 
-        consteval string_literal(const value_type (&str)[N])
-        {
-            std::ranges::copy_n(str, N, value_);
-        }
+    [[nodiscard]] constexpr std::basic_string_view<value_type> view() const
+    {
+        return { value_, N - 1 };
+    }
 
-        [[nodiscard]] constexpr std::basic_string_view<value_type> view() const
-        {
-            return { value_, N - 1 };
-        }
+    value_type value_[N]{};
+};
 
-        value_type value_[N]{};
-    };
-}
+} // namespace srx
