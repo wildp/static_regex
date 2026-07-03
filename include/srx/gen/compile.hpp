@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "srx/api/regex_error.hpp"
 #include "srx/ast/tree.hpp"
 #include "srx/etc/static_charset.hpp"
 #include "srx/etc/static_span.hpp"
@@ -176,7 +175,7 @@ private:
     }
 
 public:
-    explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa, const std::pair<std::size_t, std::size_t>& mml)
+    explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa, const std::pair<std::size_t, std::size_t>& mml, fsm_flags f)
         : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
         , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
         , continue_nodes{ dfa.continue_nodes() }
@@ -188,7 +187,8 @@ public:
         , match_start{ dfa.match_start }
         , captures{ dfa.get_capture_info() }
         , outer_transitions{ make_continue_info(dfa, nfa) }
-        , min_max_lengths{ mml } {}
+        , min_max_lengths{ mml }
+        , flags{ f } {}
 
     [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
     {
@@ -213,6 +213,8 @@ public:
 
     static_span<static_transition<char_type>> outer_transitions;
     std::pair<std::size_t, std::size_t> min_max_lengths;
+
+    fsm_flags flags;
 };
 
 
@@ -249,8 +251,11 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     dfa.minimise_transition_edges();
     dfa.de_default_edges();
 
-    return tdfa_info{ dfa, nfa, mml };
+    return tdfa_info{ dfa, nfa, mml, f };
 }
+
+template<string_literal Pattern, fsm_flags Flags>
+inline constexpr auto re = compile_pattern(Pattern.view(), Flags);
 
 
 struct match_non_empty_t {};

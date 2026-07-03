@@ -136,13 +136,13 @@ consteval std::size_t score_optimised_edges(const std::vector<optimised_tr_edge<
         std::size_t mask_bits{ bit_count - std::popcount(msk) };
         std::size_t number{ (1 + rng) * mask_bits };
         count += number;
-        ops += 2 + (rng != 0) * range_penalty + (mask_bits != 0);
+        ops += 2 + ((rng != 0) * range_penalty) + (mask_bits != 0);
     }
 
     if (inverted)
         count = (~0uz >> (std::numeric_limits<std::size_t>::digits - bit_count)) - count;
 
-    return count * scale + ops;
+    return (count * scale) + ops;
 }
 
 template<typename CharT>
@@ -350,19 +350,22 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
 }
 #endif // __cpp_lib_simd >= 202411L
 
-template<string_literal Pattern, fsm_flags Flags>
+
+template<std::meta::info DFARefl>
+// template<string_literal Pattern, fsm_flags Flags>
 struct p1306dfa
 {
-    using char_type = decltype(Pattern)::value_type;
+    static constexpr tdfa_info DFA{ [:DFARefl
+        :] }; // line break avoid breaking syntax highlighting
+    using char_type = decltype(DFA)::char_type;
 
-    static constexpr tdfa_info DFA{ compile_pattern(Pattern.view(), Flags) };
     static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
     static constexpr bool fixed_length{ DFA.min_max_lengths.first != std::numeric_limits<std::size_t>::max()
                                         and DFA.min_max_lengths.first == DFA.min_max_lengths.second };
     static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
 
     template<typename I>
-    using result = static_match_results<I, DFA.make_match_result_info(Flags.is_iterator)>;
+    using result = static_match_results<I, DFA.make_match_result_info(DFA.flags.is_iterator)>;
 
 private:
     static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
@@ -401,20 +404,17 @@ private:
     template<typename I>
     result_t(result<I>&, gen_info&) -> result_t<I, true>;
 
-    static constexpr bool has_fallback_it{ not Flags.return_bool };
+    static constexpr bool has_fallback_it{ not DFA.flags.return_bool };
 
     template<typename I>
     struct fallback_info
     {
-        [[no_unique_address]] maybe_type_t<has_fallback_it, I> it;
+        [[no_unique_address]] maybe_type_t<(not DFA.flags.return_bool), I> it;
         std::size_t state;
     };
 
     template<typename I>
-    using maybe_fallback_t = maybe_type_t<Flags.enable_fallback, fallback_info<I>>;
-
-    static constexpr bool return_bool = (Flags.return_bool);
-
+    using maybe_fallback_t = maybe_type_t<DFA.flags.enable_fallback, fallback_info<I>>;
 
     template<std::bidirectional_iterator I>
     static constexpr void clean_generations(result<I>& res, const gen_info& gen)
@@ -519,18 +519,18 @@ private:
 
     template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
     static constexpr bool fallback_state(Result result, I /* it */, const S /* last */, fallback_info<I> fallback)
-        requires (Flags.enable_fallback)
+        requires (DFA.flags.enable_fallback)
     {
         if (fallback.state == fallback_disabled)
             return false;
 
         // TODO: change to use structured binding when supported
-        template for (constexpr const auto& pair : DFA.fallback_nodes)
+        template for (constexpr auto pair : DFA.fallback_nodes)
         {
             if (fallback.state == pair.first)
             {
                 static constexpr auto fni = DFA.final_nodes.at(pair.first);
-                if constexpr (has_fallback_it)
+                if constexpr (not DFA.flags.return_bool)
                     set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(result, fallback.it);
                 return true;
             }
@@ -545,10 +545,10 @@ private:
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
 
-        if constexpr (Flags.enable_fallback and fallback_node != nullptr)
+        if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
         {
             fallback.state = DFAState;
-            if constexpr (has_fallback_it)
+            if constexpr (not DFA.flags.return_bool)
                 fallback.it = it;
         }
 
@@ -563,7 +563,7 @@ private:
                 }
             }
 
-            if constexpr (final_node != nullptr and Flags.enable_fallback and fallback_node != nullptr)
+            if constexpr (final_node != nullptr and DFA.flags.enable_fallback and fallback_node != nullptr)
             {
                 set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
                 return true;
@@ -573,7 +573,7 @@ private:
         {
             if constexpr (final_node != nullptr)
             {
-                if constexpr (Flags.enable_fallback and fallback_node != nullptr)
+                if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
                     set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
                 else
                     set_final_info<final_node->op_index, final_node->final_offset>(result, it);
@@ -581,7 +581,7 @@ private:
             }
         }
 
-        if constexpr (Flags.enable_fallback and fallback_node == nullptr)
+        if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
             [[clang::musttail]] return fallback_state(result, it, last, fallback);
         return false;
     }
@@ -592,10 +592,10 @@ private:
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
 
-        if constexpr (Flags.enable_fallback and fallback_node != nullptr)
+        if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
         {
             fallback.state = DFAState;
-            if constexpr (has_fallback_it)
+            if constexpr (not DFA.flags.return_bool)
                 fallback.it = it;
         }
 
@@ -610,7 +610,7 @@ private:
 
         if constexpr (final_node != nullptr)
         {
-            if constexpr (Flags.enable_fallback and fallback_node != nullptr)
+            if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
                 set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
                 return true;
@@ -625,7 +625,7 @@ private:
             }
         }
 
-        if constexpr (Flags.enable_fallback and fallback_node == nullptr)
+        if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
             [[clang::musttail]] return fallback_state(result, it, last, fallback);
         return false;
     }
@@ -686,7 +686,7 @@ private:
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
     static constexpr bool initial_state(Result result, I it, const S last)
-        requires (fixed_length and not Flags.enable_fallback)
+        requires (fixed_length and not DFA.flags.enable_fallback)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -697,7 +697,7 @@ private:
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
     static constexpr bool initial_state(Result result, I it, const S last)
-        requires (Flags.enable_fallback or not fixed_length)
+        requires (DFA.flags.enable_fallback or not fixed_length)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -783,7 +783,7 @@ private:
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
     static constexpr bool scalar_outer_state(Result result, I it, const S last)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
-                  and (Flags.enable_fallback or not fixed_length))
+                  and (DFA.flags.enable_fallback or not fixed_length))
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -811,7 +811,7 @@ private:
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
     static constexpr bool scalar_outer_state(Result result, I it, const S last)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
-                  and (/* degenerate case */ fixed_length and not Flags.enable_fallback))
+                  and (/* degenerate case */ fixed_length and not DFA.flags.enable_fallback))
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -834,7 +834,8 @@ private:
     }
 
 #if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
-    template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+    template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip,
+             typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
     [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
     {
@@ -963,7 +964,7 @@ private:
         // TODO: possibly select a second position to check?
         static constexpr static_charset combined_cs = []{
             charset<char_type> result;
-            template for (constexpr auto& tr : DFA.nodes[position])
+            template for (constexpr auto tr : DFA.nodes[position])
                 result |= tr.cs;
             return static_charset{ result };
         }();
@@ -1027,24 +1028,26 @@ public:
     struct searcher;
 };
 
-template<string_literal Pattern, fsm_flags Flags>
-struct p1306dfa<Pattern, Flags>::matcher
+
+template<std::meta::info DFARefl>
+struct p1306dfa<DFARefl>::matcher
 {
 public:
     template<std::bidirectional_iterator I>
     using result = p1306dfa::result<I>;
 
+    static constexpr bool normal_mode{ not DFA.flags.return_bool };
     static constexpr bool never_empty{ p1306dfa::never_empty };
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires (not normal_mode) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         return initial_state<DFA.match_start>(no_result{}, first, last);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
     {
         result<I> res{ first };
@@ -1053,15 +1056,9 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
-#ifndef __GNUC_MINOR__
-        requires result<I>::has_continue
-#endif
     {
-#ifdef __GNUC_MINOR__
-        static_assert(result<I>::has_continue);
-#endif
         result<I> res{ first };
 
         template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
@@ -1081,9 +1078,8 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and (DFA.flags.maybe_no_empty)
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
-        requires (Flags.maybe_no_empty)
     {
         result<I> res{ first };
         if constexpr (never_empty)
@@ -1094,15 +1090,9 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue and (DFA.flags.maybe_no_empty)
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
-#ifndef __GNUC_MINOR__
-        requires result<I>::has_continue and (Flags.maybe_no_empty)
-#endif
     {
-#ifdef __GNUC_MINOR__
-        static_assert(result<I>::has_continue and (Flags.maybe_no_empty));
-#endif
         result<I> res{ first };
 
         template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
@@ -1125,24 +1115,26 @@ public:
     }
 };
 
-template<string_literal Pattern, fsm_flags Flags>
-struct p1306dfa<Pattern, Flags>::searcher
+
+template<std::meta::info DFARefl>
+struct p1306dfa<DFARefl>::searcher
 {
 public:
     template<std::bidirectional_iterator I>
     using result = p1306dfa::result<I>;
 
+    static constexpr bool normal_mode{ not DFA.flags.return_bool };
     static constexpr bool never_empty{ p1306dfa::never_empty };
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires (not normal_mode) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         return outer_state<DFA.match_start>(no_result{}, first, last);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
     {
         result<I> res{ first };
@@ -1153,15 +1145,9 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
-#ifndef __GNUC_MINOR__
-        requires result<I>::has_continue
-#endif
     {
-#ifdef __GNUC_MINOR__
-        static_assert(result<I>::has_continue);
-#endif
         result<I> res{ first };
         gen_info gen{};
 
@@ -1184,9 +1170,8 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and (DFA.flags.maybe_no_empty)
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
-        requires (Flags.maybe_no_empty)
     {
         result<I> res{ first };
         gen_info gen{};
@@ -1201,15 +1186,9 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not Flags.return_bool) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue and (DFA.flags.maybe_no_empty)
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
-#ifndef __GNUC_MINOR__
-        requires result<I>::has_continue and (Flags.maybe_no_empty)
-#endif
     {
-#ifdef __GNUC_MINOR__
-        static_assert(result<I>::has_continue and (Flags.maybe_no_empty));
-#endif
         result<I> res{ first };
         gen_info gen{};
 
@@ -1236,9 +1215,9 @@ public:
 };
 
 template<string_literal Pattern, fsm_flags Flags>
-using p1306_matcher = p1306dfa<Pattern, Flags>::matcher;
+using p1306_matcher = p1306dfa<(^^re<Pattern, Flags>)>::matcher;
 
 template<string_literal Pattern, fsm_flags Flags>
-using p1306_searcher = p1306dfa<Pattern, adapt_searcher_flags_to_matcher(Flags)>::searcher;
+using p1306_searcher = p1306dfa<(^^re<Pattern, adapt_searcher_flags_to_matcher(Flags)>)>::searcher;
 
 } // namespace srx::detail

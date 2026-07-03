@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include <concepts>
 #include <cstddef>
 #include <iterator>
+#include <meta>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -17,14 +17,13 @@
 #include "srx/api/submatch.hpp"
 #include "srx/etc/string_literal.hpp"
 #include "srx/etc/util.hpp"
-#include "srx/fsm/flags.hpp"
 #include "srx/gen/compile.hpp"
 
 
 namespace srx {
 namespace detail {
 
-template<string_literal Pattern, fsm_flags Flags>
+template<std::meta::info DFARefl>
 struct p1306dfa;
 
 template<srx::string_literal Pattern>
@@ -157,7 +156,7 @@ public:
         return {};
     }
 
-    template<srx::string_literal Pattern, srx::detail::fsm_flags Flags>
+    template<std::meta::info DFARefl>
     friend struct detail::p1306dfa;
 
     template<srx::string_literal Pattern>

@@ -139,7 +139,8 @@ namespace hash
     constexpr void append(std::size_t& hash, const T& value)
     {
         template for (constexpr auto member : define_static_array(nonstatic_data_members_of(dealias(^^T), std::meta::access_context::unchecked())))
-            append(hash, value.[:member:]);
+            append(hash, value.[:member
+                :]); // line break to fix syntax highlighting
     }
 };
 
