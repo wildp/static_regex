@@ -382,6 +382,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <bitset>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
@@ -650,6 +651,8 @@ inline constexpr fsm_flags match_sequential{
 
 }
 
+/* flag adaptors */
+
 constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
 {
     f.is_search = false;
@@ -668,6 +671,37 @@ constexpr fsm_flags adapt_flags_non_capturing(fsm_flags f)
 {
     f.no_captures = true;
     return f;
+}
+
+/* packed flag representation */
+
+using ff = unsigned long long;
+
+constexpr ff pack_flags(fsm_flags f)
+{
+    static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^fsm_flags, std::meta::access_context::unprivileged())) };
+    static_assert(nsdms.size() <= std::numeric_limits<ff>::digits);
+
+    std::bitset<nsdms.size()> bitset;
+
+    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+        bitset[i] = f.[: nsdms[i] :];
+
+    return bitset.to_ullong();
+}
+
+constexpr fsm_flags unpack_flags(ff f)
+{
+    static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^fsm_flags, std::meta::access_context::unprivileged())) };
+    static_assert(nsdms.size() <= std::numeric_limits<ff>::digits);
+
+    std::bitset<nsdms.size()> bitset{ f };
+    fsm_flags result{};
+
+    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+        result.[: nsdms[i]:] = bitset[i];
+
+    return result;
 }
 
 }
@@ -10721,8 +10755,8 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     return tdfa_info{ dfa, nfa, mml, f };
 }
 
-template<string_literal Pattern, fsm_flags Flags>
-inline constexpr auto re = compile_pattern(Pattern.view(), Flags);
+template<string_literal P, ff F>
+inline constexpr auto re = compile_pattern(P.view(), unpack_flags(F));
 
 struct match_non_empty_t {};
 inline constexpr match_non_empty_t match_non_empty;
@@ -12871,8 +12905,8 @@ private:
     static constexpr void set_fallback_info(no_result /* result */, const I /* it */) {};
 
     template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool fallback_state(Result result, I /* it */, const S /* last */, fallback_info<I> fallback)
         requires (DFA.flags.enable_fallback)
+    static constexpr bool fallback_state(Result result, I /* it */, const S /* last */, fallback_info<I> fallback)
     {
         if (fallback.state == fallback_disabled)
             return false;
@@ -13038,23 +13072,20 @@ private:
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
     static constexpr bool initial_state(Result result, I it, const S last)
-        requires (fixed_length and not DFA.flags.enable_fallback)
-    {
-        static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
-
-        if (std::ranges::distance(it, last) == length)
-            return unchecked_state<DFAState, length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
-        return false;
-    }
-
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool initial_state(Result result, I it, const S last)
-        requires (DFA.flags.enable_fallback or not fixed_length)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
-        if (std::ranges::distance(it, last) >= min_length)
-            return unchecked_state<DFAState, min_length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
+        if constexpr (fixed_length and not DFA.flags.enable_fallback)
+        {
+            if (std::ranges::distance(it, last) == min_length)
+                return unchecked_state<DFAState, min_length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
+        }
+        else
+        {
+            if (std::ranges::distance(it, last) >= min_length)
+                return unchecked_state<DFAState, min_length>(result, it, last, maybe_fallback_t<I>{ it, fallback_disabled });
+        }
+
         return false;
     }
 
@@ -13133,9 +13164,9 @@ private:
     }
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool scalar_outer_state(Result result, I it, const S last)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and (DFA.flags.enable_fallback or not fixed_length))
+    static constexpr bool scalar_outer_state(Result result, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -13161,9 +13192,9 @@ private:
     }
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool scalar_outer_state(Result result, I it, const S last)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and (/* degenerate case */ fixed_length and not DFA.flags.enable_fallback))
+    static constexpr bool scalar_outer_state(Result result, I it, const S last)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -13188,8 +13219,9 @@ private:
 #if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip,
              typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
-    [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
+    [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
+
     {
         while (mask != 0) [[unlikely]]
         {
@@ -13213,9 +13245,9 @@ private:
     }
 
     template<std::size_t DFAState, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool vector_outer_state(Result result, I it, const S last)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and fixed_length and branch_free)
+    static constexpr bool vector_outer_state(Result result, I it, const S last)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
         static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState));
@@ -13291,9 +13323,9 @@ private:
     }
 
     template<std::size_t DFAState, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool vector_outer_state(Result result, I it, const S last)
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and (not fixed_length or not branch_free))
+    static constexpr bool vector_outer_state(Result result, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
         static constexpr auto states = std::define_static_array(get_flattened_states(DFA, DFAState, true));
@@ -13381,22 +13413,24 @@ public:
 template<std::meta::info DFARefl>
 struct p1306dfa<DFARefl>::matcher
 {
+    static constexpr bool enable_normal{ not DFA.flags.return_bool };
+    static constexpr bool enable_noempty{ enable_normal and DFA.flags.maybe_no_empty };
+
 public:
     template<std::bidirectional_iterator I>
     using result = p1306dfa::result<I>;
 
-    static constexpr bool normal_mode{ not DFA.flags.return_bool };
     static constexpr bool never_empty{ p1306dfa::never_empty };
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not normal_mode) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires (not enable_normal) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         return initial_state<DFA.match_start>(no_result{}, first, last);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires enable_normal and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
     {
         result<I> res{ first };
@@ -13405,7 +13439,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
+        requires enable_normal and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
     {
         result<I> res{ first };
@@ -13427,7 +13461,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and (DFA.flags.maybe_no_empty)
+        requires enable_noempty and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
     {
         result<I> res{ first };
@@ -13439,7 +13473,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue and (DFA.flags.maybe_no_empty)
+        requires enable_noempty and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
     {
         result<I> res{ first };
@@ -13467,22 +13501,24 @@ public:
 template<std::meta::info DFARefl>
 struct p1306dfa<DFARefl>::searcher
 {
+    static constexpr bool enable_normal{ not DFA.flags.return_bool };
+    static constexpr bool enable_noempty{ enable_normal and DFA.flags.maybe_no_empty };
+
 public:
     template<std::bidirectional_iterator I>
     using result = p1306dfa::result<I>;
 
-    static constexpr bool normal_mode{ not DFA.flags.return_bool };
     static constexpr bool never_empty{ p1306dfa::never_empty };
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires (not normal_mode) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires (not enable_normal) and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         return outer_state<DFA.match_start>(no_result{}, first, last);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+        requires enable_normal and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr auto operator()(const I first, const S last) -> result<I>
     {
         result<I> res{ first };
@@ -13493,7 +13529,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
+        requires enable_normal and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at) -> result<I>
     {
         result<I> res{ first };
@@ -13518,7 +13554,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and (DFA.flags.maybe_no_empty)
+        requires enable_noempty and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, match_non_empty_t) -> result<I>
     {
         result<I> res{ first };
@@ -13534,7 +13570,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires normal_mode and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue and (DFA.flags.maybe_no_empty)
+        requires enable_noempty and std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and result<I>::has_continue
     [[nodiscard]] static constexpr auto operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t) -> result<I>
     {
         result<I> res{ first };
@@ -13563,10 +13599,10 @@ public:
 };
 
 template<string_literal Pattern, fsm_flags Flags>
-using p1306_matcher = p1306dfa<(^^re<Pattern, Flags>)>::matcher;
+using p1306_matcher = p1306dfa<(^^re<Pattern, pack_flags(Flags)>)>::matcher;
 
 template<string_literal Pattern, fsm_flags Flags>
-using p1306_searcher = p1306dfa<(^^re<Pattern, adapt_searcher_flags_to_matcher(Flags)>)>::searcher;
+using p1306_searcher = p1306dfa<(^^re<Pattern, pack_flags(adapt_searcher_flags_to_matcher(Flags))>)>::searcher;
 
 }
 

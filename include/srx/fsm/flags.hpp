@@ -6,6 +6,11 @@
 
 #pragma once
 
+#include <bitset>
+#include <limits>
+#include <meta>
+#include <ranges>
+
 
 namespace srx::detail {
 
@@ -76,6 +81,8 @@ inline constexpr fsm_flags match_sequential{
 } // namespace default_fsm_flags;
 
 
+/* flag adaptors */
+
 constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
 {
     f.is_search = false;
@@ -94,6 +101,38 @@ constexpr fsm_flags adapt_flags_non_capturing(fsm_flags f)
 {
     f.no_captures = true;
     return f;
+}
+
+
+/* packed flag representation */
+
+using ff = unsigned long long;
+
+constexpr ff pack_flags(fsm_flags f)
+{
+    static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^fsm_flags, std::meta::access_context::unprivileged())) };
+    static_assert(nsdms.size() <= std::numeric_limits<ff>::digits);
+
+    std::bitset<nsdms.size()> bitset;
+
+    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+        bitset[i] = f.[: nsdms[i] :];
+
+    return bitset.to_ullong();
+}
+
+constexpr fsm_flags unpack_flags(ff f)
+{
+    static constexpr auto nsdms{ define_static_array(nonstatic_data_members_of(^^fsm_flags, std::meta::access_context::unprivileged())) };
+    static_assert(nsdms.size() <= std::numeric_limits<ff>::digits);
+
+    std::bitset<nsdms.size()> bitset{ f };
+    fsm_flags result{};
+
+    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+        result.[: nsdms[i]:] = bitset[i];
+
+    return result;
 }
 
 } // namespace srx::detail
