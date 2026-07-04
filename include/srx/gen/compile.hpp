@@ -255,8 +255,8 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     return tdfa_info{ dfa, nfa, mml, f };
 }
 
-template<string_literal P, ff F>
-inline constexpr auto re = compile_pattern(P.view(), unpack_flags(F));
+template<std::meta::info P, ff F>
+inline constexpr auto re = compile_pattern(std::basic_string_view{ [: P :] }, unpack_flags(F));
 
 
 struct match_non_empty_t {};

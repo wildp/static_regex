@@ -24,6 +24,7 @@ struct fsm_flags
     bool no_captures     : 1;
     bool return_bool     : 1;
     bool maybe_no_empty  : 1;
+    bool adapted_search  : 1;
 };
 
 
@@ -37,6 +38,7 @@ inline constexpr fsm_flags full_match{
     .no_captures     = false,
     .return_bool     = false,
     .maybe_no_empty  = false,
+    .adapted_search  = false,
 };
 
 inline constexpr fsm_flags partial_match{
@@ -47,6 +49,7 @@ inline constexpr fsm_flags partial_match{
     .no_captures     = false,
     .return_bool     = false,
     .maybe_no_empty  = false,
+    .adapted_search  = false,
 };
 
 inline constexpr fsm_flags search_single{
@@ -57,6 +60,7 @@ inline constexpr fsm_flags search_single{
     .no_captures     = false,
     .return_bool     = false,
     .maybe_no_empty  = false,
+    .adapted_search  = false,
 };
 
 inline constexpr fsm_flags search_all{
@@ -67,6 +71,7 @@ inline constexpr fsm_flags search_all{
     .no_captures     = false,
     .return_bool     = false,
     .maybe_no_empty  = true,
+    .adapted_search  = false,
 };
 
 inline constexpr fsm_flags match_sequential{
@@ -77,6 +82,7 @@ inline constexpr fsm_flags match_sequential{
     .no_captures     = false,
     .return_bool     = false,
     .maybe_no_empty  = true,
+    .adapted_search  = false,
 };
 
 } // namespace default_fsm_flags;
@@ -88,6 +94,7 @@ constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
 {
     f.is_search = false;
     f.is_iterator = true;
+    f.adapted_search = true;
     return f;
 }
 

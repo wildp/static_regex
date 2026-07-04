@@ -23,7 +23,7 @@
 namespace srx {
 namespace detail {
 
-template<std::meta::info DFARefl>
+template<std::meta::info Info>
 struct p1306dfa;
 
 template<srx::string_literal Pattern>
@@ -156,7 +156,7 @@ public:
         return {};
     }
 
-    template<std::meta::info DFARefl>
+    template<std::meta::info Info>
     friend struct detail::p1306dfa;
 
     template<srx::string_literal Pattern>
