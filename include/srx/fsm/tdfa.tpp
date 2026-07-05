@@ -335,8 +335,8 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
     {
         auto final_ops = final_regops(result.final_registers_, it->registers, it->tag_seq);
         const auto& node = tnfa_ptr_->get_node(it->tnfa_state);
-        const auto final_offset = node.final_offset;
-        const auto lexer_alt = node.lexer_alt;
+        const auto offset = node.final_offset;
+        const auto alt = node.final_alt;
 
         if (node.continue_at < tnfa_ptr_->get_cont_info().size())
             continue_at = node.continue_at;
@@ -344,11 +344,11 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
         if (final_ops.empty())
         {
             /* avoid creating empty regop blocks */
-            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = no_transition_regops, .final_offset = final_offset, .lexer_alt = lexer_alt });
+            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = no_transition_regops, .offset = offset, .alternative = alt });
         }
         else
         {
-            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = result.regops_.size(), .final_offset = final_offset, .lexer_alt = lexer_alt });
+            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = result.regops_.size(), .offset = offset, .alternative = alt });
             result.regops_.emplace_back(std::move(final_ops));
         }
     }

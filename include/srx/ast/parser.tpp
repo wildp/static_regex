@@ -1320,7 +1320,7 @@ constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags
 
 template<typename CharT>
 constexpr expr_tree<CharT>::expr_tree(const std::vector<sv_type>& svs, const parser_flags flags)
-    : flags_{ flags }, lexer_mode_{ true }
+    : flags_{ flags }, enable_alt_mode_{ true }
 {
     parser::ll1<char_type> ll1_parser(*this, svs);
 }

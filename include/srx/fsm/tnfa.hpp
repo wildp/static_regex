@@ -130,7 +130,7 @@ struct node
 
     std::uint_least16_t final_offset{ 0 };  /* only meaningful if is_final */
     continue_at_t       continue_at{ 0 };   /* only meaningful if is_final */
-    std::uint_least16_t lexer_alt{ 0 };     /* only meaningful if is_final */
+    std::uint_least16_t final_alt{ 0 };     /* only meaningful if is_final */
 };
 
 template<typename CharT>

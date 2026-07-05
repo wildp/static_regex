@@ -550,15 +550,15 @@ private:
                 ++index_;
             }
 
-            template for (constexpr std::size_t I : std::views::iota(0uz, max_index))
+            template for (constexpr std::size_t i : std::views::iota(0uz, max_index))
             {
-                if (index_ == I)
+                if (index_ == i)
                 {
                     namespace drc = detail::replace_constants;
 
-                    if constexpr (I % 2 == 0)
+                    if constexpr (i % 2 == 0)
                     {
-                        static constexpr fmt_subrange format{ fmt.subranges()[I / 2] };
+                        static constexpr fmt_subrange format{ fmt.subranges()[i / 2] };
 
                         if constexpr (not format.empty())
                         {
@@ -566,7 +566,7 @@ private:
                             return;
                         }
                     }
-                    else if constexpr (constexpr auto submatch_index = fmt.captures()[I / 2]; submatch_index == drc::prematch)
+                    else if constexpr (constexpr auto submatch_index = fmt.captures()[i / 2]; submatch_index == drc::prematch)
                     {
                         const auto mfirst = get<0>(*current_).begin();
 

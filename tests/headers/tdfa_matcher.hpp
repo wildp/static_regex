@@ -166,7 +166,7 @@ constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I 
             {
                 const auto& fni = this->final_nodes().at(next_state);
                 regops_implementation(it, fni.op_index, registers, registers_enabled);
-                it -= fni.final_offset;
+                it -= fni.offset;
                 if (this->fallback_nodes().contains(next_state))
                     continue_at = this->fallback_nodes().at(next_state).continue_at;
                 break; /* outer */
@@ -209,7 +209,7 @@ constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I 
         it = fallback_it;
         regops_implementation(it, fbni.op_index, registers, registers_enabled);
         continue_at = fbni.continue_at;
-        it -= fni.final_offset;
+        it -= fni.offset;
         break; /* outer */
     }
 

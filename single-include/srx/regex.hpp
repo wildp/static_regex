@@ -711,7 +711,7 @@ constexpr fsm_flags unpack_flags(ff f)
     fsm_flags result{};
 
     template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
-        result.[: nsdms[i]:] = bitset[i];
+        result.[: nsdms[i] :] = bitset[i];
 
     return result;
 }
@@ -4232,7 +4232,7 @@ public:
 
     [[nodiscard]] constexpr std::pair<std::size_t, std::size_t> min_max_length() const;
     [[nodiscard]] constexpr bool empty_match_possible() const;
-    [[nodiscard]] constexpr bool is_lexer_mode() const { return lexer_mode_; }
+    [[nodiscard]] constexpr bool is_alt_mode() const { return enable_alt_mode_; }
 
     constexpr void make_tag_vec(std::vector<std::vector<int>>& tag_vec) const;
     constexpr void optimise_tags();
@@ -4253,7 +4253,7 @@ private:
     capture_info capture_info_;
     tag_number_t tag_count_{ 0 };
     parser_flags flags_;
-    bool lexer_mode_{ false };
+    bool enable_alt_mode_{ false };
 };
 
 template<typename CharT>
@@ -6578,7 +6578,7 @@ constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags
 
 template<typename CharT>
 constexpr expr_tree<CharT>::expr_tree(const std::vector<sv_type>& svs, const parser_flags flags)
-    : flags_{ flags }, lexer_mode_{ true }
+    : flags_{ flags }, enable_alt_mode_{ true }
 {
     parser::ll1<char_type> ll1_parser(*this, svs);
 }
@@ -6682,7 +6682,7 @@ struct node
 
     std::uint_least16_t final_offset{ 0 };  /* only meaningful if is_final */
     continue_at_t       continue_at{ 0 };   /* only meaningful if is_final */
-    std::uint_least16_t lexer_alt{ 0 };     /* only meaningful if is_final */
+    std::uint_least16_t final_alt{ 0 };     /* only meaningful if is_final */
 };
 
 template<typename CharT>
@@ -6860,7 +6860,7 @@ constexpr auto tagged_nfa<CharT>::node_copy(const state_t q) -> state_t
     new_n.is_fallback  = old_n.is_fallback;
     new_n.final_offset = old_n.final_offset;
     new_n.continue_at  = old_n.continue_at;
-    new_n.lexer_alt = old_n.lexer_alt;
+    new_n.final_alt    = old_n.final_alt;
 
     if (new_n.is_final)
         final_nodes_.emplace_back(p);
@@ -6881,7 +6881,7 @@ constexpr void tagged_nfa<CharT>::node_copy_to(const state_t q_old, const state_
     new_n.is_fallback  = old_n.is_fallback;
     new_n.final_offset = old_n.final_offset;
     new_n.continue_at  = old_n.continue_at;
-    new_n.lexer_alt = old_n.lexer_alt;
+    new_n.final_alt    = old_n.final_alt;
 }
 
 /* transition creation helper functions */
@@ -8300,7 +8300,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
     if (tag_count_ > 1)
         ast.make_tag_vec(tag_vec);
 
-    if (not ast.is_lexer_mode())
+    if (not ast.is_alt_mode())
     {
         thompson(ast, tag_vec, stack_elem{ .q0 = default_start_node, .qf = default_final_node, .idx = ast.root_idx() });
         return;
@@ -8319,7 +8319,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
         std::ranges::copy(std::views::iota(1uz, branch_count), std::back_inserter(final_nodes_));
         std::uint_least32_t i{ 0 };
         for (auto& new_final_node : nodes_ | std::views::drop(2))
-            new_final_node.lexer_alt = ++i;
+            new_final_node.final_alt = ++i;
     }
 
     for (std::size_t i{ 0 }; i < branch_count; ++i)
@@ -8421,8 +8421,8 @@ inline constexpr regops_t empty_regops{};
 struct final_node_info
 {
     std::size_t         op_index;
-    std::uint_least16_t final_offset;
-    std::uint_least32_t lexer_alt;
+    std::uint_least16_t offset;
+    std::uint_least32_t alternative;
 
     friend constexpr bool operator==(const final_node_info&, const final_node_info&) noexcept = default;
     friend constexpr auto operator<=>(const final_node_info&, const final_node_info&) noexcept = default;
@@ -8845,8 +8845,8 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
     {
         auto final_ops = final_regops(result.final_registers_, it->registers, it->tag_seq);
         const auto& node = tnfa_ptr_->get_node(it->tnfa_state);
-        const auto final_offset = node.final_offset;
-        const auto lexer_alt = node.lexer_alt;
+        const auto offset = node.final_offset;
+        const auto alt = node.final_alt;
 
         if (node.continue_at < tnfa_ptr_->get_cont_info().size())
             continue_at = node.continue_at;
@@ -8854,11 +8854,11 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
         if (final_ops.empty())
         {
             /* avoid creating empty regop blocks */
-            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = no_transition_regops, .final_offset = final_offset, .lexer_alt = lexer_alt });
+            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = no_transition_regops, .offset = offset, .alternative = alt });
         }
         else
         {
-            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = result.regops_.size(), .final_offset = final_offset, .lexer_alt = lexer_alt });
+            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = result.regops_.size(), .offset = offset, .alternative = alt });
             result.regops_.emplace_back(std::move(final_ops));
         }
     }
@@ -10662,7 +10662,7 @@ private:
         {
             auto scored_pairs = std::views::zip(std::views::iota(0uz),
                                                 vec | std::views::transform([](const auto& t){ return t.second.score_intervals(); }))
-                                | std::ranges::to<std::vector>();
+                                                    | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
 
@@ -10714,7 +10714,8 @@ private:
     }
 
 public:
-    explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa, const std::pair<std::size_t, std::size_t>& mml, fsm_flags f)
+    explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa,
+                                 const std::pair<std::size_t, std::size_t>& mml, fsm_flags f, bool alt_mode)
         : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
         , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
         , continue_nodes{ dfa.continue_nodes() }
@@ -10727,7 +10728,8 @@ public:
         , captures{ dfa.get_capture_info() }
         , outer_transitions{ make_continue_info(dfa, nfa) }
         , min_max_lengths{ mml }
-        , flags{ f } {}
+        , flags{ f }
+        , alt_mode{ alt_mode }{}
 
     [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
     {
@@ -10754,6 +10756,7 @@ public:
     std::pair<std::size_t, std::size_t> min_max_lengths;
 
     fsm_flags flags;
+    bool alt_mode;
 };
 
 template<typename CharT>
@@ -10788,7 +10791,7 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     dfa.minimise_transition_edges();
     dfa.de_default_edges();
 
-    return tdfa_info{ dfa, nfa, mml, f };
+    return tdfa_info{ dfa, nfa, mml, f, ast.is_alt_mode() };
 }
 
 template<std::meta::info P, ff F>
@@ -12667,10 +12670,8 @@ template<static_charset Sc>
 {
 #ifndef __GNUC_MINOR__
     template for (constexpr auto pair : Sc.get_intervals())
-    {
         if (pair.first <= c and c <= pair.second)
             return true;
-    }
     return false;
 #else
     using char_type = decltype(Sc)::char_type;
@@ -12925,29 +12926,29 @@ private:
     static constexpr void register_operations(no_result /* result */, const I /* it */) {}
 
     template<std::size_t Blk, std::ptrdiff_t Offset, typename Result, std::bidirectional_iterator I>
-    static constexpr void set_final_info(Result result, const I it)
+    static constexpr void set_final_info(Result rag, const I it)
     {
-        register_operations<Blk>(result, it);
-        result.res.match_end_ = std::ranges::prev(it, Offset);
+        if constexpr (not std::same_as<Result, no_result>)
+        {
+            register_operations<Blk>(rag, it);
+            rag.res.match_end_ = std::ranges::prev(it, Offset);
 
-        if constexpr (not std::contiguous_iterator<I>)
-            result.res.match_success_ = true;
+            if constexpr (not std::contiguous_iterator<I>)
+                rag.res.match_success_ = true;
+        }
     }
 
     template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, typename Result, std::bidirectional_iterator I>
     static constexpr void set_fallback_info(Result rag, const I it)
     {
-        set_final_info<Blk, Offset>(rag, it);
+        if constexpr (not std::same_as<Result, no_result>)
+        {
+            set_final_info<Blk, Offset>(rag, it);
 
-        if constexpr (result<I>::has_continue and ContinueAt != tdfa::no_continue)
-            rag.res.continue_at_ = ContinueAt;
+            if constexpr (result<I>::has_continue and ContinueAt != tdfa::no_continue)
+                rag.res.continue_at_ = ContinueAt;
+        }
     }
-
-    template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I>
-    static constexpr void set_final_info(no_result /* result */, const I /* it */) {};
-
-    template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I>
-    static constexpr void set_fallback_info(no_result /* result */, const I /* it */) {};
 
     template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires (DFA.flags.enable_fallback)
@@ -12962,7 +12963,7 @@ private:
             {
                 static constexpr auto fni = DFA.final_nodes.at(pair.first);
                 if constexpr (not DFA.flags.return_bool)
-                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(result, fallback.it);
+                    set_fallback_info<pair.second.op_index, fni.offset, pair.second.continue_at>(result, fallback.it);
                 return true;
             }
         }
@@ -12996,7 +12997,7 @@ private:
 
             if constexpr (final_node != nullptr and DFA.flags.enable_fallback and fallback_node != nullptr)
             {
-                set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
+                set_fallback_info<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
                 return true;
             }
         }
@@ -13005,9 +13006,9 @@ private:
             if constexpr (final_node != nullptr)
             {
                 if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
-                    set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
+                    set_fallback_info<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
                 else
-                    set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                    set_final_info<final_node->op_index, final_node->offset>(result, it);
                 return true;
             }
         }
@@ -13043,14 +13044,14 @@ private:
         {
             if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
-                set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
+                set_fallback_info<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
                 return true;
             }
             else
             {
                 if (it == last) [[likely]]
                 {
-                    set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                    set_final_info<final_node->op_index, final_node->offset>(result, it);
                     return true;
                 }
             }
@@ -13151,7 +13152,7 @@ private:
         {
             if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
             {
-                set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                set_final_info<final_node->op_index, final_node->offset>(result, it);
                 if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                     result.res.match_start_ = it;
                 return true;
@@ -13189,7 +13190,7 @@ private:
         {
             if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
             {
-                set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                set_final_info<final_node->op_index, final_node->offset>(result, it);
                 if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                     result.res.match_start_ = it;
                 return true;
@@ -14885,15 +14886,15 @@ private:
                 ++index_;
             }
 
-            template for (constexpr std::size_t I : std::views::iota(0uz, max_index))
+            template for (constexpr std::size_t i : std::views::iota(0uz, max_index))
             {
-                if (index_ == I)
+                if (index_ == i)
                 {
                     namespace drc = detail::replace_constants;
 
-                    if constexpr (I % 2 == 0)
+                    if constexpr (i % 2 == 0)
                     {
-                        static constexpr fmt_subrange format{ fmt.subranges()[I / 2] };
+                        static constexpr fmt_subrange format{ fmt.subranges()[i / 2] };
 
                         if constexpr (not format.empty())
                         {
@@ -14901,7 +14902,7 @@ private:
                             return;
                         }
                     }
-                    else if constexpr (constexpr auto submatch_index = fmt.captures()[I / 2]; submatch_index == drc::prematch)
+                    else if constexpr (constexpr auto submatch_index = fmt.captures()[i / 2]; submatch_index == drc::prematch)
                     {
                         const auto mfirst = get<0>(*current_).begin();
 

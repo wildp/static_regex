@@ -31,9 +31,9 @@ void dump_fsm(T target, const detail::tagged_dfa<CharT>& dfa)
             std::unreachable();
     };
 
-    auto print_offset_cont = [&]( std::uint_least16_t final_offset, std::optional<continue_at_t> continue_at = {}){
-        if (final_offset != 0)
-            std::print(target, " offset={}", -final_offset);
+    auto print_offset_cont = [&]( std::uint_least16_t offset, std::optional<continue_at_t> continue_at = {}){
+        if (offset != 0)
+            std::print(target, " offset={}", -offset);
         if (continue_at.has_value() and *continue_at != no_continue)
             std::print(target, " cont={}", *continue_at);
     };
@@ -84,7 +84,7 @@ void dump_fsm(T target, const detail::tagged_dfa<CharT>& dfa)
             const auto& fni = dfa.final_nodes().at(i);
 
             std::print(target, "\tACCEPT:");
-            print_offset_cont(fni.final_offset);
+            print_offset_cont(fni.offset);
             print_regop_blk(fni.op_index, "\t\t");
         }
 
@@ -94,7 +94,7 @@ void dump_fsm(T target, const detail::tagged_dfa<CharT>& dfa)
             const auto& fbni = dfa.fallback_nodes().at(i);
 
             std::print(target, "\tFALLBACK:");
-            print_offset_cont(fni.final_offset, fbni.continue_at);
+            print_offset_cont(fni.offset, fbni.continue_at);
             print_regop_blk(fbni.op_index, "\t\t");
         }
     }

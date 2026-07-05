@@ -138,7 +138,7 @@ constexpr fsm_flags unpack_flags(ff f)
     fsm_flags result{};
 
     template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
-        result.[: nsdms[i]:] = bitset[i];
+        result.[: nsdms[i] :] = bitset[i];
 
     return result;
 }

@@ -47,7 +47,7 @@ constexpr auto tagged_nfa<CharT>::node_copy(const state_t q) -> state_t
     new_n.is_fallback  = old_n.is_fallback;
     new_n.final_offset = old_n.final_offset;
     new_n.continue_at  = old_n.continue_at;
-    new_n.lexer_alt = old_n.lexer_alt;
+    new_n.final_alt    = old_n.final_alt;
 
     if (new_n.is_final)
         final_nodes_.emplace_back(p);
@@ -68,7 +68,7 @@ constexpr void tagged_nfa<CharT>::node_copy_to(const state_t q_old, const state_
     new_n.is_fallback  = old_n.is_fallback;
     new_n.final_offset = old_n.final_offset;
     new_n.continue_at  = old_n.continue_at;
-    new_n.lexer_alt = old_n.lexer_alt;
+    new_n.final_alt    = old_n.final_alt;
 }
 
 
@@ -1519,7 +1519,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
     if (tag_count_ > 1)
         ast.make_tag_vec(tag_vec);
 
-    if (not ast.is_lexer_mode())
+    if (not ast.is_alt_mode())
     {
         thompson(ast, tag_vec, stack_elem{ .q0 = default_start_node, .qf = default_final_node, .idx = ast.root_idx() });
         return;
@@ -1539,7 +1539,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
         std::ranges::copy(std::views::iota(1uz, branch_count), std::back_inserter(final_nodes_));
         std::uint_least32_t i{ 0 };
         for (auto& new_final_node : nodes_ | std::views::drop(2))
-            new_final_node.lexer_alt = ++i;
+            new_final_node.final_alt = ++i;
     }
 
     for (std::size_t i{ 0 }; i < branch_count; ++i)

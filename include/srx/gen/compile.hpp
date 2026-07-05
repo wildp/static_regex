@@ -124,7 +124,7 @@ private:
             // TODO: switch to using views::enumerate when supported by clang
             auto scored_pairs = std::views::zip(std::views::iota(0uz),
                                                 vec | std::views::transform([](const auto& t){ return t.second.score_intervals(); }))
-                                | std::ranges::to<std::vector>();
+                                                    | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
 
@@ -176,7 +176,8 @@ private:
     }
 
 public:
-    explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa, const std::pair<std::size_t, std::size_t>& mml, fsm_flags f)
+    explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa,
+                                 const std::pair<std::size_t, std::size_t>& mml, fsm_flags f, bool alt_mode)
         : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
         , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
         , continue_nodes{ dfa.continue_nodes() }
@@ -189,7 +190,8 @@ public:
         , captures{ dfa.get_capture_info() }
         , outer_transitions{ make_continue_info(dfa, nfa) }
         , min_max_lengths{ mml }
-        , flags{ f } {}
+        , flags{ f }
+        , alt_mode{ alt_mode }{}
 
     [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
     {
@@ -216,6 +218,7 @@ public:
     std::pair<std::size_t, std::size_t> min_max_lengths;
 
     fsm_flags flags;
+    bool alt_mode;
 };
 
 
@@ -252,7 +255,7 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     dfa.minimise_transition_edges();
     dfa.de_default_edges();
 
-    return tdfa_info{ dfa, nfa, mml, f };
+    return tdfa_info{ dfa, nfa, mml, f, ast.is_alt_mode() };
 }
 
 template<std::meta::info P, ff F>

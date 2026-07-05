@@ -237,10 +237,8 @@ template<static_charset Sc>
 #ifndef __GNUC_MINOR__
     // TODO: change to use structured binding when supported
     template for (constexpr auto pair : Sc.get_intervals())
-    {
         if (pair.first <= c and c <= pair.second)
             return true;
-    }
     return false;
 #else
     using char_type = decltype(Sc)::char_type;
@@ -496,29 +494,29 @@ private:
     static constexpr void register_operations(no_result /* result */, const I /* it */) {}
 
     template<std::size_t Blk, std::ptrdiff_t Offset, typename Result, std::bidirectional_iterator I>
-    static constexpr void set_final_info(Result result, const I it)
+    static constexpr void set_final_info(Result rag, const I it)
     {
-        register_operations<Blk>(result, it);
-        result.res.match_end_ = std::ranges::prev(it, Offset);
+        if constexpr (not std::same_as<Result, no_result>)
+        {
+            register_operations<Blk>(rag, it);
+            rag.res.match_end_ = std::ranges::prev(it, Offset);
 
-        if constexpr (not std::contiguous_iterator<I>)
-            result.res.match_success_ = true;
+            if constexpr (not std::contiguous_iterator<I>)
+                rag.res.match_success_ = true;
+        }
     }
 
     template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, typename Result, std::bidirectional_iterator I>
     static constexpr void set_fallback_info(Result rag, const I it)
     {
-        set_final_info<Blk, Offset>(rag, it);
+        if constexpr (not std::same_as<Result, no_result>)
+        {
+            set_final_info<Blk, Offset>(rag, it);
 
-        if constexpr (result<I>::has_continue and ContinueAt != tdfa::no_continue)
-            rag.res.continue_at_ = ContinueAt;
+            if constexpr (result<I>::has_continue and ContinueAt != tdfa::no_continue)
+                rag.res.continue_at_ = ContinueAt;
+        }
     }
-
-    template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I>
-    static constexpr void set_final_info(no_result /* result */, const I /* it */) {};
-
-    template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I>
-    static constexpr void set_fallback_info(no_result /* result */, const I /* it */) {};
 
     template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires (DFA.flags.enable_fallback)
@@ -534,7 +532,7 @@ private:
             {
                 static constexpr auto fni = DFA.final_nodes.at(pair.first);
                 if constexpr (not DFA.flags.return_bool)
-                    set_fallback_info<pair.second.op_index, fni.final_offset, pair.second.continue_at>(result, fallback.it);
+                    set_fallback_info<pair.second.op_index, fni.offset, pair.second.continue_at>(result, fallback.it);
                 return true;
             }
         }
@@ -568,7 +566,7 @@ private:
 
             if constexpr (final_node != nullptr and DFA.flags.enable_fallback and fallback_node != nullptr)
             {
-                set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
+                set_fallback_info<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
                 return true;
             }
         }
@@ -577,9 +575,9 @@ private:
             if constexpr (final_node != nullptr)
             {
                 if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
-                    set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
+                    set_fallback_info<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
                 else
-                    set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                    set_final_info<final_node->op_index, final_node->offset>(result, it);
                 return true;
             }
         }
@@ -615,14 +613,14 @@ private:
         {
             if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
-                set_fallback_info<final_node->op_index, final_node->final_offset, fallback_node->continue_at>(result, it);
+                set_fallback_info<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
                 return true;
             }
             else
             {
                 if (it == last) [[likely]]
                 {
-                    set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                    set_final_info<final_node->op_index, final_node->offset>(result, it);
                     return true;
                 }
             }
@@ -723,7 +721,7 @@ private:
         {
             if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
             {
-                set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                set_final_info<final_node->op_index, final_node->offset>(result, it);
                 if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                     result.res.match_start_ = it;
                 return true;
@@ -761,7 +759,7 @@ private:
         {
             if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
             {
-                set_final_info<final_node->op_index, final_node->final_offset>(result, it);
+                set_final_info<final_node->op_index, final_node->offset>(result, it);
                 if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
                     result.res.match_start_ = it;
                 return true;
