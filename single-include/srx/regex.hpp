@@ -2859,6 +2859,9 @@ enum class named_character_class : unsigned char
     uppercase,
     word,
     hexdigits,
+    not_digits,
+    not_perl_whitespace,
+    not_word,
 };
 
 /* class definitions */
@@ -2979,6 +2982,11 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::uppercase:        data_ |= upper;  break;
     case named_character_class::word:             data_ |= word;   break;
     case named_character_class::hexdigits:        data_ |= xdigit; break;
+
+    /* negated named char classes */
+    case named_character_class::not_digits:          data_ |= ~digit; break;
+    case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
+    case named_character_class::not_word:            data_ |= ~word;  break;
     }
 }
 
@@ -3197,11 +3205,11 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
         /* perl character classes */
 
         case 'd': return char_class{ ncc::digits };
-        case 'D': return char_class{ ncc::digits, negated_cc_tag };
+        case 'D': return char_class{ ncc::not_digits };
         case 's': return char_class{ ncc::perl_whitespace };
-        case 'S': return char_class{ ncc::perl_whitespace, negated_cc_tag };
+        case 'S': return char_class{ ncc::not_perl_whitespace };
         case 'w': return char_class{ ncc::word };
-        case 'W': return char_class{ ncc::word, negated_cc_tag };
+        case 'W': return char_class{ ncc::not_word };
 
         /* octal escape sequences and backreferences */
 
@@ -3652,7 +3660,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 
         const auto current = it_;
 
-        std::optional<std::pair<ncc, bool>> selected_cc;
+        std::optional<ncc> selected_cc;
         std::optional<underlying_char_t> nc;
 
         switch (*it_++)
@@ -3708,12 +3716,12 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 
             /* perl character classes */
 
-            case 'd': selected_cc = { ncc::digits, false }; break;
-            case 'D': selected_cc = { ncc::digits, true }; break;
-            case 's': selected_cc = { ncc::perl_whitespace, false }; break;
-            case 'S': selected_cc = { ncc::perl_whitespace, true }; break;
-            case 'w': selected_cc = { ncc::word, false }; break;
-            case 'W': selected_cc = { ncc::word, true }; break;
+            case 'd': selected_cc = ncc::digits; break;
+            case 'D': selected_cc = ncc::not_digits; break;
+            case 's': selected_cc = ncc::perl_whitespace; break;
+            case 'S': selected_cc = ncc::not_perl_whitespace; break;
+            case 'w': selected_cc = ncc::word; break;
+            case 'W': selected_cc = ncc::not_word; break;
 
             default:
                 if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
@@ -3726,7 +3734,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
         }
 
         case '[':
-            selected_cc = { parse_posix_char_class(), false };
+            selected_cc = parse_posix_char_class();
             break;
 
         default:
@@ -3743,18 +3751,8 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
                 c.reset();
             }
 
-            if (selected_cc->second)
-            {
-                /* insert negated char class */
-                typename char_class::impl_type tmp{ selected_cc->first, negated_cc_tag };
-                result.data.insert(tmp);
-            }
-            else
-            {
-                /* insert char class */
-                result.data.insert(selected_cc->first);
-            }
-
+            /* insert char class */
+            result.data.insert(*selected_cc);
             selected_cc.reset();
         }
         else if (nc)

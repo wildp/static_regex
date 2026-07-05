@@ -35,6 +35,9 @@ enum class named_character_class : unsigned char
     uppercase,
     word,
     hexdigits,
+    not_digits,
+    not_perl_whitespace,
+    not_word,
 };
 
 
@@ -157,6 +160,11 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::uppercase:        data_ |= upper;  break;
     case named_character_class::word:             data_ |= word;   break;
     case named_character_class::hexdigits:        data_ |= xdigit; break;
+
+    /* negated named char classes */
+    case named_character_class::not_digits:          data_ |= ~digit; break;
+    case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
+    case named_character_class::not_word:            data_ |= ~word;  break;
     }
 }
 
