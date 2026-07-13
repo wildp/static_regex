@@ -459,7 +459,7 @@ private:
             //     // - advance it as necessary
             // }
 
-            static_assert("Unimplemented");
+            static_assert(false, "Unimplemented");
             return false;
         }
     };
@@ -938,35 +938,35 @@ private:
     //     [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
     //     requires (spg.mode == special_group_mode::backtrack_mark)
     //     {
-    //         static_assert("Unimplemented");
+    //         static_assert(false, "Unimplemented");
     //     }
 
     //     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
     //     [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
     //     requires (spg.mode == special_group_mode::backtrack_commit)
     //     {
-    //         static_assert("Unimplemented");
+    //         static_assert(false, "Unimplemented");
     //     }
 
     //     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
     //     [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
     //     requires (spg.mode == special_group_mode::backtrack_prune)
     //     {
-    //         static_assert("Unimplemented");
+    //         static_assert(false, "Unimplemented");
     //     }
 
     //     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
     //     [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
     //     requires (spg.mode == special_group_mode::backtrack_skip)
     //     {
-    //         static_assert("Unimplemented");
+    //         static_assert(false, "Unimplemented");
     //     }
 
     //     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
     //     [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
     //     requires (spg.mode == special_group_mode::backtrack_then)
     //     {
-    //         static_assert("Unimplemented");
+    //         static_assert(false, "Unimplemented");
     //     }
     // };
 

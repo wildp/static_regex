@@ -11858,7 +11858,7 @@ private:
             requires (not std::same_as<char_type, char> and not std::same_as<char_type, char32_t>)
         {
 
-            static_assert("Unimplemented");
+            static_assert(false, "Unimplemented");
             return false;
         }
     };
@@ -14376,7 +14376,7 @@ template<std::ranges::bidirectional_range V, typename Regex, bool Sequential = f
     requires std::ranges::view<V>
 class regex_match_view
 {
-    static_assert("regex_match_view: invalid regex");
+    static_assert(false, "regex_match_view: invalid regex");
 };
 
 template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode, bool Sequential>
@@ -14555,7 +14555,7 @@ template<std::ranges::input_range V, int... Submatches>
     requires std::ranges::view<V>
 class submatches_view
 {
-    static_assert("submatches_view: invalid range");
+    static_assert(false, "submatches_view: invalid range");
 };
 
 template<std::ranges::input_range V, int... Submatches>
@@ -14753,7 +14753,7 @@ template<std::ranges::input_range V, typename Fmt>
     requires std::ranges::view<V>
 class replace_view
 {
-    static_assert("replace_view: invalid range");
+    static_assert(false, "replace_view: invalid range");
 };
 
 template<std::ranges::input_range V, string_literal Fmt>
@@ -15135,7 +15135,7 @@ template<std::ranges::bidirectional_range V, typename Regex>
     requires std::ranges::view<V>
 class regex_split_view
 {
-    static_assert("regex_split_view: invalid regex");
+    static_assert(false, "regex_split_view: invalid regex");
 };
 
 template<std::ranges::bidirectional_range V, string_literal Pattern, mode Mode>

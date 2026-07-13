@@ -102,7 +102,7 @@ std::size_t matchcount_xpr(const xpr_pattern<Pattern>)
         else if constexpr (Pattern.view() == R"(["'][^"']{0,30}[?!\.][\"'])")
             return (set = '\"', '\'') >> repeat<0,30>(~(set = '\"', '\'')) >> (set= '?','!','.') >> (set = '\"', '\'');
         else
-            static_assert("Unknown Pattern");
+            static_assert(false, "Unknown Pattern");
     }();
 
     boost::xpressive::cregex_iterator it{ input.begin(), input.end(), re };
