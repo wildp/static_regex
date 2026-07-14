@@ -95,6 +95,7 @@ struct char_str
 
     constexpr explicit char_str() : data{} {} /* empty string */
     constexpr explicit char_str(CharT c) : data{ c } {}
+    constexpr explicit char_str(const std::basic_string<CharT>& str) : data{ str } {}
 
     template<std::input_iterator I, std::sentinel_for<I> S>
         requires std::convertible_to<std::iter_value_t<I>, CharT>
@@ -103,6 +104,12 @@ struct char_str
     constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
     {
         data += c;
+    }
+
+    constexpr explicit char_str(const std::basic_string<char>& str) requires (not std::same_as<CharT, char>)
+    {
+        for (const auto& c : str)
+            data += c;
     }
 
     constexpr explicit char_str(std::size_t parse_result)

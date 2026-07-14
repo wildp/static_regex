@@ -2862,6 +2862,7 @@ enum class named_character_class : unsigned char
     not_digits,
     not_perl_whitespace,
     not_word,
+    octal_digits,
 };
 
 /* class definitions */
@@ -2964,6 +2965,7 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     static constexpr cs upper{ p{ 'A', 'Z' } };
     static constexpr cs word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
     static constexpr cs xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
+    static constexpr cs octal{ p{ '0', '7' } };
 
     switch (ncc)
     {
@@ -2987,6 +2989,9 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::not_digits:          data_ |= ~digit; break;
     case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
     case named_character_class::not_word:            data_ |= ~word;  break;
+
+    /* used by bootstrap only */
+    case named_character_class::octal_digits: data_ |= octal; break;
     }
 }
 
@@ -3069,6 +3074,7 @@ struct char_str
 
     constexpr explicit char_str() : data{} {} /* empty string */
     constexpr explicit char_str(CharT c) : data{ c } {}
+    constexpr explicit char_str(const std::basic_string<CharT>& str) : data{ str } {}
 
     template<std::input_iterator I, std::sentinel_for<I> S>
         requires std::convertible_to<std::iter_value_t<I>, CharT>
@@ -3077,6 +3083,12 @@ struct char_str
     constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
     {
         data += c;
+    }
+
+    constexpr explicit char_str(const std::basic_string<char>& str) requires (not std::same_as<CharT, char>)
+    {
+        for (const auto& c : str)
+            data += c;
     }
 
     constexpr explicit char_str(std::size_t parse_result)

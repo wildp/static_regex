@@ -38,6 +38,7 @@ enum class named_character_class : unsigned char
     not_digits,
     not_perl_whitespace,
     not_word,
+    octal_digits,
 };
 
 
@@ -142,6 +143,7 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     static constexpr cs upper{ p{ 'A', 'Z' } };
     static constexpr cs word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
     static constexpr cs xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
+    static constexpr cs octal{ p{ '0', '7' } };
 
     switch (ncc)
     {
@@ -165,6 +167,9 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::not_digits:          data_ |= ~digit; break;
     case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
     case named_character_class::not_word:            data_ |= ~word;  break;
+
+    /* used by bootstrap only */
+    case named_character_class::octal_digits: data_ |= octal; break;
     }
 }
 
