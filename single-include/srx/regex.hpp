@@ -5357,6 +5357,40 @@ namespace srx {
 namespace detail {
 namespace parser {
 
+enum class nonterminal : unsigned char { S, E, E_, F, F_, G, R, R_, H, P, V };
+
+enum class semantic_action : unsigned char
+{
+    make_empty,
+    make_dot,
+    make_hat,
+    make_dollar,
+    make_assert,
+
+    make_char_lit,
+    make_char_class,
+
+    make_alt,
+    make_concat,
+
+    make_bref,
+
+    make_star,
+    make_plus,
+    make_quest,
+    make_repeat,
+
+    rep_greedy,
+    rep_lazy,
+    rep_possessive,
+
+    cap_push,
+    cap_pop,
+    next_alt,
+};
+
+/* parser class definition */
+
 template<typename CharT>
 class ll1
 {
@@ -5413,6 +5447,20 @@ private:
 
     template<typename T>
     static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^typename lexer<char_type>::token_t) };
+    static constexpr std::size_t tok_count{ template_arguments_of(dealias(^^typename lexer<char_type>::token_t)).size() };
+
+    static consteval std::size_t se(nonterminal nt)
+    {
+        /* return adjusted index corresponding to stack element */
+        return tok_count + static_cast<std::size_t>(nt);
+    }
+
+    static consteval std::size_t se(semantic_action sa)
+    {
+        /* return adjusted index corresponding to stack element */
+        static constexpr auto offset{ tok_count + enumerators_of(^^nonterminal).size() };
+        return offset +  static_cast<std::size_t>(sa);
+    }
 
     template<in_variant<type> T, typename... Args>
     [[nodiscard]] constexpr std::size_t new_expression(Args... args)
@@ -5452,66 +5500,33 @@ private:
     capture_stack capstack_;
 };
 
-/* helper classes (and enum) for parser */
+/* helper classes for parser */
 
-enum class nonterminal : unsigned char { S, E, E_, F, F_, G, R, R_, H, P, V };
-
-enum class semantic_action : unsigned char
-{
-    make_empty,
-    make_dot,
-    make_hat,
-    make_dollar,
-    make_assert,
-
-    make_char_lit,
-    make_char_class,
-
-    make_alt,
-    make_concat,
-
-    make_bref,
-
-    make_star,
-    make_plus,
-    make_quest,
-    make_repeat,
-
-    rep_greedy,
-    rep_lazy,
-    rep_possessive,
-
-    cap_push,
-    cap_pop,
-    next_alt,
-};
-
-template<typename CharT>
 class ll1_stack
 {
 public:
-    using char_type = CharT;
-    using terminal = lexer<char_type>::token_t;
-    using terminal_idx = decltype(std::declval<terminal>().index());
-    using elem_t = std::variant<terminal_idx, nonterminal, semantic_action>;
+    using elem_t = std::size_t;
 
     constexpr void pop() { data_.pop_back(); }
     constexpr void push(const std::vector<elem_t>& elems) { data_.append_range(elems | std::views::reverse); }
     [[nodiscard]] constexpr auto& root() { return data_.back(); }
     [[nodiscard]] constexpr const auto& root() const { return data_.back(); }
 
-    constexpr auto begin() const noexcept { return data_.cbegin(); }
-    constexpr auto end() const noexcept { return data_.cend(); }
-    constexpr auto rbegin() const noexcept { return data_.crbegin(); }
-    constexpr auto rend() const noexcept { return data_.crend(); }
-    constexpr auto cbegin() const noexcept { return data_.cbegin(); }
-    constexpr auto cend() const noexcept { return data_.cend(); }
-    constexpr auto crbegin() const noexcept { return data_.crbegin(); }
-    constexpr auto crend() const noexcept { return data_.crend(); }
+    [[nodiscard]] constexpr auto begin() const noexcept { return data_.cbegin(); }
+    [[nodiscard]] constexpr auto end() const noexcept { return data_.cend(); }
+    [[nodiscard]] constexpr auto rbegin() const noexcept { return data_.crbegin(); }
+    [[nodiscard]] constexpr auto rend() const noexcept { return data_.crend(); }
+    [[nodiscard]] constexpr auto cbegin() const noexcept { return data_.cbegin(); }
+    [[nodiscard]] constexpr auto cend() const noexcept { return data_.cend(); }
+    [[nodiscard]] constexpr auto crbegin() const noexcept { return data_.crbegin(); }
+    [[nodiscard]] constexpr auto crend() const noexcept { return data_.crend(); }
     [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
 
+    constexpr ll1_stack(std::size_t start) : data_{ start } {};
+    ll1_stack() = delete;
+
 private:
-    std::vector<elem_t> data_{ nonterminal::S };
+    std::vector<elem_t> data_;
 };
 
 template<typename CharT>
@@ -5519,20 +5534,20 @@ class semantic_stack
 {
 public:
     using char_type = CharT;
-    using terminal = ll1_stack<char_type>::terminal;
-    using elem_t = std::variant<std::size_t, typename lexer<char_type>::token_t, repeater_mode, std::basic_string_view<CharT>>;
+    using terminal = lexer<char_type>::token_t;
+    using elem_t = std::variant<std::size_t, terminal, repeater_mode, std::basic_string_view<CharT>>;
 
     [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
     constexpr void push(elem_t&& elems) { data_.push_back(std::move(elems)); }
 
-    constexpr auto begin() const noexcept { return data_.cbegin(); }
-    constexpr auto end() const noexcept { return data_.cend(); }
-    constexpr auto rbegin() const noexcept { return data_.crbegin(); }
-    constexpr auto rend() const noexcept { return data_.crend(); }
-    constexpr auto cbegin() const noexcept { return data_.cbegin(); }
-    constexpr auto cend() const noexcept { return data_.cend(); }
-    constexpr auto crbegin() const noexcept { return data_.crbegin(); }
-    constexpr auto crend() const noexcept { return data_.crend(); }
+    [[nodiscard]] constexpr auto begin() const noexcept { return data_.cbegin(); }
+    [[nodiscard]] constexpr auto end() const noexcept { return data_.cend(); }
+    [[nodiscard]] constexpr auto rbegin() const noexcept { return data_.crbegin(); }
+    [[nodiscard]] constexpr auto rend() const noexcept { return data_.crend(); }
+    [[nodiscard]] constexpr auto cbegin() const noexcept { return data_.cbegin(); }
+    [[nodiscard]] constexpr auto cend() const noexcept { return data_.cend(); }
+    [[nodiscard]] constexpr auto crbegin() const noexcept { return data_.crbegin(); }
+    [[nodiscard]] constexpr auto crend() const noexcept { return data_.crend(); }
     [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
 
 private:
@@ -5567,13 +5582,12 @@ constexpr ll1<CharT>::ll1(ast_t& ast, const std::vector<sv_type>& svs)
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
 {
-    using terminal = ll1_stack<char_type>::terminal;
-    using terminal_idx = ll1_stack<char_type>::terminal_idx;
+    using terminal = lexer<char_type>::token_t;
 
     if (lex.empty()) /* ensure expressions is non-empty */
         return new_expression<char_str>(/* empty string */);
 
-    ll1_stack<char_type> stack;
+    ll1_stack stack{ se(nonterminal::S) };
     semantic_stack<char_type> semstack;
 
     auto token = lex.nexttok();
@@ -5583,17 +5597,36 @@ constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
         if (stack.empty())
             throw pattern_error("Invalid pattern");
 
-        const auto top = std::move(stack.root());
+        const auto top = stack.root();
         stack.pop();
 
-        if (const auto* const termidx{ get_if<terminal_idx>(&top) })
+        using nt = nonterminal;
+        using sa = semantic_action;
+        using namespace tok;
+
+        switch (top)
         {
-            if (*termidx == tok_index<tok::end_of_input>)
+        case tok_index<end_of_input>:
+        case tok_index<dot>:
+        case tok_index<hat>:
+        case tok_index<dollar>:
+        case tok_index<lparen>:
+        case tok_index<rparen>:
+        case tok_index<vert>:
+        case tok_index<star>:
+        case tok_index<plus>:
+        case tok_index<quest>:
+        case tok_index<repeat_n_m>:
+        case tok_index<char_str>:
+        case tok_index<char_class>:
+        case tok_index<backref>:
+        case tok_index<assertion>:
+            if (top == tok_index<tok::end_of_input>)
             {
                 /* parsing is done */
                 loop = false;
             }
-            else if (*termidx == token.index())
+            else if (top == token.index())
             {
                 /* match */
                 semstack.push(std::move(token));
@@ -5604,382 +5637,369 @@ constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
                 /* no match */
                 throw pattern_error("Parse Error");
             }
-        }
-        else if (const auto* const nonterm{ get_if<nonterminal>(&top) })
-        {
-            /* predict */
+            break;
 
-            using nt = nonterminal;
-            using sa = semantic_action;
-            using namespace tok;
+        /* predict */
 
-            switch (*nonterm)
+        case se(nt::S):
+            switch (token.index())
             {
-            case nt::S:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<vert>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ nt::E, tok_index<end_of_input> });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            case tok_index<end_of_input>:
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<vert>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                stack.push({ se(nt::E), tok_index<end_of_input> });
                 break;
-            case nt::E:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<rparen>:
-                case tok_index<vert>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ nt::F, nt::E_ });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::E):
+            switch (token.index())
+            {
+            case tok_index<end_of_input>:
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<rparen>:
+            case tok_index<vert>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                stack.push({ se(nt::F), se(nt::E_) });
                 break;
-            case nt::E_:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<rparen>:
-                    /* epsilon */
-                    break;
-                case tok_index<vert>:
-                    stack.push({ nt::V, nt::E, sa::make_alt });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::E_):
+            switch (token.index())
+            {
+            case tok_index<end_of_input>:
+            case tok_index<rparen>:
+                /* epsilon */
                 break;
-            case nt::F:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<rparen>:
-                case tok_index<vert>:
-                    stack.push({ /* epsilon */ sa::make_empty });
-                    break;
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ nt::G, nt::F_ });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            case tok_index<vert>:
+                stack.push({ se(nt::V), se(nt::E), se(sa::make_alt) });
                 break;
-            case nt::F_:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<rparen>:
-                case tok_index<vert>:
-                    /* epsilon */
-                    break;
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ nt::G, nt::F_, sa::make_concat });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::F):
+            switch (token.index())
+            {
+            case tok_index<end_of_input>:
+            case tok_index<rparen>:
+            case tok_index<vert>:
+                stack.push({ /* epsilon */ se(sa::make_empty) });
                 break;
-            case nt::G:
-                switch (token.index())
-                {
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ nt::H, nt::R });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                stack.push({ se(nt::G), se(nt::F_) });
                 break;
-            case nt::R:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<rparen>:
-                case tok_index<vert>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    /* epsilon */
-                    break;
-                case tok_index<star>:
-                    stack.push({ tok_index<star>, nt::R_, sa::make_star });
-                    break;
-                case tok_index<plus>:
-                    stack.push({ tok_index<plus>, nt::R_, sa::make_plus });
-                    break;
-                case tok_index<quest>:
-                    stack.push({ tok_index<quest>, nt::R_, sa::make_quest });
-                    break;
-                case tok_index<repeat_n_m>:
-                    stack.push({ tok_index<repeat_n_m>, nt::R_, sa::make_repeat });
-                    break;
-                }
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::F_):
+            switch (token.index())
+            {
+            case tok_index<end_of_input>:
+            case tok_index<rparen>:
+            case tok_index<vert>:
+                /* epsilon */
                 break;
-            case nt::R_:
-                switch (token.index())
-                {
-                case tok_index<end_of_input>:
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
-                case tok_index<assertion>:
-                case tok_index<lparen>:
-                case tok_index<rparen>:
-                case tok_index<vert>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ /* epsilon, */ sa::rep_greedy });
-                    break;
-                case tok_index<quest>:
-                    stack.push({ tok_index<quest>, sa::rep_lazy });
-                    break;
-                case tok_index<plus>:
-                    stack.push({ tok_index<plus>, sa::rep_possessive });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                stack.push({ se(nt::G), se(nt::F_), se(sa::make_concat) });
                 break;
-            case nt::H:
-                switch (token.index())
-                {
-                case tok_index<dot>:
-                    stack.push({ tok_index<dot>, sa::make_dot });
-                    break;
-                case tok_index<hat>:
-                    stack.push({ tok_index<hat>, sa::make_hat });
-                    break;
-                case tok_index<dollar>:
-                    stack.push({ tok_index<dollar>, sa::make_dollar });
-                    break;
-                case tok_index<assertion>:
-                    stack.push({ tok_index<assertion>, sa::make_assert });
-                    break;
-                case tok_index<lparen>:
-                    stack.push({ nt::P, nt::E, tok_index<rparen>, sa::cap_pop });
-                    break;
-                case tok_index<char_str>:
-                    stack.push({ tok_index<char_str>, sa::make_char_lit });
-                    break;
-                case tok_index<char_class>:
-                    stack.push({ tok_index<char_class>, sa::make_char_class });
-                    break;
-                case tok_index<backref>:
-                    stack.push({ tok_index<backref>, sa::make_bref });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::G):
+            switch (token.index())
+            {
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                stack.push({ se(nt::H), se(nt::R) });
                 break;
-            case nt::P:
-                switch (token.index())
-                {
-                case tok_index<lparen>:
-                    stack.push({ tok_index<lparen>, sa::cap_push });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::R):
+            switch (token.index())
+            {
+            case tok_index<end_of_input>:
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<rparen>:
+            case tok_index<vert>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                /* epsilon */
                 break;
-            case nt::V:
-                switch (token.index())
-                {
-                case tok_index<vert>:
-                    stack.push({ tok_index<vert>, sa::next_alt });
-                    break;
-                default:
-                    throw pattern_error("Invalid pattern");
-                }
+            case tok_index<star>:
+                stack.push({ tok_index<star>, se(nt::R_), se(sa::make_star) });
+                break;
+            case tok_index<plus>:
+                stack.push({ tok_index<plus>, se(nt::R_), se(sa::make_plus) });
+                break;
+            case tok_index<quest>:
+                stack.push({ tok_index<quest>, se(nt::R_), se(sa::make_quest) });
+                break;
+            case tok_index<repeat_n_m>:
+                stack.push({ tok_index<repeat_n_m>, se(nt::R_), se(sa::make_repeat) });
                 break;
             }
-        }
-        else if (const auto* const action{ get_if<semantic_action>(&top) })
-        {
-            using sa = semantic_action;
+            break;
+        case se(nt::R_):
+            switch (token.index())
+            {
+            case tok_index<end_of_input>:
+            case tok_index<dot>:
+            case tok_index<hat>:
+            case tok_index<dollar>:
+            case tok_index<assertion>:
+            case tok_index<lparen>:
+            case tok_index<rparen>:
+            case tok_index<vert>:
+            case tok_index<char_str>:
+            case tok_index<char_class>:
+            case tok_index<backref>:
+                stack.push({ /* epsilon, */ se(sa::rep_greedy) });
+                break;
+            case tok_index<quest>:
+                stack.push({ tok_index<quest>, se(sa::rep_lazy) });
+                break;
+            case tok_index<plus>:
+                stack.push({ tok_index<plus>, se(sa::rep_possessive) });
+                break;
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::H):
+            switch (token.index())
+            {
+            case tok_index<dot>:
+                stack.push({ tok_index<dot>, se(sa::make_dot) });
+                break;
+            case tok_index<hat>:
+                stack.push({ tok_index<hat>, se(sa::make_hat) });
+                break;
+            case tok_index<dollar>:
+                stack.push({ tok_index<dollar>, se(sa::make_dollar) });
+                break;
+            case tok_index<assertion>:
+                stack.push({ tok_index<assertion>, se(sa::make_assert) });
+                break;
+            case tok_index<lparen>:
+                stack.push({ se(nt::P), se(nt::E), tok_index<rparen>, se(sa::cap_pop) });
+                break;
+            case tok_index<char_str>:
+                stack.push({ tok_index<char_str>, se(sa::make_char_lit) });
+                break;
+            case tok_index<char_class>:
+                stack.push({ tok_index<char_class>, se(sa::make_char_class) });
+                break;
+            case tok_index<backref>:
+                stack.push({ tok_index<backref>, se(sa::make_bref) });
+                break;
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::P):
+            switch (token.index())
+            {
+            case tok_index<lparen>:
+                stack.push({ tok_index<lparen>, se(sa::cap_push) });
+                break;
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
+        case se(nt::V):
+            switch (token.index())
+            {
+            case tok_index<vert>:
+                stack.push({ tok_index<vert>, se(sa::next_alt) });
+                break;
+            default:
+                throw pattern_error("Invalid pattern");
+            }
+            break;
 
-            switch (*action)
-            {
-            case sa::make_empty:
-            {
-                semstack.push(sa_make_empty());
-                break;
-            }
-            case sa::make_dot:
-            {
-                std::ignore = semstack.pop(); /* pop tok::dot */
-                semstack.push(sa_make_dot());
-                break;
-            }
-            case sa::make_hat:
-            {
-                std::ignore = semstack.pop(); /* pop tok::hat */
-                semstack.push(sa_make_hat());
-                break;
-            }
-            case sa::make_dollar:
-            {
-                std::ignore = semstack.pop(); /* pop tok::dollar */
-                semstack.push(sa_make_dollar());
-                break;
-            }
-            case sa::make_assert:
-            {
-                assertion as{ get<assertion>(get<terminal>(semstack.pop())) }; /* pop tok::assertion */
-                semstack.push(sa_make_assert(std::move(as)));
-                break;
-            }
-            case sa::make_char_lit:
-            {
-                char_str lit{ get<char_str>(get<terminal>(semstack.pop())) }; /* pop tok::char_str */
-                semstack.push(sa_make_char_lit(std::move(lit)));
-                break;
-            }
-            case sa::make_char_class:
-            {
-                char_class cc{ get<char_class>(get<terminal>(semstack.pop())) }; /* pop tok::char_str */
-                semstack.push(sa_make_char_class(std::move(cc)));
-                break;
-            }
-            case sa::make_alt:
-            {
-                const auto rhs_idx = get<std::size_t>(semstack.pop());
-                std::ignore = semstack.pop(); /* pop (placeholder) */
-                const auto lhs_idx = get<std::size_t>(semstack.pop());
-                semstack.push(sa_make_alt(lhs_idx, rhs_idx));
-                break;
-            }
-            case sa::make_concat:
-            {
-                const auto rhs_idx = get<std::size_t>(semstack.pop());
-                const auto lhs_idx = get<std::size_t>(semstack.pop());
-                semstack.push(sa_make_concat(lhs_idx, rhs_idx));
-                break;
-            }
-            case sa::make_bref:
-            {
-                const auto bref = get<tok::backref>(get<terminal>(semstack.pop())); /* pop tok::backref */
-                semstack.push(sa_make_bref(bref));
-                break;
-            }
-            case sa::make_star:
-            {
-                const auto mode = get<repeater_mode>(semstack.pop());
-                std::ignore = semstack.pop(); /* pop tok::star */
-                const auto child_idx = get<std::size_t>(semstack.pop());
-                semstack.push(sa_make_star(child_idx, mode));
-                break;
-            }
-            case sa::make_plus:
-            {
-                const auto mode = get<repeater_mode>(semstack.pop());
-                std::ignore = semstack.pop(); /* pop tok::plus */
-                const auto child_idx = get<std::size_t>(semstack.pop());
-                semstack.push(sa_make_plus(child_idx, mode));
-                break;
-            }
-            case sa::make_quest:
-            {
-                const auto mode = get<repeater_mode>(semstack.pop());
-                std::ignore = semstack.pop(); /* pop tok::quest */
-                const auto child_idx = get<std::size_t>(semstack.pop());
-                semstack.push(sa_make_quest(child_idx, mode));
-                break;
-            }
-            case sa::make_repeat:
-            {
-                const auto mode = get<repeater_mode>(semstack.pop());
-                const auto rep = get<repeat_n_m>(get<terminal>(semstack.pop()));
-                const auto child_idx = get<std::size_t>(semstack.pop());
-                semstack.push(sa_make_repeat(child_idx, rep, mode));
-                break;
-            }
-            case sa::rep_greedy:
-            {
-                semstack.push(sa_rep_greedy());
-                break;
-            }
-            case sa::rep_lazy:
-            {
-                std::ignore = semstack.pop(); /* pop tok::quest */
-                semstack.push(sa_rep_lazy());
-                break;
-            }
-            case sa::rep_possessive:
-            {
-                std::ignore = semstack.pop(); /* pop tok::plus */
-                semstack.push(sa_rep_possessive());
-                break;
-            }
-            case sa::cap_push:
-            {
-                const auto lpn = get<lparen>(get<terminal>(semstack.pop()));
-                semstack.push(sa_cap_push(lpn));
-                break;
-            }
-            case sa::cap_pop:
-            {
-                std::ignore = semstack.pop(); /* pop tok::rparen */
-                const auto child_idx = get<std::size_t>(semstack.pop());
-                const auto cap_name = get<std::basic_string_view<CharT>>(semstack.pop());
-                semstack.push(sa_cap_pop(child_idx, cap_name));
-                break;
-            }
-            case sa::next_alt:
-            {
-                std::ignore = semstack.pop(); /* pop tok::vert */
-                semstack.push(sa_next_alternative());
-                break;
-            }
-            }
-        }
-        else
+        /* semantic actions */
+
+        case se(sa::make_empty):
         {
-            /* no match */
+            semstack.push(sa_make_empty());
+            break;
+        }
+        case se(sa::make_dot):
+        {
+            std::ignore = semstack.pop(); /* pop tok::dot */
+            semstack.push(sa_make_dot());
+            break;
+        }
+        case se(sa::make_hat):
+        {
+            std::ignore = semstack.pop(); /* pop tok::hat */
+            semstack.push(sa_make_hat());
+            break;
+        }
+        case se(sa::make_dollar):
+        {
+            std::ignore = semstack.pop(); /* pop tok::dollar */
+            semstack.push(sa_make_dollar());
+            break;
+        }
+        case se(sa::make_assert):
+        {
+            assertion as{ get<assertion>(get<terminal>(semstack.pop())) }; /* pop tok::assertion */
+            semstack.push(sa_make_assert(std::move(as)));
+            break;
+        }
+        case se(sa::make_char_lit):
+        {
+            char_str lit{ get<char_str>(get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+            semstack.push(sa_make_char_lit(std::move(lit)));
+            break;
+        }
+        case se(sa::make_char_class):
+        {
+            char_class cc{ get<char_class>(get<terminal>(semstack.pop())) }; /* pop tok::char_str */
+            semstack.push(sa_make_char_class(std::move(cc)));
+            break;
+        }
+        case se(sa::make_alt):
+        {
+            const auto rhs_idx = get<std::size_t>(semstack.pop());
+            std::ignore = semstack.pop(); /* pop (placeholder) */
+            const auto lhs_idx = get<std::size_t>(semstack.pop());
+            semstack.push(sa_make_alt(lhs_idx, rhs_idx));
+            break;
+        }
+        case se(sa::make_concat):
+        {
+            const auto rhs_idx = get<std::size_t>(semstack.pop());
+            const auto lhs_idx = get<std::size_t>(semstack.pop());
+            semstack.push(sa_make_concat(lhs_idx, rhs_idx));
+            break;
+        }
+        case se(sa::make_bref):
+        {
+            const auto bref = get<tok::backref>(get<terminal>(semstack.pop())); /* pop tok::backref */
+            semstack.push(sa_make_bref(bref));
+            break;
+        }
+        case se(sa::make_star):
+        {
+            const auto mode = get<repeater_mode>(semstack.pop());
+            std::ignore = semstack.pop(); /* pop tok::star */
+            const auto child_idx = get<std::size_t>(semstack.pop());
+            semstack.push(sa_make_star(child_idx, mode));
+            break;
+        }
+        case se(sa::make_plus):
+        {
+            const auto mode = get<repeater_mode>(semstack.pop());
+            std::ignore = semstack.pop(); /* pop tok::plus */
+            const auto child_idx = get<std::size_t>(semstack.pop());
+            semstack.push(sa_make_plus(child_idx, mode));
+            break;
+        }
+        case se(sa::make_quest):
+        {
+            const auto mode = get<repeater_mode>(semstack.pop());
+            std::ignore = semstack.pop(); /* pop tok::quest */
+            const auto child_idx = get<std::size_t>(semstack.pop());
+            semstack.push(sa_make_quest(child_idx, mode));
+            break;
+        }
+        case se(sa::make_repeat):
+        {
+            const auto mode = get<repeater_mode>(semstack.pop());
+            const auto rep = get<repeat_n_m>(get<terminal>(semstack.pop()));
+            const auto child_idx = get<std::size_t>(semstack.pop());
+            semstack.push(sa_make_repeat(child_idx, rep, mode));
+            break;
+        }
+        case se(sa::rep_greedy):
+        {
+            semstack.push(sa_rep_greedy());
+            break;
+        }
+        case se(sa::rep_lazy):
+        {
+            std::ignore = semstack.pop(); /* pop tok::quest */
+            semstack.push(sa_rep_lazy());
+            break;
+        }
+        case se(sa::rep_possessive):
+        {
+            std::ignore = semstack.pop(); /* pop tok::plus */
+            semstack.push(sa_rep_possessive());
+            break;
+        }
+        case se(sa::cap_push):
+        {
+            const auto lpn = get<lparen>(get<terminal>(semstack.pop()));
+            semstack.push(sa_cap_push(lpn));
+            break;
+        }
+        case se(sa::cap_pop):
+        {
+            std::ignore = semstack.pop(); /* pop tok::rparen */
+            const auto child_idx = get<std::size_t>(semstack.pop());
+            const auto cap_name = get<std::basic_string_view<CharT>>(semstack.pop());
+            semstack.push(sa_cap_pop(child_idx, cap_name));
+            break;
+        }
+        case se(sa::next_alt):
+        {
+            std::ignore = semstack.pop(); /* pop tok::vert */
+            semstack.push(sa_next_alternative());
+            break;
+        }
+
+        /* no match */
+
+        default:
             throw pattern_error("Parse Error");
         }
     }
@@ -6456,7 +6476,7 @@ constexpr repeater_mode ll1<CharT>::sa_rep_possessive() const
 }
 
 template<typename CharT>
-constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx, std::basic_string_view<CharT> group_name)
+constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx, std::basic_string_view<CharT> /* group_name */)
 {
     const auto cap_number = capstack_.pop();
 
