@@ -2998,6 +2998,165 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
 }
 }
 
+namespace srx {
+namespace detail {
+namespace parser {
+
+struct capture_flags
+{
+    enum class flag_value : unsigned char
+    {
+        inherit,
+        disabled,
+        enabled,
+        enabled_more, /* only used for extended */
+    };
+
+    flag_value caseless  : 2 { flag_value::inherit };
+    flag_value multiline : 2 { flag_value::inherit };
+    flag_value noautocap : 2 { flag_value::inherit };
+    flag_value dotall    : 2 { flag_value::inherit };
+    flag_value ungreedy  : 2 { flag_value::inherit };
+    flag_value extended  : 2 { flag_value::inherit };
+};
+
+enum class group_modes : unsigned char
+{
+    normal,
+    comment,
+    flag_assigning,
+    non_capturing,
+    branch_reset,
+    atomic,
+};
+
+class capture_stack
+{
+    using number_t = std::uint_least16_t;
+    using cf = capture_flags::flag_value;
+    using gm = group_modes;
+
+    struct cse
+    {
+        static constexpr capture_flags all_disabled{
+            .caseless  = cf::disabled,
+            .multiline = cf::disabled,
+            .noautocap = cf::disabled,
+            .dotall    = cf::disabled,
+            .ungreedy  = cf::disabled,
+            .extended  = cf::disabled,
+        };
+
+        constexpr cse() noexcept
+            : number{ 1 } , number_end{ 1 } , flags{ all_disabled }, mode{ gm::non_capturing } {}
+
+        constexpr explicit cse(number_t cur, number_t end, capture_flags f, group_modes m) noexcept
+            : number{ cur } , number_end{ end } , flags{ f } , mode{ m } {}
+
+        number_t number;
+        number_t number_end;
+        capture_flags flags;
+        group_modes mode;
+    };
+
+public:
+    [[nodiscard]] constexpr bool caseless()  const { return get<^^capture_flags::caseless>(); }
+    [[nodiscard]] constexpr bool multiline() const { return get<^^capture_flags::multiline>(); }
+    [[nodiscard]] constexpr bool dotall()    const { return get<^^capture_flags::dotall>(); }
+    [[nodiscard]] constexpr bool ungreedy()  const { return get<^^capture_flags::ungreedy>(); }
+
+    [[nodiscard]] constexpr bool push(capture_flags flags, group_modes mode)
+    {
+        /* return true if overflow and false otherwise */
+        auto next_beg = next_number();
+        auto next_end = next_beg;
+
+        if (mode == gm::normal and ++next_end == 0)
+            return true; /* unsigned integer overflow */
+
+        elems_.emplace_back(next_beg, next_end, flags, mode);
+        return false;
+    }
+
+    constexpr void push_non_capturing(capture_flags flags, group_modes mode)
+    {
+        auto next = next_number();
+        elems_.emplace_back(next, next, flags, (mode == gm::normal) ? gm::non_capturing : mode);
+    }
+
+    constexpr void branch_reset_if_enabled() noexcept
+    {
+        if (elems_.empty())
+            return;
+
+        if (auto& elem = elems_.back(); elem.mode == gm::branch_reset)
+        {
+            auto& target = (elems_.size() < 2) ? base_ : *(std::ranges::next(elems_.rbegin()));
+            target.number_end = std::max(target.number_end, elem.number_end);
+            elem.number_end = elem.number;
+        }
+    }
+
+    [[nodiscard]] constexpr std::optional<number_t> capture_count() const noexcept
+    {
+        if (elems_.empty())
+            return base_.number_end;
+        return {};
+    }
+
+    constexpr std::optional<number_t> pop()
+    {
+        if (elems_.empty())
+            return {};
+
+        auto elem = elems_.back();
+        elems_.pop_back();
+
+        auto& target = elems_.empty() ? base_ : elems_.back();
+
+        /* overwrite containing capturing group's flags when elem is an empty capturing group */
+        if (elem.mode == gm::flag_assigning)
+            template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
+                if (elem.flags.[: e
+                                :] != cf::inherit)
+                    target.flags.[: e :] = elem.flags.[: e :];
+
+        if (elem.mode == gm::branch_reset)
+            target.number_end = std::max(target.number_end, elem.number_end);
+        else
+            target.number_end = elem.number_end;
+
+        if (elem.mode == gm::normal)
+            return elem.number;
+        else
+            return {};
+    }
+
+private:
+    template<std::meta::info CaptureFlagReflection>
+    [[nodiscard]] constexpr bool get() const
+    {
+        for (const auto& elem : elems_ | std::views::reverse)
+            if (elem.flags.[: CaptureFlagReflection
+                            :] != cf::inherit)
+                return elem.flags.[: CaptureFlagReflection :] == cf::enabled;
+        return base_.flags.[: CaptureFlagReflection :] == cf::enabled;
+    }
+
+    [[nodiscard]] constexpr number_t next_number() const noexcept
+    {
+        auto& target = elems_.empty() ? base_ : elems_.back();
+        return target.number_end;
+    }
+
+    std::vector<cse> elems_{};
+    cse              base_{};
+};
+
+}
+}
+}
+
 /* Note: We assume the literal character encoding is a superset of ASCII */
 
 namespace srx {
@@ -3032,7 +3191,6 @@ struct vert {};
 struct dot {};
 struct hat {};
 struct dollar {};
-struct lparen {};
 struct rparen {};
 struct star {};
 struct plus {};
@@ -3051,6 +3209,15 @@ struct assertion
     assert_type type;
 
     friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
+};
+
+template<typename CharT>
+struct lparen
+{
+    parser::capture_flags flags{};
+    parser::group_modes mode{ parser::group_modes::normal };
+    bool is_named { false };
+    std::basic_string_view<CharT> name{};
 };
 
 template<typename CharT>
@@ -3124,7 +3291,7 @@ struct backref
 
 template<typename CharT>
 using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
-                                tok::lparen, tok::rparen, tok::vert,
+                                tok::lparen<CharT>, tok::rparen, tok::vert,
                                 tok::star, tok::plus, tok::quest, tok::repeat_n_m,
                                 tok::char_str<CharT>, tok::char_class<CharT>,
                                 tok::backref, tok::assertion>;
@@ -3152,6 +3319,7 @@ private:
     constexpr std::size_t            parse_arbitrary_oct();
     constexpr tok::backref           parse_bref();
     constexpr tok::repeat_n_m        parse_repeat();
+    constexpr tok::lparen<CharT>     parse_lparen();
     constexpr token_t                parse_bref_or_octal(CharT init);
     constexpr tok::char_str<CharT>   parse_literal_string(it_type begin);
     constexpr tok::char_class<CharT> parse_char_class();
@@ -3177,7 +3345,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
 
     switch (*it_++)
     {
-    case '(': return lparen{};
+    case '(': return parse_lparen();
     case ')': return rparen{};
     case '.': return dot{};
     case '*': return star{};
@@ -3587,6 +3755,108 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
     }
 
     return rep;
+}
+
+template<typename CharT>
+constexpr tok::lparen<CharT> lexer<CharT>::parse_lparen()
+{
+    tok::lparen<CharT> result{};
+
+    if (it_ == end_ or *it_ != '?')
+        return result;
+
+    if (++it_ == end_)
+        throw pattern_error("Invalid Pattern");;
+
+    using cf = parser::capture_flags::flag_value;
+    using gm = parser::group_modes;
+
+    switch (*it_)
+    {
+    case '#':
+        ++it_;
+        while (it_ != end_ and *it_ != ')')
+            ++it_; /* skip comment */
+        result.mode = gm::comment;
+        break;
+
+    case '|':
+        ++it_;
+        result.mode = gm::branch_reset;
+        break;
+
+    case '>':
+        ++it_;
+        result.mode = gm::atomic;
+        break;
+
+    case 'P':
+    case '<':
+    case '\'':
+        ++it_;
+        result.is_named = true;
+        throw pattern_error("Named capture groups are unsupported");
+
+    default: /* parse options */
+        result.mode = gm::flag_assigning;
+        for (bool loop{ true }, flag_value{ true }; loop;)
+        {
+            if (it_ == end_)
+                throw pattern_error("Invalid Pattern");
+
+            const auto lookahead = *it_;
+            bool increment{ true };
+
+            switch (lookahead)
+            {
+            case 'i':
+                result.flags.caseless = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'm':
+                result.flags.multiline = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'n':
+                result.flags.noautocap = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 's':
+                result.flags.dotall = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'U':
+                result.flags.ungreedy = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'x':
+                result.flags.extended = (flag_value) ? cf::enabled : cf::disabled;
+                if (auto lit = it_ + 1; lit != end_ and *lit == 'x')
+                    if (++it_, flag_value)
+                        result.flags.extended = cf::enabled_more;
+                break;
+            case '-':
+                if (not flag_value)
+                    throw pattern_error("Capturing group arguments can only contain one hyphen");
+                flag_value = false;
+                break;
+
+            case ':':
+                result.mode = gm::non_capturing;
+                loop = false;
+                break;
+
+            case ')':
+                loop = false;
+                increment = false;
+                break;
+
+            default:
+                throw pattern_error("Invalid capturing group");
+            }
+
+            if (increment)
+                ++it_;
+        }
+        break;
+    }
+
+    return result;
 }
 
 template<typename CharT>
@@ -5087,211 +5357,6 @@ namespace srx {
 namespace detail {
 namespace parser {
 
-struct capture_flags
-{
-    enum class flag_value : unsigned char
-    {
-        enabled,
-        disabled,
-        inherit,
-    };
-
-    flag_value caseless  : 2;
-    flag_value multiline : 2;
-    flag_value dotall    : 2;
-    flag_value ungreedy  : 2;
-};
-
-class capture_stack
-{
-    using number_t = std::uint_least16_t;
-
-    struct cse
-    {
-        enum class modes : unsigned char
-        {
-            normal,
-            flag_assigning,
-            non_capturing,
-            branch_reset,
-        };
-
-        using cf = capture_flags::flag_value;
-
-        number_t number;
-        number_t number_end;
-        capture_flags flags;
-        modes mode;
-
-        constexpr cse() noexcept
-            : number{ 1 }
-            , number_end{ 1 }
-            , flags{ .caseless = cf::disabled, .multiline = cf::disabled, .dotall = cf::disabled, .ungreedy = cf::disabled }
-            , mode{ modes::non_capturing } {}
-
-        constexpr explicit cse(number_t cur, number_t end) noexcept
-            : number{ cur }
-            , number_end{ end }
-            , flags{ .caseless = cf::inherit, .multiline = cf::inherit, .dotall = cf::inherit, .ungreedy = cf::inherit }
-            , mode{ modes::normal } {}
-    };
-
-public:
-    using cf = capture_flags::flag_value;
-
-    constexpr void push_non_capturing()
-    {
-        auto next = next_number();
-        elems_.emplace_back(next, next);
-        elems_.back().mode = cse::modes::non_capturing;
-    }
-
-    [[nodiscard]] constexpr bool push()
-    {
-        /* return true if overflow and false otherwise */
-
-        auto next = next_number();
-
-        if (next + 1 == 0) /* unsigned integer overflow */
-            return true;
-
-        elems_.emplace_back(next, next + 1);
-        return false;
-    }
-
-    constexpr void set_non_capturing() noexcept
-    {
-        if (elems_.empty())
-            return;
-
-        if (auto& elem = elems_.back(); elem.mode != cse::modes::non_capturing)
-        {
-            elem.mode = cse::modes::non_capturing;
-            elem.number_end = elem.number;
-        }
-    }
-
-    constexpr void set_branch_reset() noexcept
-    {
-        if (elems_.empty())
-            return;
-
-        if (auto& elem = elems_.back(); elem.mode != cse::modes::branch_reset)
-        {
-            elem.mode = cse::modes::branch_reset;
-            elem.number_end = elem.number;
-        }
-    }
-
-    constexpr void set_flag_assigning() noexcept
-    {
-        if (elems_.empty())
-            return;
-
-        if (auto& elem = elems_.back(); elem.mode != cse::modes::flag_assigning)
-        {
-            elem.mode = cse::modes::flag_assigning;
-            elem.number_end = elem.number;
-        }
-    }
-
-    constexpr void branch_reset_if_enabled() noexcept
-    {
-        if (elems_.empty())
-            return;
-
-        if (auto& elem = elems_.back(); elem.mode == cse::modes::branch_reset)
-        {
-            auto& target = (elems_.size() < 2) ? base_ : *(std::ranges::next(elems_.rbegin()));
-            target.number_end = std::max(target.number_end, elem.number_end);
-            elem.number_end = elem.number;
-        }
-    }
-
-    [[nodiscard]] constexpr std::optional<number_t> capture_count() const noexcept
-    {
-        if (elems_.empty())
-            return base_.number_end;
-        return {};
-    }
-
-    constexpr std::optional<number_t> pop()
-    {
-        if (elems_.empty())
-            return {};
-
-        auto elem = elems_.back();
-        elems_.pop_back();
-
-        auto& target = elems_.empty() ? base_ : elems_.back();
-
-        /* overwrite containing capturing group's flags when elem is an empty capturing group */
-        if (elem.mode == cse::modes::flag_assigning)
-        {
-            template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
-                if (elem.flags.[: e
-                                :] != cf::inherit)
-                    target.flags.[: e :] = elem.flags.[: e :];
-        }
-
-        if (elem.mode == cse::modes::branch_reset)
-            target.number_end = std::max(target.number_end, elem.number_end);
-        else
-            target.number_end = elem.number_end;
-
-        if (elem.mode == cse::modes::normal)
-            return elem.number;
-        else
-            return {};
-    }
-
-private:
-    template<std::meta::info CaptureFlagReflection>
-    [[nodiscard]] constexpr bool get() const
-    {
-        for (const auto& elem : elems_ | std::views::reverse)
-            if (elem.flags.[: CaptureFlagReflection
-                            :] != cf::inherit)
-                return elem.flags.[: CaptureFlagReflection :] == cf::enabled;
-        return base_.flags.[: CaptureFlagReflection :] == cf::enabled;
-    }
-
-    template<std::meta::info CaptureFlagReflection>
-    constexpr void set(bool value)
-    {
-        ((elems_.empty()) ? base_ : elems_.back()).flags.[: CaptureFlagReflection :] = (value) ? cf::enabled : cf::disabled;
-    }
-
-public:
-    [[nodiscard]] constexpr bool caseless()  const { return get<^^capture_flags::caseless>(); }
-    [[nodiscard]] constexpr bool multiline() const { return get<^^capture_flags::multiline>(); }
-    [[nodiscard]] constexpr bool dotall()    const { return get<^^capture_flags::dotall>(); }
-    [[nodiscard]] constexpr bool ungreedy()  const { return get<^^capture_flags::ungreedy>(); }
-
-    constexpr void set_caseless(bool value)  noexcept { return set<^^capture_flags::caseless>(value); }
-    constexpr void set_multiline(bool value) noexcept { return set<^^capture_flags::multiline>(value); }
-    constexpr void set_dotall(bool value)    noexcept { return set<^^capture_flags::dotall>(value); }
-    constexpr void set_ungreedy(bool value)  noexcept { return set<^^capture_flags::ungreedy>(value); }
-
-private:
-    [[nodiscard]] constexpr number_t next_number() const noexcept
-    {
-        auto& target = elems_.empty() ? base_ : elems_.back();
-        return target.number_end;
-    }
-
-    std::vector<cse> elems_{};
-    cse              base_{};
-};
-
-}
-}
-}
-
-namespace srx {
-namespace detail {
-namespace parser {
-
 template<typename CharT>
 class ll1
 {
@@ -5304,7 +5369,7 @@ public:
     constexpr ll1(ast_t& ast, const std::vector<sv_type>& svs);
 
 private:
-    [[nodiscard]] constexpr std::size_t parse();
+    [[nodiscard]] constexpr std::size_t parse(lexer<char_type> lex);
 
     using assertion  = ast_t::assertion;
     using alt        = ast_t::alt;
@@ -5315,6 +5380,9 @@ private:
     using char_str   = ast_t::char_str;
     using char_class = ast_t::char_class;
     using type       = ast_t::type;
+
+    using repeat_n_m = tok::repeat_n_m;
+    using lparen     = tok::lparen<CharT>;
 
     [[nodiscard]] constexpr std::size_t sa_make_empty();
     [[nodiscard]] constexpr std::size_t sa_make_dot();
@@ -5329,14 +5397,13 @@ private:
     [[nodiscard]] constexpr std::size_t sa_make_star(std::size_t child_idx, repeater_mode mode);
     [[nodiscard]] constexpr std::size_t sa_make_plus(std::size_t child_idx, repeater_mode mode);
     [[nodiscard]] constexpr std::size_t sa_make_quest(std::size_t child_idx, repeater_mode mode);
-    [[nodiscard]] constexpr std::size_t sa_make_repeat(std::size_t child_idx, tok::repeat_n_m rep, repeater_mode mode);
+    [[nodiscard]] constexpr std::size_t sa_make_repeat(std::size_t child_idx, repeat_n_m rep, repeater_mode mode);
     [[nodiscard]] constexpr repeater_mode sa_rep_greedy() const;
     [[nodiscard]] constexpr repeater_mode sa_rep_lazy() const;
     [[nodiscard]] constexpr repeater_mode sa_rep_possessive() const;
-    [[nodiscard]] constexpr std::size_t sa_cap_pop(std::size_t child_idx);
-    constexpr void sa_cap_push();
-    constexpr void sa_cap_parse_flag();
-    constexpr void sa_begin_alt();
+    [[nodiscard]] constexpr std::size_t sa_cap_pop(std::size_t child_idx, std::basic_string_view<CharT> group_name);
+    [[nodiscard]] constexpr std::basic_string_view<CharT> sa_cap_push(const lparen& flag_info);
+    [[nodiscard]] constexpr std::size_t sa_next_alternative();
 
     [[nodiscard]] constexpr parser_flags& flags() { return ref_.get().flags_; }
     [[nodiscard]] constexpr const parser_flags& flags() const { return ref_.get().flags_; }
@@ -5382,13 +5449,12 @@ private:
 
     std::reference_wrapper<ast_t> ref_;
     std::vector<std::size_t> overwritable_;
-    lexer<char_type> lex_;
     capture_stack capstack_;
 };
 
 /* helper classes (and enum) for parser */
 
-enum class nonterminal : unsigned char { S, E, E_, F, F_, G, R, R_, H, P };
+enum class nonterminal : unsigned char { S, E, E_, F, F_, G, R, R_, H, P, V };
 
 enum class semantic_action : unsigned char
 {
@@ -5417,10 +5483,7 @@ enum class semantic_action : unsigned char
 
     cap_push,
     cap_pop,
-    cap_parse_flag,
-    cap_parse_flag_done,
-
-    begin_alt,
+    next_alt,
 };
 
 template<typename CharT>
@@ -5429,7 +5492,8 @@ class ll1_stack
 public:
     using char_type = CharT;
     using terminal = lexer<char_type>::token_t;
-    using elem_t = std::variant<terminal, nonterminal, semantic_action>;
+    using terminal_idx = decltype(std::declval<terminal>().index());
+    using elem_t = std::variant<terminal_idx, nonterminal, semantic_action>;
 
     constexpr void pop() { data_.pop_back(); }
     constexpr void push(const std::vector<elem_t>& elems) { data_.append_range(elems | std::views::reverse); }
@@ -5456,7 +5520,7 @@ class semantic_stack
 public:
     using char_type = CharT;
     using terminal = ll1_stack<char_type>::terminal;
-    using elem_t = std::variant<std::size_t, typename lexer<char_type>::token_t, repeater_mode>;
+    using elem_t = std::variant<std::size_t, typename lexer<char_type>::token_t, repeater_mode, std::basic_string_view<CharT>>;
 
     [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
     constexpr void push(elem_t&& elems) { data_.push_back(std::move(elems)); }
@@ -5479,9 +5543,9 @@ private:
 
 template<typename CharT>
 constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv)
-    : ref_{ ast }, lex_{ sv }
+    : ref_{ ast }
 {
-    ast.root_idx_ = parse();
+    ast.root_idx_ = parse(lexer<char_type>{ sv });
 }
 
 template<typename CharT>
@@ -5492,8 +5556,7 @@ constexpr ll1<CharT>::ll1(ast_t& ast, const std::vector<sv_type>& svs)
 
     for (const auto& sv : svs)
     {
-        lex_ = lexer{ sv };
-        const std::size_t subtree_root = parse();
+        const std::size_t subtree_root = parse(lexer<char_type>{ sv });
         const auto& root = std::get<alt>(get_expr(ast.root_idx_));
         root.idxs.emplace_back(subtree_root);
     }
@@ -5502,17 +5565,18 @@ constexpr ll1<CharT>::ll1(ast_t& ast, const std::vector<sv_type>& svs)
 /* parser implementation */
 
 template<typename CharT>
-constexpr std::size_t ll1<CharT>::parse()
+constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
 {
     using terminal = ll1_stack<char_type>::terminal;
+    using terminal_idx = ll1_stack<char_type>::terminal_idx;
 
-    if (lex_.empty()) /* ensure expressions is non-empty */
+    if (lex.empty()) /* ensure expressions is non-empty */
         return new_expression<char_str>(/* empty string */);
 
     ll1_stack<char_type> stack;
     semantic_stack<char_type> semstack;
 
-    auto token = lex_.nexttok();
+    auto token = lex.nexttok();
 
     for (bool loop{ true }; loop;)
     {
@@ -5522,18 +5586,18 @@ constexpr std::size_t ll1<CharT>::parse()
         const auto top = std::move(stack.root());
         stack.pop();
 
-        if (const auto* const term{ get_if<terminal>(&top) })
+        if (const auto* const termidx{ get_if<terminal_idx>(&top) })
         {
-            if (holds_alternative<tok::end_of_input>(*term))
+            if (*termidx == tok_index<tok::end_of_input>)
             {
                 /* parsing is done */
                 loop = false;
             }
-            else if (term->index() == token.index())
+            else if (*termidx == token.index())
             {
                 /* match */
                 semstack.push(std::move(token));
-                token = lex_.nexttok();
+                token = lex.nexttok();
             }
             else
             {
@@ -5564,7 +5628,7 @@ constexpr std::size_t ll1<CharT>::parse()
                 case tok_index<char_str>:
                 case tok_index<char_class>:
                 case tok_index<backref>:
-                    stack.push({ nt::E, end_of_input{} });
+                    stack.push({ nt::E, tok_index<end_of_input> });
                     break;
                 default:
                     throw pattern_error("Invalid pattern");
@@ -5598,7 +5662,7 @@ constexpr std::size_t ll1<CharT>::parse()
                     /* epsilon */
                     break;
                 case tok_index<vert>:
-                    stack.push({ sa::begin_alt, vert{}, nt::E, sa::make_alt });
+                    stack.push({ nt::V, nt::E, sa::make_alt });
                     break;
                 default:
                     throw pattern_error("Invalid pattern");
@@ -5682,16 +5746,16 @@ constexpr std::size_t ll1<CharT>::parse()
                     /* epsilon */
                     break;
                 case tok_index<star>:
-                    stack.push({ star{}, nt::R_, sa::make_star });
+                    stack.push({ tok_index<star>, nt::R_, sa::make_star });
                     break;
                 case tok_index<plus>:
-                    stack.push({ plus{}, nt::R_, sa::make_plus });
+                    stack.push({ tok_index<plus>, nt::R_, sa::make_plus });
                     break;
                 case tok_index<quest>:
-                    stack.push({ quest{}, nt::R_, sa::make_quest });
+                    stack.push({ tok_index<quest>, nt::R_, sa::make_quest });
                     break;
                 case tok_index<repeat_n_m>:
-                    stack.push({ repeat_n_m{}, nt::R_, sa::make_repeat });
+                    stack.push({ tok_index<repeat_n_m>, nt::R_, sa::make_repeat });
                     break;
                 }
                 break;
@@ -5712,10 +5776,10 @@ constexpr std::size_t ll1<CharT>::parse()
                     stack.push({ /* epsilon, */ sa::rep_greedy });
                     break;
                 case tok_index<quest>:
-                    stack.push({ quest{}, sa::rep_lazy });
+                    stack.push({ tok_index<quest>, sa::rep_lazy });
                     break;
                 case tok_index<plus>:
-                    stack.push({ plus{}, sa::rep_possessive });
+                    stack.push({ tok_index<plus>, sa::rep_possessive });
                     break;
                 default:
                     throw pattern_error("Invalid pattern");
@@ -5725,28 +5789,28 @@ constexpr std::size_t ll1<CharT>::parse()
                 switch (token.index())
                 {
                 case tok_index<dot>:
-                    stack.push({ dot{}, sa::make_dot });
+                    stack.push({ tok_index<dot>, sa::make_dot });
                     break;
                 case tok_index<hat>:
-                    stack.push({ hat{}, sa::make_hat });
+                    stack.push({ tok_index<hat>, sa::make_hat });
                     break;
                 case tok_index<dollar>:
-                    stack.push({ dollar{}, sa::make_dollar });
+                    stack.push({ tok_index<dollar>, sa::make_dollar });
                     break;
                 case tok_index<assertion>:
-                    stack.push({ assertion{}, sa::make_assert });
+                    stack.push({ tok_index<assertion>, sa::make_assert });
                     break;
                 case tok_index<lparen>:
-                    stack.push({ sa::cap_push, lparen{}, nt::P, rparen{}, sa::cap_pop });
+                    stack.push({ nt::P, nt::E, tok_index<rparen>, sa::cap_pop });
                     break;
                 case tok_index<char_str>:
-                    stack.push({ char_str{}, sa::make_char_lit });
+                    stack.push({ tok_index<char_str>, sa::make_char_lit });
                     break;
                 case tok_index<char_class>:
-                    stack.push({ char_class{}, sa::make_char_class });
+                    stack.push({ tok_index<char_class>, sa::make_char_class });
                     break;
                 case tok_index<backref>:
-                    stack.push({ backref{}, sa::make_bref });
+                    stack.push({ tok_index<backref>, sa::make_bref });
                     break;
                 default:
                     throw pattern_error("Invalid pattern");
@@ -5755,19 +5819,18 @@ constexpr std::size_t ll1<CharT>::parse()
             case nt::P:
                 switch (token.index())
                 {
-                case tok_index<assertion>:
-                case tok_index<dot>:
-                case tok_index<hat>:
-                case tok_index<dollar>:
                 case tok_index<lparen>:
-                case tok_index<rparen>:
-                case tok_index<char_str>:
-                case tok_index<char_class>:
-                case tok_index<backref>:
-                    stack.push({ nt::E });
+                    stack.push({ tok_index<lparen>, sa::cap_push });
                     break;
-                case tok_index<quest>:
-                    stack.push({ sa::cap_parse_flag, quest{}, sa::cap_parse_flag_done, nt::E });
+                default:
+                    throw pattern_error("Invalid pattern");
+                }
+                break;
+            case nt::V:
+                switch (token.index())
+                {
+                case tok_index<vert>:
+                    stack.push({ tok_index<vert>, sa::next_alt });
                     break;
                 default:
                     throw pattern_error("Invalid pattern");
@@ -5825,7 +5888,7 @@ constexpr std::size_t ll1<CharT>::parse()
             case sa::make_alt:
             {
                 const auto rhs_idx = get<std::size_t>(semstack.pop());
-                std::ignore = semstack.pop(); /* pop tok::vert */
+                std::ignore = semstack.pop(); /* pop (placeholder) */
                 const auto lhs_idx = get<std::size_t>(semstack.pop());
                 semstack.push(sa_make_alt(lhs_idx, rhs_idx));
                 break;
@@ -5870,7 +5933,7 @@ constexpr std::size_t ll1<CharT>::parse()
             case sa::make_repeat:
             {
                 const auto mode = get<repeater_mode>(semstack.pop());
-                const auto rep = get<tok::repeat_n_m>(get<terminal>(semstack.pop()));
+                const auto rep = get<repeat_n_m>(get<terminal>(semstack.pop()));
                 const auto child_idx = get<std::size_t>(semstack.pop());
                 semstack.push(sa_make_repeat(child_idx, rep, mode));
                 break;
@@ -5894,32 +5957,22 @@ constexpr std::size_t ll1<CharT>::parse()
             }
             case sa::cap_push:
             {
-                sa_cap_push();
+                const auto lpn = get<lparen>(get<terminal>(semstack.pop()));
+                semstack.push(sa_cap_push(lpn));
                 break;
             }
             case sa::cap_pop:
             {
                 std::ignore = semstack.pop(); /* pop tok::rparen */
                 const auto child_idx = get<std::size_t>(semstack.pop());
-                std::ignore = semstack.pop(); /* pop tok::lparen */
-                semstack.push(sa_cap_pop(child_idx));
+                const auto cap_name = get<std::basic_string_view<CharT>>(semstack.pop());
+                semstack.push(sa_cap_pop(child_idx, cap_name));
                 break;
             }
-            case sa::cap_parse_flag:
+            case sa::next_alt:
             {
-                sa_cap_parse_flag();
-                break;
-            }
-            case sa::cap_parse_flag_done:
-            {
-                std::ignore = semstack.pop(); /* pop tok::quest */
-                /* this exists only so we can use capture_pop(_empty)? for captures with flags */
-                break;
-            }
-            case sa::begin_alt:
-            {
-                /* exists only so branch resetting captures work */
-                sa_begin_alt();
+                std::ignore = semstack.pop(); /* pop tok::vert */
+                semstack.push(sa_next_alternative());
                 break;
             }
             }
@@ -6352,23 +6405,23 @@ constexpr std::size_t ll1<CharT>::sa_make_bref(const backref bref)
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_star(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 0, .max = -1 }, mode);
+    return new_expression<repeat>(child_idx, repeat_n_m{ .min = 0, .max = -1 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_plus(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 1, .max = 0 }, mode);
+    return new_expression<repeat>(child_idx, repeat_n_m{ .min = 1, .max = 0 }, mode);
 }
 
 template<typename CharT>
 constexpr std::size_t ll1<CharT>::sa_make_quest(const std::size_t child_idx, const repeater_mode mode)
 {
-    return new_expression<repeat>(child_idx, tok::repeat_n_m{ .min = 0, .max = 1 }, mode);
+    return new_expression<repeat>(child_idx, repeat_n_m{ .min = 0, .max = 1 }, mode);
 }
 
 template<typename CharT>
-constexpr std::size_t ll1<CharT>::sa_make_repeat(const std::size_t child_idx, const tok::repeat_n_m rep, const repeater_mode mode)
+constexpr std::size_t ll1<CharT>::sa_make_repeat(const std::size_t child_idx, const repeat_n_m rep, const repeater_mode mode)
 {
     return new_expression<repeat>(child_idx, rep, mode);
 }
@@ -6403,7 +6456,7 @@ constexpr repeater_mode ll1<CharT>::sa_rep_possessive() const
 }
 
 template<typename CharT>
-constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx)
+constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx, std::basic_string_view<CharT> group_name)
 {
     const auto cap_number = capstack_.pop();
 
@@ -6465,114 +6518,41 @@ constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx)
 }
 
 template<typename CharT>
-constexpr void ll1<CharT>::sa_cap_push()
+constexpr std::basic_string_view<CharT> ll1<CharT>::sa_cap_push(const tok::lparen<CharT>& flag_info)
 {
+    if (not flags().enable_branchreset and flag_info.mode == group_modes::branch_reset)
+        throw parser_error("Branch resetting in captures is not enabled");
+
+    if (flag_info.mode == group_modes::atomic)
+        throw pattern_error("Atomic capture groups are unsupported");
+    if (flag_info.is_named)
+        throw pattern_error("Named capture groups are unsupported");
+
+    if (flag_info.flags.noautocap != capture_flags::flag_value::inherit)
+        throw pattern_error("Capturing group flag 'n' is unsupported");
+    if (flag_info.flags.extended != capture_flags::flag_value::inherit)
+        throw pattern_error("Capturing group flag 'x' is unsupported");
+
     if (flags().enable_captures)
     {
-        if (capstack_.push()) /* i.e. unsigned integer overflow has occurred */
+        if (capstack_.push(flag_info.flags, flag_info.mode)) /* i.e. unsigned integer overflow has occurred */
             throw pattern_error("Capturing group limit exceeded");
     }
     else
     {
-        capstack_.push_non_capturing();
+        capstack_.push_non_capturing(flag_info.flags, flag_info.mode);
     }
+
+    return (flag_info.is_named) ? flag_info.name : std::basic_string_view<CharT>{};
 }
 
 template<typename CharT>
-constexpr void ll1<CharT>::sa_cap_parse_flag()
+constexpr std::size_t ll1<CharT>::sa_next_alternative()
 {
-    /* manually parse flags */
-
-    auto& lit = lex_.it_;
-    const auto& lend = lex_.end_;
-
-    bool flag_value{ true };
-
-    if (lit == lend)
-        return;
-
-    switch (*lit)
-    {
-    case '#':
-        ++lit;
-        while (lit != lend and *lit != ')')
-            ++lit; /* skip comment */
-        capstack_.set_non_capturing();
-        break;
-
-    case '|':
-        if (not flags().enable_branchreset)
-            throw parser_error("Branch resetting in captures is not enabled");
-        ++lit;
-        capstack_.set_branch_reset();
-        break;
-
-    case '>':
-        throw pattern_error("Atomic capture groups are unsupported");
-
-    case 'P':
-    case '<':
-    case '\'':
-        throw pattern_error("Named capture groups are unsupported");
-
-    default: /* parse options */
-        capstack_.set_flag_assigning();
-        for (bool loop{ true }; loop;)
-        {
-            if (lit == lend)
-                throw pattern_error("Invalid Pattern");
-
-            const auto lookahead = *lit;
-            bool increment{ true };
-
-            switch (lookahead)
-            {
-            case 'i':
-                capstack_.set_caseless(flag_value);
-                break;
-            case 'm':
-                capstack_.set_multiline(flag_value);
-                break;
-            case 's':
-                capstack_.set_dotall(flag_value);
-                break;
-            case 'U':
-                capstack_.set_ungreedy(flag_value);
-                break;
-            case 'x':
-                throw pattern_error("Capturing group flag 'x' is unsupported");
-            case '-':
-                if (not flag_value)
-                    throw pattern_error("Capturing group arguments can only contain one hyphen");
-                flag_value = false;
-                break;
-
-            case ':':
-                capstack_.set_non_capturing();
-                loop = false;
-                break;
-
-            case ')':
-                loop = false;
-                increment = false;
-                break;
-
-            default:
-                throw pattern_error("Invalid capturing group");
-            }
-
-            if (increment)
-                ++lit;
-        }
-        break;
-    }
-}
-
-template<typename CharT>
-constexpr void ll1<CharT>::sa_begin_alt()
-{
+    /* allow branch reset to work properly */
     if (flags().enable_branchreset)
         capstack_.branch_reset_if_enabled();
+    return -1; /* dummy value */
 }
 
 }

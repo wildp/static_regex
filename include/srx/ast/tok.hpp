@@ -16,6 +16,7 @@
 
 #include "srx/api/regex_error.hpp"
 #include "srx/ast/charclass.hpp"
+#include "srx/ast/capstack.hpp"
 
 
 /* Note: We assume the literal character encoding is a superset of ASCII */
@@ -53,7 +54,6 @@ struct vert {};
 struct dot {};
 struct hat {};
 struct dollar {};
-struct lparen {};
 struct rparen {};
 struct star {};
 struct plus {};
@@ -72,6 +72,15 @@ struct assertion
     assert_type type;
 
     friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
+};
+
+template<typename CharT>
+struct lparen
+{
+    parser::capture_flags flags{};
+    parser::group_modes mode{ parser::group_modes::normal };
+    bool is_named { false };
+    std::basic_string_view<CharT> name{};
 };
 
 template<typename CharT>
@@ -148,7 +157,7 @@ struct backref
 
 template<typename CharT>
 using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::dollar,
-                                tok::lparen, tok::rparen, tok::vert,
+                                tok::lparen<CharT>, tok::rparen, tok::vert,
                                 tok::star, tok::plus, tok::quest, tok::repeat_n_m,
                                 tok::char_str<CharT>, tok::char_class<CharT>,
                                 tok::backref, tok::assertion>;
@@ -179,6 +188,7 @@ private:
     constexpr std::size_t            parse_arbitrary_oct();
     constexpr tok::backref           parse_bref();
     constexpr tok::repeat_n_m        parse_repeat();
+    constexpr tok::lparen<CharT>     parse_lparen();
     constexpr token_t                parse_bref_or_octal(CharT init);
     constexpr tok::char_str<CharT>   parse_literal_string(it_type begin);
     constexpr tok::char_class<CharT> parse_char_class();
@@ -205,7 +215,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
 
     switch (*it_++)
     {
-    case '(': return lparen{};
+    case '(': return parse_lparen();
     case ')': return rparen{};
     case '.': return dot{};
     case '*': return star{};
@@ -619,6 +629,108 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
     }
 
     return rep;
+}
+
+template<typename CharT>
+constexpr tok::lparen<CharT> lexer<CharT>::parse_lparen()
+{
+    tok::lparen<CharT> result{};
+
+    if (it_ == end_ or *it_ != '?')
+        return result;
+
+    if (++it_ == end_)
+        throw pattern_error("Invalid Pattern");;
+
+    using cf = parser::capture_flags::flag_value;
+    using gm = parser::group_modes;
+
+    switch (*it_)
+    {
+    case '#':
+        ++it_;
+        while (it_ != end_ and *it_ != ')')
+            ++it_; /* skip comment */
+        result.mode = gm::comment;
+        break;
+
+    case '|':
+        ++it_;
+        result.mode = gm::branch_reset;
+        break;
+
+    case '>':
+        ++it_;
+        result.mode = gm::atomic;
+        break;
+
+    case 'P':
+    case '<':
+    case '\'':
+        ++it_;
+        result.is_named = true;
+        throw pattern_error("Named capture groups are unsupported");
+
+    default: /* parse options */
+        result.mode = gm::flag_assigning;
+        for (bool loop{ true }, flag_value{ true }; loop;)
+        {
+            if (it_ == end_)
+                throw pattern_error("Invalid Pattern");
+
+            const auto lookahead = *it_;
+            bool increment{ true };
+
+            switch (lookahead)
+            {
+            case 'i':
+                result.flags.caseless = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'm':
+                result.flags.multiline = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'n':
+                result.flags.noautocap = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 's':
+                result.flags.dotall = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'U':
+                result.flags.ungreedy = (flag_value) ? cf::enabled : cf::disabled;
+                break;
+            case 'x':
+                result.flags.extended = (flag_value) ? cf::enabled : cf::disabled;
+                if (auto lit = it_ + 1; lit != end_ and *lit == 'x')
+                    if (++it_, flag_value)
+                        result.flags.extended = cf::enabled_more;
+                break;
+            case '-':
+                if (not flag_value)
+                    throw pattern_error("Capturing group arguments can only contain one hyphen");
+                flag_value = false;
+                break;
+
+            case ':':
+                result.mode = gm::non_capturing;
+                loop = false;
+                break;
+
+            case ')':
+                loop = false;
+                increment = false;
+                break;
+
+            default:
+                throw pattern_error("Invalid capturing group");
+            }
+
+            if (increment)
+                ++it_;
+        }
+        break;
+    }
+
+    return result;
 }
 
 template<typename CharT>
