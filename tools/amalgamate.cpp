@@ -33,11 +33,7 @@ public:
     {
         if (data_ == MAP_FAILED)
         {
-#if __cpp_lib_format_path >= 202403L
             std::println(std::cerr, "error: could not open file {} for reading", p);
-#else
-            std::println(std::cerr, "error: could not open file {} for reading", p.string());
-#endif
             std::quick_exit(1);
         }
     }
@@ -65,11 +61,7 @@ public:
         {
             if (not is_directory(dir))
             {
-#if __cpp_lib_format_path >= 202403L
                 std::println(std::cerr, "error: {} is not a directory", dir);
-#else
-                std::println(std::cerr, "error: {} is not a directory", dir.string());
-#endif
                 std::quick_exit(1);
             }
         }
@@ -84,11 +76,7 @@ public:
 
         if (not tmp.is_open())
         {
-#if __cpp_lib_format_path >= 202403L
             std::println(std::cerr, "error: could not open file {} for writing", tmpfile);
-#else
-            std::println(std::cerr, "error: could not open file {} for writing", tmpfile.string());
-#endif
             std::quick_exit(1);
         }
 
@@ -100,19 +88,12 @@ public:
 
         if (not ofs.is_open())
         {
-#if __cpp_lib_format_path >= 202403L
             std::println(std::cerr, "error: could not open file {} for writing", out);
-#else
-            std::println(std::cerr, "error: could not open file {} for writing", out.string());
-#endif
             std::quick_exit(1);
         }
 
-#if __cpp_lib_format_path >= 202506L
-        ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::quoted(in.display_string()) << '\n';
-#else
-        ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::quoted(in.string()) << '\n';
-#endif
+        ofs << "// THIS FILE IS AUTOMATICALLY AMALGAMATED FROM " << std::format("{:?}", in) << '\n';
+
         insert_copyrights(ofs);
         copy_licence_to(ofs, licence);
         insert_includes(ofs);
@@ -140,11 +121,7 @@ private:
                 return absolute(path);
         }
 
-#if __cpp_lib_format_path >= 202403L
         std::println(std::cerr, "error: file {} does not exist", next);
-#else
-        std::println(std::cerr, "error: file {} does not exist", next.string());
-#endif
         std::quick_exit(1);
     }
 

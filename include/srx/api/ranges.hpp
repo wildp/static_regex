@@ -904,10 +904,10 @@ public:
 
     iterator() requires std::default_initializable<std::ranges::iterator_t<V>> = default;
 
-    explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
-    explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
         requires result_type::has_continue
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 

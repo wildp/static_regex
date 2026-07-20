@@ -74,11 +74,7 @@ constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length()
             {
                 auto tmp = cat.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
                 lengths.at(idx) = std::ranges::fold_left(tmp, min_max_t{ 0, 0 }, [](const min_max_t& x, const min_max_t& y) -> min_max_t {
-#if __cpp_lib_saturation_arithmetic >= 202603L
                     return { std::saturating_add(x.first, y.first), std::saturating_add(x.second, y.second) };
-#else
-                    return { std::add_sat(x.first, y.first), std::add_sat(x.second, y.second) };
-#endif
                 });
                 stack.pop_back();
             }
@@ -123,17 +119,9 @@ constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length()
                 const auto& [rmin, rmax] = rep.reps;
 
                 if (rmin > rmax) /* unbounded repetition */
-#if __cpp_lib_saturation_arithmetic >= 202603L
                     lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(lmin, rmin), no_upper_bound };
-#else
-                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(lmin, rmin), no_upper_bound };
-#endif
                 else
-#if __cpp_lib_saturation_arithmetic >= 202603L
                     lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(lmin, rmin), std::saturating_mul<min_max_t::second_type>(lmax, rmax) };
-#else
-                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(lmin, rmin), std::mul_sat<min_max_t::second_type>(lmax, rmax) };
-#endif
 
                 stack.pop_back();
             }
@@ -463,11 +451,7 @@ constexpr void expr_tree<CharT>::optimise_tags()
     if (remapper.size() > std::numeric_limits<tag_number_t>::max())
         throw tree_error("Tag number exceeded");
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
     tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
-#else
-    tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
-#endif
 }
 
 
@@ -698,11 +682,7 @@ constexpr auto expr_tree<CharT>::tag_to_register()
     if (remapper.size() > std::numeric_limits<tag_number_t>::max())
         throw tree_error("Tag number exceeded");
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
     tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
-#else
-    tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
-#endif
 
 
     /* --- end copied section ---  */

@@ -398,6 +398,7 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <simd>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -2862,7 +2863,8 @@ enum class named_character_class : unsigned char
     not_digits,
     not_perl_whitespace,
     not_word,
-    octal_digits,
+    octdigits,
+    nucs_char,
 };
 
 /* class definitions */
@@ -2880,9 +2882,15 @@ public:
     char_class_impl() = default;
     constexpr explicit char_class_impl(negated_cc_tag_t) noexcept(IsNarrow) { negate(); }
     constexpr explicit char_class_impl(named_character_class ncc) noexcept(IsNarrow) { insert(ncc); }
-    constexpr explicit char_class_impl(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow) { insert(ncc); negate(); }
+    constexpr explicit char_class_impl(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(ncc) { negate(); }
     constexpr explicit char_class_impl(char_type c) noexcept(IsNarrow) { insert(c); }
-    constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) { insert(c); negate(); }
+    constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c) { negate(); }
+
+    template<std::same_as<char_type>... Ts>
+    constexpr explicit char_class_impl(Ts... c) noexcept(IsNarrow) { ([&]{ insert(c); }() , ...); }
+
+    template<std::same_as<char_type>... Ts>
+    constexpr explicit char_class_impl(Ts... c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c...) { negate(); }
 
     constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
     constexpr void insert(char_type first, char_type last) noexcept(IsNarrow) { data_.insert(first, last); }
@@ -2966,6 +2974,7 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     static constexpr cs word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
     static constexpr cs xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
     static constexpr cs octal{ p{ '0', '7' } };
+    static constexpr cs nucsc{ p{ '0', '9' }, p{ 'A', 'Z' }, ' ', '-' };
 
     switch (ncc)
     {
@@ -2990,8 +2999,9 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
     case named_character_class::not_word:            data_ |= ~word;  break;
 
-    /* used by bootstrap only */
-    case named_character_class::octal_digits: data_ |= octal; break;
+    /* used internally only */
+    case named_character_class::octdigits: data_ |= octal; break;
+    case named_character_class::nucs_char: data_ |= nucsc; break;
     }
 }
 
@@ -3702,11 +3712,7 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
             if (rep.min == -1)
                 rep.min = c - '0';
             else
-#if __cpp_lib_saturation_arithmetic >= 202603L
                 rep.min = std::saturating_add(std::saturating_mul(rep.min, base), static_cast<int>(c - '0'));
-#else
-                rep.min = std::add_sat(std::mul_sat(rep.min, base), static_cast<int>(c - '0'));
-#endif
         }
         else if (c == ',')
         {
@@ -3741,11 +3747,7 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
             if (rep.max == -1)
                 rep.max = c - '0';
             else
-#if __cpp_lib_saturation_arithmetic >= 202603L
                 rep.max = std::saturating_add(std::saturating_mul(rep.max, base), static_cast<int>(c - '0'));
-#else
-                rep.max = std::add_sat(std::mul_sat(rep.max, base), static_cast<int>(c - '0'));
-#endif
         }
         else if (c == '}')
         {
@@ -4224,11 +4226,7 @@ public:
     {
         auto key_copy = keys_;
         auto [last, _] = std::ranges::unique(key_copy);
-#if __cpp_lib_saturation_arithmetic >= 202603L
         return std::saturating_cast<capture_number_t>(last - key_copy.begin());
-#else
-        return std::saturate_cast<capture_number_t>(last - key_copy.begin());
-#endif
     }
 
     [[nodiscard]] constexpr std::pair<bool, bool> capture_side(tag_number_t tag) const
@@ -4583,11 +4581,7 @@ constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length()
             {
                 auto tmp = cat.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
                 lengths.at(idx) = std::ranges::fold_left(tmp, min_max_t{ 0, 0 }, [](const min_max_t& x, const min_max_t& y) -> min_max_t {
-#if __cpp_lib_saturation_arithmetic >= 202603L
                     return { std::saturating_add(x.first, y.first), std::saturating_add(x.second, y.second) };
-#else
-                    return { std::add_sat(x.first, y.first), std::add_sat(x.second, y.second) };
-#endif
                 });
                 stack.pop_back();
             }
@@ -4632,17 +4626,9 @@ constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length()
                 const auto& [rmin, rmax] = rep.reps;
 
                 if (rmin > rmax) /* unbounded repetition */
-#if __cpp_lib_saturation_arithmetic >= 202603L
                     lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(lmin, rmin), no_upper_bound };
-#else
-                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(lmin, rmin), no_upper_bound };
-#endif
                 else
-#if __cpp_lib_saturation_arithmetic >= 202603L
                     lengths.at(idx) = { std::saturating_mul<min_max_t::first_type>(lmin, rmin), std::saturating_mul<min_max_t::second_type>(lmax, rmax) };
-#else
-                    lengths.at(idx) = { std::mul_sat<min_max_t::first_type>(lmin, rmin), std::mul_sat<min_max_t::second_type>(lmax, rmax) };
-#endif
 
                 stack.pop_back();
             }
@@ -4971,11 +4957,7 @@ constexpr void expr_tree<CharT>::optimise_tags()
     if (remapper.size() > std::numeric_limits<tag_number_t>::max())
         throw tree_error("Tag number exceeded");
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
     tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
-#else
-    tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
-#endif
 }
 
 /* convert pattern for use in regex search */
@@ -5204,11 +5186,7 @@ constexpr auto expr_tree<CharT>::tag_to_register()
     if (remapper.size() > std::numeric_limits<tag_number_t>::max())
         throw tree_error("Tag number exceeded");
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
     tag_count_ = std::saturating_cast<tag_number_t>(remapper.size());
-#else
-    tag_count_ = std::saturate_cast<tag_number_t>(remapper.size());
-#endif
 
     /* --- end copied section ---  */
 
@@ -6731,7 +6709,7 @@ public:
     using lookbehind_1_tr = tnfa::lookbehind_1_tr<char_type>;
     using lookahead_1_tr = tnfa::lookahead_1_tr<char_type>;
 
-    explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
+    constexpr explicit tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
     constexpr void rewrite_assertions();
     constexpr void add_non_empty_match_pathway();
 
@@ -7723,11 +7701,7 @@ constexpr void tagged_nfa<CharT>::rewrite_sc_lookahead()
 
             /* assign the lowest priority to avoid clashes with eof_anchor */
             using priority_t = decltype(epsilon_tr::priority);
-#if __cpp_lib_saturation_arithmetic >= 202603L
             const auto p = std::saturating_cast<priority_t>(std::saturating_sub(nodes_.at(tr.src).out_tr.size(), 1uz));
-#else
-            const auto p = std::saturate_cast<priority_t>(std::sub_sat(nodes_.at(tr.src).out_tr.size(), 1uz));
-#endif
 
             std::erase(nodes_.at(tr.dst).in_tr, i);
             tr.dst = mapped_states.at(tr.dst);
@@ -8023,11 +7997,7 @@ constexpr void tagged_nfa<CharT>::rewrite_sc_lookbehind()
         if (cont_info_.size() >= std::numeric_limits<tnfa::continue_at_t>::max())
             throw tnfa_error("tagged_nfa::rewrite_sc_lookbehind: maximum size of cont_info_ exceeded");
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
         continue_ats.emplace_back(std::saturating_cast<tnfa::continue_at_t>(cont_info_.size()));
-#else
-        continue_ats.emplace_back(std::saturate_cast<tnfa::continue_at_t>(cont_info_.size()));
-#endif
         cont_info_.emplace_back(mapped_cont, edge);
         cont_info_.at(0).cs -= edge; /* note: cont_info should be non-empty to begin with */
     }
@@ -8475,7 +8445,7 @@ class tagged_dfa
 public:
     using char_type = CharT;
 
-    explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
+    constexpr explicit tagged_dfa(const tagged_nfa<char_type>& tnfa);
     constexpr void optimise_registers();
     constexpr void compact_regop_blocks();
     constexpr void minimise_states();
@@ -9203,11 +9173,7 @@ constexpr void factory<CharT>::factory_init()
 
 template<typename CharT>
 constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
-#if __cpp_lib_saturation_arithmetic >= 202603L
     : tnfa_ptr_{ &input }, tag_count_{ std::saturating_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
-#else
-    : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
-#endif
 {
     factory_init();
 
@@ -9446,7 +9412,7 @@ constexpr void normalise_regops(regops_t& o, const reg_t regcount)
 class liveness_matrix
 {
 public:
-    explicit constexpr liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count, bitset_t(reg_count, false)) {}
+    constexpr explicit liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count, bitset_t(reg_count, false)) {}
     [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) { return data_[block_idx][reg]; }
     [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) const { return data_[block_idx][reg]; }
     [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) { return data_.at(block_idx).at(reg); }
@@ -9462,7 +9428,7 @@ private:
 class square_matrix
 {
 public:
-    explicit constexpr square_matrix(std::size_t reg_count) : data_(reg_count * reg_count, false), reg_count_{ reg_count } {}
+    constexpr explicit square_matrix(std::size_t reg_count) : data_(reg_count * reg_count, false), reg_count_{ reg_count } {}
     [[nodiscard]] constexpr auto operator[](std::size_t reg1, std::size_t reg2) { return data_[(reg1 * reg_count_) + reg2]; }
     [[nodiscard]] constexpr auto operator[](std::size_t reg1, std::size_t reg2) const { return data_[(reg1 * reg_count_) + reg2]; }
     [[nodiscard]] constexpr auto at(std::size_t reg1, std::size_t reg2) { return data_.at((reg1 * reg_count_) + reg2); }
@@ -9648,7 +9614,7 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
     class postorder_visitor
     {
     public:
-        explicit constexpr postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count)
+        constexpr explicit postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count)
             : block_added(block_count, false)
         {
             for (const auto i : block_graph_start | std::views::reverse)
@@ -10811,10 +10777,8 @@ class submatch
 public:
     using iterator               = I;
     using reverse_iterator       = std::reverse_iterator<iterator>;
-#if __cpp_lib_ranges_as_const >= 202311L
     using const_iterator         = std::const_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-#endif
     using value_type             = std::iter_value_t<iterator>;
     using size_type              = std::size_t;
     using string_type            = std::basic_string<value_type>;
@@ -10874,7 +10838,6 @@ public:
         return std::make_reverse_iterator(this->begin());
     }
 
-#if __cpp_lib_ranges_as_const >= 202311L
     [[nodiscard]] constexpr const_iterator cbegin() const noexcept
         requires std::bidirectional_iterator<const_iterator>
     {
@@ -10898,7 +10861,6 @@ public:
     {
         return std::make_reverse_iterator(this->cbegin());
     }
-#endif
 
     /* structured binding support */
 
@@ -10946,7 +10908,6 @@ public:
         return this->view();
     }
 
-#if __cpp_lib_ranges_as_const >= 202311L
     [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() const &
         requires (not std::same_as<const_iterator, iterator>)
     {
@@ -10958,7 +10919,6 @@ public:
     {
         return { std::move(first_), std::move(last_) };
     }
-#endif
 
     /* operators */
 
@@ -11007,10 +10967,8 @@ public:
         std::ranges::swap(x.last_, y.last_);
     }
 
-#if __cpp_lib_ranges_as_const >= 202311L
     template<std::bidirectional_iterator OtherI>
     friend class submatch;
-#endif
 
 private:
     static constexpr bool use_bool{ not std::contiguous_iterator<I> };
@@ -11108,11 +11066,7 @@ public:
     using size_type              = std::size_t;
     using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
     using submatch_type          = submatch<I>;
-#if __cpp_lib_ranges_as_const >= 202311L
     using iterator               = proxy_iterator<std::same_as<I, std::const_iterator<I>>>;
-#else
-    using iterator               = proxy_iterator<false>;
-#endif
     using reverse_iterator       = std::reverse_iterator<iterator>;
     using const_iterator         = proxy_iterator<true>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
@@ -11243,7 +11197,7 @@ private:
     static constexpr bool has_continue{ Captures.has_continue };
     static constexpr bool continue_from_it{ Captures.continue_from_it };
 
-    explicit constexpr static_match_results(I start)
+    constexpr explicit static_match_results(I start)
         noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
         : match_start_{ std::move(start) }
     {
@@ -11342,11 +11296,7 @@ class static_match_results<I, Captures>::proxy_iterator
 public:
     using iterator_concept  = std::random_access_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-#if __cpp_lib_ranges_as_const >= 202311L
     using value_type        = submatch<std::conditional_t<Const, std::const_iterator<I>, I>>;
-#else
-    using value_type        = submatch<I>; /* semantically incorrect workaround */
-#endif
     using difference_type   = std::ptrdiff_t;
 
     proxy_iterator() = default;
@@ -11548,54 +11498,48 @@ private:
 
         using index_t = type::index_t;
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
-#define INDEX_CAST std::saturating_cast<index_t>
-#else
-#define INDEX_CAST std::saturate_cast<index_t>
-#endif
         return expr.visit(overloads{
             [](const typename expr_tree<CharT>::assertion& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .assertion{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
+                return { .value{ .assertion{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
             },
             [](const typename expr_tree<CharT>::char_str& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .char_str{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
+                return { .value{ .char_str{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
             },
             [](const typename expr_tree<CharT>::char_class& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .char_class{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
+                return { .value{ .char_class{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
             },
             [](const typename expr_tree<CharT>::backref& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .backref{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
+                return { .value{ .backref{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
             },
             [](const typename expr_tree<CharT>::alt& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .alt{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
+                return { .value{ .alt{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
             },
             [](const typename expr_tree<CharT>::concat& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .concat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::concat, original_type)) };
+                return { .value{ .concat{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, original_type)) };
             },
             [](const typename expr_tree<CharT>::tag& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .tag{  mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
+                return { .value{ .tag{  mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
             },
             [](const typename expr_tree<CharT>::repeat& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .repeat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
+                return { .value{ .repeat{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
             }
         });
-#undef INDEX_CAST
     }
 
 public:
@@ -11646,10 +11590,8 @@ template<static_span Intervals, typename CharT>
 [[gnu::always_inline]] constexpr bool cs_possible(CharT c)
 {
     template for (constexpr auto pair : Intervals)
-    {
         if (pair.first <= c and c <= pair.second)
             return true;
-    }
 
     return false;
 }
@@ -11894,9 +11836,6 @@ private:
     {
         static constexpr auto cat = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::concat>] :];
 
-        template<typename T> struct helper {};
-        template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
-
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
         {
@@ -11916,8 +11855,8 @@ private:
                 return substitute(^^std::index_sequence, vec);
             }() :];
 
-            using next_state = helper<next_sequence_t>::type;
-            [[clang::musttail]] return next_state::operator()(res, si, first, last, it);
+            constexpr auto [...Next] = next_sequence_t{};
+            [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
         }
     };
 
@@ -11926,9 +11865,6 @@ private:
     struct state<Fwd, Expr, Cont...>
     {
         static constexpr auto rep = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::repeat>] :];
-
-        template<typename T> struct helper {};
-        template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
@@ -11939,11 +11875,8 @@ private:
                 return substitute(^^std::index_sequence, vec);
             }() :];
 
-            /* workaround for the above */
-
-            using next_state = helper<next_sequence_t>::type;
-
-            [[clang::musttail]] return next_state::operator()(res, si, first, last, it);
+            constexpr auto [...Next] = next_sequence_t{};
+            [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -12456,10 +12389,6 @@ struct naive_matcher_adaptor<Pattern, Flags>
 }
 }
 
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
-    #include <simd>
-#endif
-
 namespace srx {
 namespace detail {
 
@@ -12662,7 +12591,8 @@ consteval auto get_outer_state_position_single(const tdfa_info<CharT>& dfa, cons
 template<static_charset Sc>
 [[gnu::always_inline]] constexpr bool tr_possible(const typename decltype(Sc)::char_type c)
 {
-#ifndef __GNUC_MINOR__
+#if false
+    /* simple code path */
     template for (constexpr auto pair : Sc.get_intervals())
         if (pair.first <= c and c <= pair.second)
             return true;
@@ -12718,7 +12648,6 @@ template<static_charset Sc>
     return tr_possible<Sc>(c);
 }
 
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
 template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
 [[gnu::always_inline]] constexpr auto vector_tr_find(const std::simd::basic_vec<UCharT, Abi>& c_vec)
 {
@@ -12774,7 +12703,6 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
         return result;
     }
 }
-#endif
 
 template<std::meta::info Info>
 struct p1306dfa
@@ -13254,7 +13182,6 @@ private:
         return false;
     }
 
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip,
              typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
@@ -13306,11 +13233,7 @@ private:
         static constexpr bool avoid_simd = [] consteval {
             std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
             std::size_t count2{ DFA.nodes[states[position2]].front().cs.count() };
-#if __cpp_lib_saturation_arithmetic >= 202603L
             return std::saturating_mul(count1, count2)  > std::saturating_mul(avoid_simd_threshold, avoid_simd_threshold);
-#else
-            return std::mul_sat(count1, count2)  > std::mul_sat(avoid_simd_threshold, avoid_simd_threshold);
-#endif
         }();
 
         if constexpr (avoid_simd)
@@ -13341,7 +13264,7 @@ private:
                 const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
 #if false
-                /* potential bug involving non-mask overloads of simd::partial_load ??? */
+                /* bug involving non-mask overloads of simd::partial_load */
                 const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, flags);
                 const auto block2 = std::simd::partial_load<vec_type>(it + position2, epi_size, flags);
 #else
@@ -13415,7 +13338,7 @@ private:
                 const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
 #if false
-                /* potential bug involving non-mask overloads of simd::partial_load ??? */
+                /* bug involving non-mask overloads of simd::partial_load */
                 const auto block = std::simd::partial_load<vec_type>(it + position, epi_size, flags);
 #else
                 const auto block = std::simd::partial_load<vec_type>(it + position, epi_size, epi_mask, flags);
@@ -13428,17 +13351,14 @@ private:
             return false;
         }
     }
-#endif
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
     static constexpr bool outer_state(Result result, I it, const S last)
     {
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
         if constexpr (std::contiguous_iterator<I> and std::sized_sentinel_for<S, I>
                       and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
             return vector_outer_state<DFAState>(result, it, last);
         else
-#endif
             return scalar_outer_state<DFAState>(result, it, last);
     }
 
@@ -14004,11 +13924,7 @@ constexpr std::size_t parse_unsigned(I first, const S last, const std::size_t su
 
     while (first != last)
     {
-#if __cpp_lib_saturation_arithmetic >= 202603L
         result = std::saturating_add(std::saturating_mul(result, base), static_cast<std::size_t>(*first - '0'));
-#else
-        result = std::add_sat(std::mul_sat(result, base), static_cast<std::size_t>(*first - '0'));
-#endif
         ++first;
     }
 
@@ -15230,10 +15146,10 @@ public:
 
     iterator() requires std::default_initializable<std::ranges::iterator_t<V>> = default;
 
-    explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
-    explicit constexpr iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
         requires result_type::has_continue
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 

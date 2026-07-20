@@ -1,6 +1,12 @@
 project(rx-tests)
 
 add_library(tests OBJECT)
+
+set_target_properties(tests PROPERTIES
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
+
 target_sources(tests
     PRIVATE
         expo_test.cpp
@@ -17,4 +23,5 @@ target_sources(tests
         tnfa_test.cpp
         tree_test.cpp
 )
+
 target_link_libraries(tests PUBLIC static_regex)

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 4.0)
 
 project(rx
-    VERSION 0.2.2
+    VERSION 0.3.0
     LANGUAGES CXX
 )
 
@@ -20,14 +20,7 @@ target_sources(static_regex
         include/srx/regex.hpp
 )
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(static_regex
-        INTERFACE
-            -freflection-latest
-            -fconstexpr-steps=4294967295
-            -fconstexpr-backtrace-limit=0
-    )
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_compile_options(static_regex
         INTERFACE
             -freflection
@@ -36,9 +29,9 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 endif()
 
 add_subdirectory(tests/)
+add_subdirectory(tools/)
 add_subdirectory(bench/ EXCLUDE_FROM_ALL)
 add_subdirectory(trace/ EXCLUDE_FROM_ALL)
-add_subdirectory(tools/ EXCLUDE_FROM_ALL)
 
 add_custom_command(
     OUTPUT

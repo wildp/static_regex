@@ -573,11 +573,7 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
             if (rep.min == -1)
                 rep.min = c - '0';
             else
-#if __cpp_lib_saturation_arithmetic >= 202603L
                 rep.min = std::saturating_add(std::saturating_mul(rep.min, base), static_cast<int>(c - '0'));
-#else
-                rep.min = std::add_sat(std::mul_sat(rep.min, base), static_cast<int>(c - '0'));
-#endif
         }
         else if (c == ',')
         {
@@ -612,11 +608,7 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
             if (rep.max == -1)
                 rep.max = c - '0';
             else
-#if __cpp_lib_saturation_arithmetic >= 202603L
                 rep.max = std::saturating_add(std::saturating_mul(rep.max, base), static_cast<int>(c - '0'));
-#else
-                rep.max = std::add_sat(std::mul_sat(rep.max, base), static_cast<int>(c - '0'));
-#endif
         }
         else if (c == '}')
         {

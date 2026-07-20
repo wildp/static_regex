@@ -2,8 +2,6 @@
 
 wildp/static_regex is an experimental compile-time regular expression library for C++26.
 
-*This library is still under development.*
-
 See [syntax.md](./docs/syntax.md) and [synopsis.md](./docs/synopsis.md) for documentation.
 
 It is also available as a [single header file](./single-include/srx/regex.hpp), which can be regenerated using [amalgamate.cpp](./tools/amalgamate.cpp).
@@ -19,11 +17,10 @@ This library requires C++26 to build.
 |:---------|:------------------------------------------------------------------|:----------------------|
 | GCC      | trunk                                                             | `-freflection`        |
 | GCC      | 16                                                                | `-freflection`        |
-| Clang    | [P2996 fork](https://github.com/bloomberg/clang-p2996/tree/p2996) | `-freflection-latest` |
 
 
 For longer regex patterns it is necessary to increase the constexpr evaluation step limit.
-On GCC use `-fconstexpr-ops-limit=4294967296`, and on Clang use `-fconstexpr-steps=4294967295`.
+On GCC use `-fconstexpr-ops-limit=4294967296`.
 
 
 ### Optional Libraries

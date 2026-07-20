@@ -128,7 +128,6 @@ static_assert(parse("|a"));
 static_assert(parse("|"));
 
 /* reject invalid syntax */
-#if __cpp_constexpr_exceptions >= 202411L
 static_assert(parse_error("+"));
 static_assert(parse_error("*"));
 static_assert(parse_error("?"));
@@ -154,7 +153,6 @@ static_assert(parse_error(")-("));
 static_assert(parse_error("abcde:)"));
 static_assert(parse_error("[]"));
 static_assert(parse_error("[^]"));
-#endif // __cpp_constexpr_exceptions >= 202411L
 
 /* repeat de-generalisation in pretty printer */
 static_assert(parse("a{0,}", "a*"));
@@ -308,10 +306,8 @@ static_assert(equal_to("[[:alpha: ]", "[: \\[ahlp]"));
 static_assert(equal_to("[[:alpha]]", "[:\\[ahlp]\\]"));
 static_assert(equal_to("[[:alpha:]-]", "[\\-A-Za-z]"));
 static_assert(equal_to("[-[:alpha:]]", "[\\-A-Za-z]"));
-#if __cpp_constexpr_exceptions >= 202411L
 static_assert(parse_error("[[:alpha:]-a])"));
 static_assert(parse_error("[a-[:alpha:]])"));
-#endif // __cpp_constexpr_exceptions >= 202411L
 
 /* alt-to-character-class merging tests */
 static_assert(alt_to_cc("a|c", "[ac]"));

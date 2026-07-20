@@ -38,7 +38,8 @@ enum class named_character_class : unsigned char
     not_digits,
     not_perl_whitespace,
     not_word,
-    octal_digits,
+    octdigits,
+    nucs_char,
 };
 
 
@@ -57,9 +58,15 @@ public:
     char_class_impl() = default;
     constexpr explicit char_class_impl(negated_cc_tag_t) noexcept(IsNarrow) { negate(); }
     constexpr explicit char_class_impl(named_character_class ncc) noexcept(IsNarrow) { insert(ncc); }
-    constexpr explicit char_class_impl(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow) { insert(ncc); negate(); }
+    constexpr explicit char_class_impl(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(ncc) { negate(); }
     constexpr explicit char_class_impl(char_type c) noexcept(IsNarrow) { insert(c); }
-    constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) { insert(c); negate(); }
+    constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c) { negate(); }
+
+    template<std::same_as<char_type>... Ts>
+    constexpr explicit char_class_impl(Ts... c) noexcept(IsNarrow) { ([&]{ insert(c); }() , ...); }
+
+    template<std::same_as<char_type>... Ts>
+    constexpr explicit char_class_impl(Ts... c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c...) { negate(); }
 
     constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
     constexpr void insert(char_type first, char_type last) noexcept(IsNarrow) { data_.insert(first, last); }
@@ -144,6 +151,7 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     static constexpr cs word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
     static constexpr cs xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
     static constexpr cs octal{ p{ '0', '7' } };
+    static constexpr cs nucsc{ p{ '0', '9' }, p{ 'A', 'Z' }, ' ', '-' };
 
     switch (ncc)
     {
@@ -168,8 +176,9 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
     case named_character_class::not_word:            data_ |= ~word;  break;
 
-    /* used by bootstrap only */
-    case named_character_class::octal_digits: data_ |= octal; break;
+    /* used internally only */
+    case named_character_class::octdigits: data_ |= octal; break;
+    case named_character_class::nucs_char: data_ |= nucsc; break;
     }
 }
 

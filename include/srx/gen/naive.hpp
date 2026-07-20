@@ -129,59 +129,53 @@ private:
 
         using index_t = type::index_t;
 
-#if __cpp_lib_saturation_arithmetic >= 202603L
-#define INDEX_CAST std::saturating_cast<index_t>
-#else
-#define INDEX_CAST std::saturate_cast<index_t>
-#endif
         return expr.visit(overloads{
             [](const typename expr_tree<CharT>::assertion& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .assertion{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
+                return { .value{ .assertion{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::assertion, original_type)) };
             },
             [](const typename expr_tree<CharT>::char_str& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .char_str{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
+                return { .value{ .char_str{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_str, original_type)) };
             },
             [](const typename expr_tree<CharT>::char_class& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .char_class{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
+                return { .value{ .char_class{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::char_class, original_type)) };
             },
             [](const typename expr_tree<CharT>::backref& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .backref{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
+                return { .value{ .backref{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::backref, original_type)) };
             },
             [](const typename expr_tree<CharT>::alt& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .alt{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
+                return { .value{ .alt{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::alt, original_type)) };
             },
             [](const typename expr_tree<CharT>::concat& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .concat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::concat, original_type)) };
+                return { .value{ .concat{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::concat, original_type)) };
             },
             [](const typename expr_tree<CharT>::tag& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .tag{  mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
+                return { .value{ .tag{  mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::tag, original_type)) };
             },
             [](const typename expr_tree<CharT>::repeat& e) -> type
             {
                 const auto& [...mems] = e;
-                return { .value{ .repeat{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
+                return { .value{ .repeat{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::repeat, original_type)) };
             }
             // , [](const typename expr_tree<CharT>::special& e) -> type
             // {
             //     const auto& [...mems] = e;
-            //     return { .value{ .special{ mems... } }, .index = INDEX_CAST(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
+            //     return { .value{ .special{ mems... } }, .index = std::saturating_cast<index_t>(index_in_variant(^^typename expr_tree<CharT>::special, original_type)) };
             // }
         });
-#undef INDEX_CAST
     }
 
 public:
@@ -232,12 +226,9 @@ consteval tree_info<CharT> parse_pattern(std::basic_string_view<CharT> pattern)
 template<static_span Intervals, typename CharT>
 [[gnu::always_inline]] constexpr bool cs_possible(CharT c)
 {
-    // TODO: change to use structured binding when supported
     template for (constexpr auto pair : Intervals)
-    {
         if (pair.first <= c and c <= pair.second)
             return true;
-    }
 
     return false;
 }
@@ -499,11 +490,6 @@ private:
     {
         static constexpr auto cat = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::concat>] :];
 
-        template<typename T> struct helper {};
-        template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
-
-        // END TEMPORARY: TODO: REMOVE
-
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
         {
@@ -523,12 +509,8 @@ private:
                 return substitute(^^std::index_sequence, vec);
             }() :];
 
-            // constexpr auto [...Next] = next_sequence_t{};
-
-            // [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
-
-            using next_state = helper<next_sequence_t>::type;
-            [[clang::musttail]] return next_state::operator()(res, si, first, last, it);
+            constexpr auto [...Next] = next_sequence_t{};
+            [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
         }
     };
 
@@ -537,11 +519,6 @@ private:
     struct state<Fwd, Expr, Cont...>
     {
         static constexpr auto rep = ast.exprs[Expr].value.[: info_t::type::nsdms[ast_index<typename ast_t::repeat>] :];
-
-        // TEMPORARY: TODO: REMOVE
-        template<typename T> struct helper {};
-        template<std::size_t... Next> struct helper<std::index_sequence<Next...>> { using type = state<Fwd, Next..., Cont...>; };
-        // END TEMPORARY: TODO: REMOVE
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>
         [[gnu::always_inline]] static constexpr bool operator()(result<I>& res, staging_info<I>& si, const I first, const S last, I& it)
@@ -552,15 +529,8 @@ private:
                 return substitute(^^std::index_sequence, vec);
             }() :];
 
-            // constexpr auto [...Next] = next_sequence_t{};
-
-            // [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
-
-            /* workaround for the above */
-
-            using next_state = helper<next_sequence_t>::type;
-
-            [[clang::musttail]] return next_state::operator()(res, si, first, last, it);
+            constexpr auto [...Next] = next_sequence_t{};
+            [[clang::musttail]] return state<Fwd, Next..., Cont...>::operator()(res, si, first, last, it);
         }
 
         template<std::bidirectional_iterator I, std::sentinel_for<I> S>

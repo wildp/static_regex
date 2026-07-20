@@ -131,7 +131,7 @@ class tagged_dfa
 public:
     using char_type = CharT;
 
-    explicit constexpr tagged_dfa(const tagged_nfa<char_type>& tnfa);
+    constexpr explicit tagged_dfa(const tagged_nfa<char_type>& tnfa);
     constexpr void optimise_registers();
     constexpr void compact_regop_blocks();
     constexpr void minimise_states();

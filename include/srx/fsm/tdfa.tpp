@@ -701,11 +701,7 @@ constexpr void factory<CharT>::factory_init()
 
 template<typename CharT>
 constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
-#if __cpp_lib_saturation_arithmetic >= 202603L
     : tnfa_ptr_{ &input }, tag_count_{ std::saturating_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
-#else
-    : tnfa_ptr_{ &input }, tag_count_{ std::saturate_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
-#endif
 {
     factory_init();
 
@@ -948,7 +944,7 @@ constexpr void normalise_regops(regops_t& o, const reg_t regcount)
 class liveness_matrix
 {
 public:
-    explicit constexpr liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count, bitset_t(reg_count, false)) {}
+    constexpr explicit liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count, bitset_t(reg_count, false)) {}
     [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) { return data_[block_idx][reg]; }
     [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) const { return data_[block_idx][reg]; }
     [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) { return data_.at(block_idx).at(reg); }
@@ -964,7 +960,7 @@ private:
 class square_matrix
 {
 public:
-    explicit constexpr square_matrix(std::size_t reg_count) : data_(reg_count * reg_count, false), reg_count_{ reg_count } {}
+    constexpr explicit square_matrix(std::size_t reg_count) : data_(reg_count * reg_count, false), reg_count_{ reg_count } {}
     [[nodiscard]] constexpr auto operator[](std::size_t reg1, std::size_t reg2) { return data_[(reg1 * reg_count_) + reg2]; }
     [[nodiscard]] constexpr auto operator[](std::size_t reg1, std::size_t reg2) const { return data_[(reg1 * reg_count_) + reg2]; }
     [[nodiscard]] constexpr auto at(std::size_t reg1, std::size_t reg2) { return data_.at((reg1 * reg_count_) + reg2); }
@@ -1151,7 +1147,7 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
     class postorder_visitor
     {
     public:
-        explicit constexpr postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count)
+        constexpr explicit postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count)
             : block_added(block_count, false)
         {
             for (const auto i : block_graph_start | std::views::reverse)

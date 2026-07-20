@@ -188,7 +188,7 @@ public:
     using lookbehind_1_tr = tnfa::lookbehind_1_tr<char_type>;
     using lookahead_1_tr = tnfa::lookahead_1_tr<char_type>;
 
-    explicit constexpr tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
+    constexpr explicit tagged_nfa(const expr_tree<char_type>& ast, fsm_flags flags);
     constexpr void rewrite_assertions();
     constexpr void add_non_empty_match_pathway();
 

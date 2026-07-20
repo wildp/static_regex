@@ -50,11 +50,7 @@ public:
     using size_type              = std::size_t;
     using char_type              = std::remove_cv_t<std::iter_value_t<I>>;
     using submatch_type          = submatch<I>;
-#if __cpp_lib_ranges_as_const >= 202311L
     using iterator               = proxy_iterator<std::same_as<I, std::const_iterator<I>>>;
-#else
-    using iterator               = proxy_iterator<false>;
-#endif
     using reverse_iterator       = std::reverse_iterator<iterator>;
     using const_iterator         = proxy_iterator<true>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
@@ -185,7 +181,7 @@ private:
     static constexpr bool has_continue{ Captures.has_continue };
     static constexpr bool continue_from_it{ Captures.continue_from_it };
 
-    explicit constexpr static_match_results(I start)
+    constexpr explicit static_match_results(I start)
         noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
         : match_start_{ std::move(start) }
     {
@@ -286,11 +282,7 @@ class static_match_results<I, Captures>::proxy_iterator
 public:
     using iterator_concept  = std::random_access_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-#if __cpp_lib_ranges_as_const >= 202311L
     using value_type        = submatch<std::conditional_t<Const, std::const_iterator<I>, I>>;
-#else
-    using value_type        = submatch<I>; /* semantically incorrect workaround */
-#endif
     using difference_type   = std::ptrdiff_t;
 
     proxy_iterator() = default;

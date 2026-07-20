@@ -31,10 +31,8 @@ class submatch
 public:
     using iterator               = I;
     using reverse_iterator       = std::reverse_iterator<iterator>;
-#if __cpp_lib_ranges_as_const >= 202311L
     using const_iterator         = std::const_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-#endif
     using value_type             = std::iter_value_t<iterator>;
     using size_type              = std::size_t;
     using string_type            = std::basic_string<value_type>;
@@ -94,7 +92,6 @@ public:
         return std::make_reverse_iterator(this->begin());
     }
 
-#if __cpp_lib_ranges_as_const >= 202311L
     [[nodiscard]] constexpr const_iterator cbegin() const noexcept
         requires std::bidirectional_iterator<const_iterator>
     {
@@ -118,7 +115,6 @@ public:
     {
         return std::make_reverse_iterator(this->cbegin());
     }
-#endif
 
     /* structured binding support */
 
@@ -166,7 +162,6 @@ public:
         return this->view();
     }
 
-#if __cpp_lib_ranges_as_const >= 202311L
     [[nodiscard]] constexpr explicit(false) operator submatch<const_iterator>() const &
         requires (not std::same_as<const_iterator, iterator>)
     {
@@ -178,7 +173,6 @@ public:
     {
         return { std::move(first_), std::move(last_) };
     }
-#endif
 
     /* operators */
 
@@ -227,10 +221,8 @@ public:
         std::ranges::swap(x.last_, y.last_);
     }
 
-#if __cpp_lib_ranges_as_const >= 202311L
     template<std::bidirectional_iterator OtherI>
     friend class submatch;
-#endif
 
 private:
     static constexpr bool use_bool{ not std::contiguous_iterator<I> };

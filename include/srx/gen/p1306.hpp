@@ -14,11 +14,8 @@
 #include <limits>
 #include <meta>
 #include <ranges>
+#include <simd>
 #include <type_traits>
-
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
-    #include <simd>
-#endif
 
 #include "srx/etc/static_charset.hpp"
 #include "srx/etc/string_literal.hpp"
@@ -234,7 +231,8 @@ consteval auto get_outer_state_position_single(const tdfa_info<CharT>& dfa, cons
 template<static_charset Sc>
 [[gnu::always_inline]] constexpr bool tr_possible(const typename decltype(Sc)::char_type c)
 {
-#ifndef __GNUC_MINOR__
+#if false
+    /* simple code path */
     // TODO: change to use structured binding when supported
     template for (constexpr auto pair : Sc.get_intervals())
         if (pair.first <= c and c <= pair.second)
@@ -291,7 +289,6 @@ template<static_charset Sc>
     return tr_possible<Sc>(c);
 }
 
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
 template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
 [[gnu::always_inline]] constexpr auto vector_tr_find(const std::simd::basic_vec<UCharT, Abi>& c_vec)
 {
@@ -347,7 +344,6 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
         return result;
     }
 }
-#endif // __cpp_lib_simd >= 202411L
 
 
 template<std::meta::info Info>
@@ -829,7 +825,6 @@ private:
         return false;
     }
 
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip,
              typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
@@ -840,7 +835,7 @@ private:
             const auto offset = std::countr_zero(mask);
             mask &= (mask - 1);
 
-            // TODO: implement simd-based checking
+            // TODO: implement simd-based checking?
             if (unchecked_state_skip<DFAState, Count, Skip>(result, it + offset, last, maybe_fallback_t<I>{ it + offset, fallback_disabled }))
             {
                 if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
@@ -882,11 +877,7 @@ private:
         static constexpr bool avoid_simd = [] consteval {
             std::size_t count1{ DFA.nodes[states[position1]].front().cs.count() };
             std::size_t count2{ DFA.nodes[states[position2]].front().cs.count() };
-#if __cpp_lib_saturation_arithmetic >= 202603L
             return std::saturating_mul(count1, count2)  > std::saturating_mul(avoid_simd_threshold, avoid_simd_threshold);
-#else
-            return std::mul_sat(count1, count2)  > std::mul_sat(avoid_simd_threshold, avoid_simd_threshold);
-#endif
         }();
 
         if constexpr (avoid_simd)
@@ -917,7 +908,7 @@ private:
                 const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
 #if false
-                /* potential bug involving non-mask overloads of simd::partial_load ??? */
+                /* bug involving non-mask overloads of simd::partial_load */
                 const auto block1 = std::simd::partial_load<vec_type>(it + position1, epi_size, flags);
                 const auto block2 = std::simd::partial_load<vec_type>(it + position2, epi_size, flags);
 #else
@@ -992,7 +983,7 @@ private:
                 const mask_type epi_mask{ (1uz << epi_size) - 1 };
 
 #if false
-                /* potential bug involving non-mask overloads of simd::partial_load ??? */
+                /* bug involving non-mask overloads of simd::partial_load */
                 const auto block = std::simd::partial_load<vec_type>(it + position, epi_size, flags);
 #else
                 const auto block = std::simd::partial_load<vec_type>(it + position, epi_size, epi_mask, flags);
@@ -1005,17 +996,14 @@ private:
             return false;
         }
     }
-#endif // __cpp_lib_simd >= 202411L
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
     static constexpr bool outer_state(Result result, I it, const S last)
     {
-#if __cpp_lib_simd >= 202411L or (defined(__GNUC_MINOR__) and __GLIBCXX__ >= 20260424L)
         if constexpr (std::contiguous_iterator<I> and std::sized_sentinel_for<S, I>
                       and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
             return vector_outer_state<DFAState>(result, it, last);
         else
-#endif // __cpp_lib_simd >= 202411L
             return scalar_outer_state<DFAState>(result, it, last);
     }
 
@@ -1073,7 +1061,7 @@ public:
 #else
                 if constexpr (DFA.flags.adapted_search)
                     clean_generations(res, gen);
-                return res; // temporary workaround for possible GCC bug
+                return res; // temporary workaround for GCC bug
 #endif
             }
         }
@@ -1124,7 +1112,7 @@ public:
 #else
                 if constexpr (DFA.flags.adapted_search)
                     clean_generations(res, gen);
-                return res; // temporary workaround for possible GCC bug
+                return res; // temporary workaround for GCC bug
 #endif
             }
         }
