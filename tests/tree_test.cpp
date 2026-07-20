@@ -303,6 +303,15 @@ static_assert(test("[\\W]"));
 static_assert(parse("[ [:graph:]]", "[ -~]"));
 static_assert(equal_to("[[:alpha:][:digit:]]", "[[:alnum:]]"));
 static_assert(equal_to("[\\d[:upper:]a-z]", "[[:alnum:]]"));
+static_assert(equal_to("[[:abc]", "[:\\[abc]"));
+static_assert(equal_to("[[:alpha: ]", "[: \\[ahlp]"));
+static_assert(equal_to("[[:alpha]]", "[:\\[ahlp]\\]"));
+static_assert(equal_to("[[:alpha:]-]", "[\\-A-Za-z]"));
+static_assert(equal_to("[-[:alpha:]]", "[\\-A-Za-z]"));
+#if __cpp_constexpr_exceptions >= 202411L
+static_assert(parse_error("[[:alpha:]-a])"));
+static_assert(parse_error("[a-[:alpha:]])"));
+#endif // __cpp_constexpr_exceptions >= 202411L
 
 /* alt-to-character-class merging tests */
 static_assert(alt_to_cc("a|c", "[ac]"));

@@ -50,3 +50,6 @@ static_assert(match("(?U)(a)??a*(?-U)(b)??b*"_test, "aabb", { 0, 1, no_tag, no_t
 /* additional parser tests */
 static_assert(match("\\Q...\\E"_test, "..."));
 static_assert(not match("\\Q...\\E"_test, "aaa"));
+static_assert(match("\\Qabc\\E+"_test, "abc"));
+static_assert(match("\\Qabc\\E+"_test, "abccc"));
+static_assert(not match("\\Qabc\\E+"_test, "abcabc"));

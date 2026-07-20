@@ -3239,36 +3239,23 @@ struct char_str
 {
     std::basic_string<CharT> data;
 
-    constexpr explicit char_str() : data{} {} /* empty string */
-    constexpr explicit char_str(CharT c) : data{ c } {}
-    constexpr explicit char_str(const std::basic_string<CharT>& str) : data{ str } {}
+    char_str() = default;
+
+    constexpr explicit(false) char_str(CharT c) : data{ c } {}
+
+    constexpr explicit(false) char_str(char c)
+        requires (not std::same_as<CharT, char>)
+        : data{ static_cast<CharT>(c) } {};
 
     template<std::input_iterator I, std::sentinel_for<I> S>
         requires std::convertible_to<std::iter_value_t<I>, CharT>
     constexpr explicit char_str(I first, S last) : data(first, last) {}
 
-    constexpr explicit char_str(char c) requires (not std::same_as<CharT, char>)
-    {
-        data += c;
-    }
+    constexpr explicit char_str(std::basic_string_view<CharT> str) : data{ str } {}
 
-    constexpr explicit char_str(const std::basic_string<char>& str) requires (not std::same_as<CharT, char>)
-    {
-        for (const auto& c : str)
-            data += c;
-    }
-
-    constexpr explicit char_str(std::size_t parse_result)
-    {
-        if (parse_result <= std::numeric_limits<std::make_unsigned_t<CharT>>::max())
-        {
-            data = static_cast<CharT>(parse_result);
-        }
-        else
-        {
-            throw pattern_error("Multibyte characters are unimplemented");
-        }
-    }
+    constexpr explicit char_str(std::basic_string_view<char>& str)
+        requires (not std::same_as<CharT, char>)
+        : data{ std::from_range, str | std::views::transform([](char c){ return static_cast<CharT>(c); })} {}
 
     [[nodiscard]] constexpr std::optional<typename char_class<CharT>::underlying_char_type> get_if_single()
     {
@@ -3301,19 +3288,17 @@ using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::doll
 template<typename CharT>
 class lexer
 {
-    using sv_type = std::basic_string_view<CharT>;
-    using it_type = sv_type::const_iterator;
-
 public:
+    static_assert(character<CharT>);
     using token_t = token_type<CharT>;
 
-    constexpr explicit lexer(const sv_type& sv) : it_{ sv.cbegin() }, end_{ sv.cend() } {}
+    constexpr explicit lexer(std::basic_string_view<CharT> sv) : it_{ sv.begin() }, end_{ sv.end() } {}
     [[nodiscard]] constexpr token_t nexttok();
     [[nodiscard]] constexpr bool empty() { return it_ == end_; }
 
-    friend class parser::ll1<CharT>;
-
 private:
+    using it_type = std::basic_string_view<CharT>::const_iterator;
+
     constexpr std::size_t            parse_hex(std::size_t fixed_amt);
     constexpr std::size_t            parse_remaining_oct(std::size_t init);
     constexpr std::size_t            parse_arbitrary_oct();
@@ -3321,12 +3306,14 @@ private:
     constexpr tok::repeat_n_m        parse_repeat();
     constexpr tok::lparen<CharT>     parse_lparen();
     constexpr token_t                parse_bref_or_octal(CharT init);
-    constexpr tok::char_str<CharT>   parse_literal_string(it_type begin);
+    constexpr token_t                parse_literal_string();
     constexpr tok::char_class<CharT> parse_char_class();
-    constexpr named_character_class  parse_posix_char_class();
+    constexpr named_character_class  parse_posix_char_class(it_type first, it_type last);
 
     it_type it_;
     it_type end_;
+    bool literal_string_mode{ false };
+    unsigned char extended_mode{ 0 };
 };
 
 /* lexer implementation */
@@ -3338,101 +3325,117 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
     using char_str = char_str<CharT>;
     using char_class = char_class<CharT>;
 
-    if (it_ == end_)
-        return end_of_input{};
+    if (literal_string_mode)
+        return parse_literal_string();
 
-    const auto current = it_;
-
-    switch (*it_++)
+    while (true)
     {
-    case '(': return parse_lparen();
-    case ')': return rparen{};
-    case '.': return dot{};
-    case '*': return star{};
-    case '+': return plus{};
-    case '?': return quest{};
-    case '^': return hat{};
-    case '$': return dollar{};
-    case '|': return vert{};
-
-    case '\\':
-    {
-        using ncc = named_character_class;
-
         if (it_ == end_)
-            throw pattern_error("Pattern cannot end with '\\'");
+            return end_of_input{};
 
-        const auto escaped = *it_++;
+        const auto current = it_;
 
-        switch (escaped)
+        switch (*it_++)
         {
-        /* standard escape sequences */
+        case '(': return parse_lparen();
+        case ')': return rparen{};
+        case '.': return dot{};
+        case '*': return star{};
+        case '+': return plus{};
+        case '?': return quest{};
+        case '^': return hat{};
+        case '$': return dollar{};
+        case '|': return vert{};
 
-        case 'a': return char_str{ '\a' };
-        case 'f': return char_str{ '\f' };
-        case 't': return char_str{ '\t' };
-        case 'n': return char_str{ '\n' };
-        case 'r': return char_str{ '\r' };
-        case 'v': return char_str{ '\v' };
+        case '\\':
+        {
+            using ncc = named_character_class;
 
-        /* numeric escape sequences */
+            if (it_ == end_)
+                throw pattern_error("Pattern cannot end with '\\'");
 
-        case 'o': return char_str{ parse_arbitrary_oct() };
-        case 'x': return char_str{ parse_hex(0) };
-        case 'u': return char_str{ parse_hex(4) };
-        case 'U': return char_str{ parse_hex(8) };
+            const auto escaped = *it_++;
 
-        /* perl character classes */
+            switch (escaped)
+            {
+            /* standard escape sequences */
 
-        case 'd': return char_class{ ncc::digits };
-        case 'D': return char_class{ ncc::not_digits };
-        case 's': return char_class{ ncc::perl_whitespace };
-        case 'S': return char_class{ ncc::not_perl_whitespace };
-        case 'w': return char_class{ ncc::word };
-        case 'W': return char_class{ ncc::not_word };
+            case 'a': return char_str{ '\a' };
+            case 'f': return char_str{ '\f' };
+            case 't': return char_str{ '\t' };
+            case 'n': return char_str{ '\n' };
+            case 'r': return char_str{ '\r' };
+            case 'v': return char_str{ '\v' };
 
-        /* octal escape sequences and backreferences */
+            /* numeric escape sequences */
 
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7': return parse_bref_or_octal(escaped);
+            case 'o': return char_str{ static_cast<CharT>(parse_arbitrary_oct()) };
+            case 'x': return char_str{ static_cast<CharT>(parse_hex(0)) };
+            case 'u': return char_str{ static_cast<CharT>(parse_hex(4)) };
+            case 'U': return char_str{ static_cast<CharT>(parse_hex(8)) };
 
-        case '8':
-        case '9': return backref{ static_cast<unsigned int>(escaped - '0') };
+            /* perl character classes */
 
-        case 'g': return parse_bref();
+            case 'd': return char_class{ ncc::digits };
+            case 'D': return char_class{ ncc::not_digits };
+            case 's': return char_class{ ncc::perl_whitespace };
+            case 'S': return char_class{ ncc::not_perl_whitespace };
+            case 'w': return char_class{ ncc::word };
+            case 'W': return char_class{ ncc::not_word };
 
-        /* assertions */
+            /* octal escape sequences and backreferences */
 
-        case 'A': return assertion{ assert_type::text_start };
-        case 'b': return assertion{ assert_type::ascii_word_boundary };
-        case 'B': return assertion{ assert_type::not_ascii_word_boundary };
-        case 'G': throw parser_error("Assertion (\\G) is not implemented");
-        case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
-        case 'z': return assertion{ assert_type::text_end };
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7': return parse_bref_or_octal(escaped);
 
-        /* literal string */
+            case '8':
+            case '9': return backref{ static_cast<unsigned int>(escaped - '0') };
 
-        case 'Q': return parse_literal_string(current);
+            case 'g': return parse_bref();
+
+            /* assertions */
+
+            case 'A': return assertion{ assert_type::text_start };
+            case 'b': return assertion{ assert_type::ascii_word_boundary };
+            case 'B': return assertion{ assert_type::not_ascii_word_boundary };
+            case 'G': throw parser_error("Assertion (\\G) is not implemented");
+            case 'Z': throw parser_error("End of text or newlines followed by end of text (\\Z) is not implemented");
+            case 'z': return assertion{ assert_type::text_end };
+
+            /* literal string */
+
+            case 'Q': literal_string_mode = true; return parse_literal_string();
+
+            default:
+                if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
+                    throw pattern_error("Invalid control character");
+                else
+                    return char_str{ escaped }; /* TODO: extract multibyte character */
+            }
+        }
+
+        case '{': return parse_repeat();
+        case '[': return parse_char_class();
+
+        case '\f':
+        case '\t':
+        case '\n':
+        case '\r':
+        case '\v':
+        case ' ':
+            if (extended_mode >= 1)
+                break;
+        [[fallthrough]];
 
         default:
-            if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
-                throw pattern_error("Invalid control character");
-            else
-                return char_str{ escaped }; /* TODO: extract multibyte character */
+            return char_str{ *current }; /* TODO: extract multibyte character */
         }
-    }
-
-    case '{': return parse_repeat();
-    case '[': return parse_char_class();
-
-    default:
-        return char_str{ *current }; /* TODO: extract multibyte character */
     }
 }
 
@@ -3886,32 +3889,28 @@ constexpr lexer<CharT>::token_t lexer<CharT>::parse_bref_or_octal(const CharT in
     }
 
     if (bref.number == 0)
-        return char_str<CharT>{ result };
+        return char_str<CharT>{ static_cast<CharT>(result) };
     else
         return bref;
 }
 
 template<typename CharT>
-constexpr tok::char_str<CharT> lexer<CharT>::parse_literal_string(const it_type begin)
+constexpr lexer<CharT>::token_t lexer<CharT>::parse_literal_string()
 {
-    using namespace tok;
+    using namespace std::string_view_literals;
+    static constexpr auto proj = [](CharT c){ return static_cast<char>(c); };
 
-    for (bool slash{ true }; true;)
+    if (it_ == end_)
+        throw pattern_error("Reached end of input in literal text");
+
+    if (std::ranges::starts_with(std::ranges::subrange{ it_, end_ }, "\\E"sv, {}, proj))
     {
-        if (it_ == end_)
-            throw pattern_error("Reached end of input in literal text");
-
-        const auto cur = *it_++;
-
-        if (not slash and cur == '\\')
-            slash = true;
-        else if (slash and cur == 'E')
-            break;
-        else
-            slash = false;
+        std::ranges::advance(it_, 2);
+        literal_string_mode = false;
+        return nexttok();
     }
 
-    return char_str<CharT>{ std::ranges::next(begin, 2), std::ranges::prev(it_, 2) };
+    return tok::char_str<CharT>{ *it_++ }; /* TODO: extract multibyte character */
 }
 
 template<typename CharT>
@@ -3931,8 +3930,9 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
         ++it_;
 
     char_class result{};
+    std::size_t count{ 0 };
 
-    std::optional<underlying_char_t> c{};
+    std::optional<underlying_char_t> c;
     bool is_range{ false };
 
     for (bool loop{ true }; loop;)
@@ -3943,13 +3943,13 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
         const auto current = it_;
 
         std::optional<ncc> selected_cc;
-        std::optional<underlying_char_t> nc;
+        std::optional<underlying_char_t> next;
 
         switch (*it_++)
         {
         case ']':
-            if (result.data.empty() and not c.has_value())
-                nc = ']';
+            if (count == 0)
+                next = ']';
             else
                 loop = false;
             break;
@@ -3958,7 +3958,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             if (c.has_value() and not is_range)
                 is_range = true;
             else
-                nc = '-';
+                next = '-';
             break;
 
         case '\\':
@@ -3972,13 +3972,13 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             {
             /* standard escape sequences */
 
-            case 'a': nc = '\a'; break;
-            case 'b': nc = '\b'; break;
-            case 'f': nc = '\f'; break;
-            case 't': nc = '\t'; break;
-            case 'n': nc = '\n'; break;
-            case 'r': nc = '\r'; break;
-            case 'v': nc = '\v'; break;
+            case 'a': next = '\a'; break;
+            case 'b': next = '\b'; break;
+            case 'f': next = '\f'; break;
+            case 't': next = '\t'; break;
+            case 'n': next = '\n'; break;
+            case 'r': next = '\r'; break;
+            case 'v': next = '\v'; break;
 
             /* numeric escape sequences */
 
@@ -3989,12 +3989,12 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             case '4':
             case '5':
             case '6':
-            case '7': nc = parse_remaining_oct(escaped - '0'); break;
+            case '7': next = parse_remaining_oct(escaped - '0'); break;
 
-            case 'o': nc = parse_arbitrary_oct(); break;
-            case 'x': nc = parse_hex(0); break;
-            case 'u': nc = parse_hex(4); break;
-            case 'U': nc = parse_hex(8); break;
+            case 'o': next = parse_arbitrary_oct(); break;
+            case 'x': next = parse_hex(0); break;
+            case 'u': next = parse_hex(4); break;
+            case 'U': next = parse_hex(8); break;
 
             /* perl character classes */
 
@@ -4006,30 +4006,59 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             case 'W': selected_cc = ncc::not_word; break;
 
             default:
-                if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
+                if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z') or escaped == '8' or escaped == '9')
                     throw pattern_error("Invalid control character");
                 else
-                    nc = escaped; /* TODO: extract multibyte character */
+                    next = escaped; /* TODO: extract multibyte character */
                 break;
             }
             break;
         }
 
         case '[':
-            selected_cc = parse_posix_char_class();
+            if (it_ != end_ and *it_ == ':')
+            {
+                using namespace std::string_view_literals;
+
+                static constexpr auto proj = [](CharT c){ return static_cast<char>(c); };
+                const auto& [first, last] = std::ranges::search(std::ranges::subrange{ it_, end_ }, ":]"sv, {}, proj);
+
+                if (first != end_)
+                {
+                    selected_cc = parse_posix_char_class(it_ + 1, first);
+                    it_ = last;
+                }
+            }
+            if (not selected_cc)
+                next  = '[';
             break;
 
+        case '\f':
+        case '\t':
+        case '\n':
+        case '\r':
+        case '\v':
+        case ' ':
+            if (extended_mode >= 2)
+                continue;
+            [[fallthrough]];
+
         default:
-            nc = *current; /* TODO: extract multibyte character */
+            next = *current; /* TODO: extract multibyte character */
             break;
         }
 
+        ++count;
+
         if (selected_cc)
         {
+            if (is_range)
+                throw pattern_error("Invalid range in character class");
+
             if (c)
             {
                 /* insert c */
-                result.data.insert(c.value());
+                result.data.insert(*c);
                 c.reset();
             }
 
@@ -4037,20 +4066,20 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             result.data.insert(*selected_cc);
             selected_cc.reset();
         }
-        else if (nc)
+        else if (next)
         {
             if (not c)
             {
                 /* delay insert */
-                c = nc;
+                c = next;
             }
             else if (is_range)
             {
-                if (*c > *nc)
+                if (*c > *next)
                     throw pattern_error("Invalid character class range");
 
                 /* insert c - nc */
-                result.data.insert(*c, *nc);
+                result.data.insert(*c, *next);
                 is_range = false;
                 c.reset();
             }
@@ -4058,7 +4087,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             {
                 /* insert c */
                 result.data.insert(*c);
-                c = nc;
+                c = next;
             }
         }
         else if (not loop)
@@ -4066,7 +4095,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             if (c)
                 result.data.insert(*c);
 
-            if (is_range)
+            if (c and is_range)
                 result.data.insert(underlying_char_t{ '-' });
         }
     }
@@ -4078,121 +4107,45 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 }
 
 template<typename CharT>
-constexpr named_character_class lexer<CharT>::parse_posix_char_class()
+constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type first, it_type last)
 {
+    using namespace std::string_view_literals;
     using ncc = named_character_class;
+    using sv_type = std::string_view;
 
-    static constexpr auto test = [](it_type& it, const it_type& end, std::string_view rest) -> bool {
-        if (std::ranges::starts_with(it, end, std::ranges::begin(rest), std::ranges::end(rest)))
-        {
-            std::ranges::advance(it, std::ranges::size(rest));
-            return true;
-        }
-        return false;
-    };
+    static constexpr auto proj = [](CharT c){ return static_cast<char>(c); };
+    std::string str{ std::from_range, std::ranges::subrange{ first, last } | std::views::transform(proj) };
 
-    if (it_ == end_ or *it_ != ':')
+    if (str == "alnum"sv)
+        return ncc::alphanumeric;
+    else if (str == "alpha"sv)
+        return ncc::alphabetic;
+    else if (str == "ascii"sv)
+        return ncc::ascii;
+    else if (str == "blank"sv)
+        return ncc::blank;
+    else if (str == "cntrl"sv)
+        return ncc::control;
+    else if (str == "digit"sv)
+        return ncc::digits;
+    else if (str == "graph"sv)
+        return ncc::graphical;
+    else if (str == "lower"sv)
+        return ncc::lowercase;
+    else if (str == "print"sv)
+        return ncc::printable;
+    else if (str == "punct"sv)
+        return ncc::punctuation;
+    else if (str == "space"sv)
+        return ncc::posix_whitespace;
+    else if (str == "upper"sv)
+        return ncc::uppercase;
+    else if (str == "word"sv)
+        return ncc::word;
+    else if (str == "xdigit"sv)
+        return ncc::hexdigits;
+    else
         throw pattern_error("Invalid POSIX Character Class");
-
-    ++it_;
-
-    if (it_ != end_)
-    {
-        switch (*it_++)
-        {
-        case 'a':
-            if (it_ == end_)
-                break;
-            if (*it_ == 'l')
-            {
-                ++it_;
-                if (it_ == end_)
-                {
-                    break;
-                }
-                else if (*it_ == 'n')
-                {
-                    if (test(++it_, end_, "um:]"))
-                        return ncc::alphanumeric;
-                }
-                else if (*it_ == 'p')
-                {
-                    if (test(++it_, end_, "ha:]"))
-                        return ncc::alphabetic;
-                }
-            }
-            else if (*it_ == 's')
-            {
-                if (test(++it_, end_, "cii:]"))
-                    return ncc::ascii;
-            }
-            break;
-
-        case 'b':
-            if (test(it_, end_, "lank:]"))
-                return ncc::blank;
-            break;
-
-        case 'c':
-            if (test(it_, end_, "ntrl:]"))
-                return ncc::control;
-            break;
-
-        case 'd':
-            if (test(it_, end_, "igit:]"))
-                return ncc::digits;
-            break;
-
-        case 'g':
-            if (test(it_, end_, "raph:]"))
-                return ncc::graphical;
-            break;
-
-        case 'l':
-            if (test(it_, end_, "ower:]"))
-                return ncc::lowercase;
-            break;
-
-        case 'p':
-            if (it_ == end_)
-                break;
-            if (*it_ == 'r')
-            {
-                if (test(++it_, end_, "int:]"))
-                    return ncc::printable;
-            }
-            else if (*it_ == 'u')
-            {
-                if (test(++it_, end_, "nct:]"))
-                    return ncc::punctuation;
-            }
-            break;
-
-        case 's':
-            if (test(it_, end_, "pace:]"))
-                return ncc::posix_whitespace;
-            break;
-
-        case 'u':
-            if (test(it_, end_, "pper:]")) return ncc::uppercase;
-            break;
-
-        case 'w':
-            if (test(it_, end_, "ord:]"))
-                return ncc::word;
-            break;
-
-        case 'x':
-            if (test(it_, end_, "digit:]"))
-                return ncc::hexdigits;
-            break;
-
-        default:
-            break;
-        }
-    }
-
-    throw pattern_error("Invalid POSIX Character Class");
 }
 
 }
@@ -5397,6 +5350,7 @@ class ll1
 public:
     using char_type = CharT;
     using ast_t = expr_tree<char_type>;
+    using token_t = token_type<char_type>;
     using sv_type = std::basic_string_view<char_type>;
 
     constexpr ll1(ast_t& ast, sv_type sv);
@@ -5446,8 +5400,8 @@ private:
     [[nodiscard]] constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
     template<typename T>
-    static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^typename lexer<char_type>::token_t) };
-    static constexpr std::size_t tok_count{ template_arguments_of(dealias(^^typename lexer<char_type>::token_t)).size() };
+    static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^token_t) };
+    static constexpr std::size_t tok_count{ template_arguments_of(dealias(^^token_t)).size() };
 
     static consteval std::size_t se(nonterminal nt)
     {
@@ -5534,7 +5488,7 @@ class semantic_stack
 {
 public:
     using char_type = CharT;
-    using terminal = lexer<char_type>::token_t;
+    using terminal = ll1<char_type>::token_t;
     using elem_t = std::variant<std::size_t, terminal, repeater_mode, std::basic_string_view<CharT>>;
 
     [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
@@ -5635,7 +5589,7 @@ constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
             else
             {
                 /* no match */
-                throw pattern_error("Parse Error");
+                throw pattern_error("Parse Error: Token does not match");
             }
             break;
 
@@ -6000,15 +5954,15 @@ constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
         /* no match */
 
         default:
-            throw pattern_error("Parse Error");
+            throw pattern_error("Parse Error: Invalid stack value");
         }
     }
 
     if (not holds_alternative<tok::end_of_input>(token))
-        throw pattern_error("Parse Error");
+        throw pattern_error("Parse Error: Incomplete parse");
 
     if (semstack.empty())
-        throw pattern_error("Parse Error: Empty Semstack");
+        throw pattern_error("Parse Error: Empty semstack");
 
     return get<std::size_t>(semstack.pop());
 }

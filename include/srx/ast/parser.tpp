@@ -59,6 +59,7 @@ class ll1
 public:
     using char_type = CharT;
     using ast_t = expr_tree<char_type>;
+    using token_t = token_type<char_type>;
     using sv_type = std::basic_string_view<char_type>;
 
     constexpr ll1(ast_t& ast, sv_type sv);
@@ -108,8 +109,8 @@ private:
     [[nodiscard]] constexpr tag_number_t& tag_count() { return ref_.get().tag_count_; }
 
     template<typename T>
-    static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^typename lexer<char_type>::token_t) };
-    static constexpr std::size_t tok_count{ template_arguments_of(dealias(^^typename lexer<char_type>::token_t)).size() };
+    static constexpr std::size_t tok_index{ index_in_variant(^^T, ^^token_t) };
+    static constexpr std::size_t tok_count{ template_arguments_of(dealias(^^token_t)).size() };
 
     static consteval std::size_t se(nonterminal nt)
     {
@@ -197,7 +198,7 @@ class semantic_stack
 {
 public:
     using char_type = CharT;
-    using terminal = lexer<char_type>::token_t;
+    using terminal = ll1<char_type>::token_t;
     using elem_t = std::variant<std::size_t, terminal, repeater_mode, std::basic_string_view<CharT>>;
 
     [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
@@ -300,7 +301,7 @@ constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
             else
             {
                 /* no match */
-                throw pattern_error("Parse Error");
+                throw pattern_error("Parse Error: Token does not match");
             }
             break;
 
@@ -665,15 +666,15 @@ constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
         /* no match */
 
         default:
-            throw pattern_error("Parse Error");
+            throw pattern_error("Parse Error: Invalid stack value");
         }
     }
 
     if (not holds_alternative<tok::end_of_input>(token))
-        throw pattern_error("Parse Error");
+        throw pattern_error("Parse Error: Incomplete parse");
 
     if (semstack.empty())
-        throw pattern_error("Parse Error: Empty Semstack");
+        throw pattern_error("Parse Error: Empty semstack");
 
     return get<std::size_t>(semstack.pop());
 }
