@@ -3283,7 +3283,23 @@ using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::doll
                                 tok::char_str<CharT>, tok::char_class<CharT>,
                                 tok::backref, tok::assertion>;
 
-/* lexer class definition */
+/* lexer concept definitions */
+
+template<typename T>
+concept lexer_like = requires (T l) {
+    typename T::token_t;
+    { l.empty() } -> std::same_as<bool>;
+    { l.nexttok() } -> std::same_as<typename T::token_t>;
+};
+
+template<typename T>
+concept extended_lexer_like = lexer_like<T> and requires (T l) {
+    { l.set_extended() } -> std::same_as<void>;
+    { l.set_extended_more() } -> std::same_as<void>;
+    { l.reset_extended() } -> std::same_as<void>;
+};
+
+namespace lexer {
 
 template<typename CharT>
 class lexer
@@ -3295,6 +3311,10 @@ public:
     constexpr explicit lexer(std::basic_string_view<CharT> sv) : it_{ sv.begin() }, end_{ sv.end() } {}
     [[nodiscard]] constexpr token_t nexttok();
     [[nodiscard]] constexpr bool empty() { return it_ == end_; }
+
+    constexpr void set_extended() { extended_mode = 1; }
+    constexpr void set_extended_more() { extended_mode = 2; }
+    constexpr void reset_extended() { extended_mode = 0; }
 
 private:
     using it_type = std::basic_string_view<CharT>::const_iterator;
@@ -4150,6 +4170,7 @@ constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type fir
 
 }
 }
+}
 
 namespace srx {
 namespace detail {
@@ -4433,6 +4454,9 @@ struct special
 
 /* ast definition */
 
+template<typename T, typename CharT>
+concept expr_tree_lexer = lexer_like<T> and std::same_as<typename T::token_t, token_type<CharT>>;
+
 template<typename CharT>
 class expr_tree
 {
@@ -4452,8 +4476,15 @@ public:
 
     using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
-    constexpr expr_tree(sv_type sv, parser_flags flags = {});
-    constexpr expr_tree(const std::vector<sv_type>& svs, parser_flags flags = {});
+    template<expr_tree_lexer<char_type> L>
+    constexpr explicit expr_tree(L&& lex, parser_flags flags = {});
+
+    template<std::ranges::range R>
+        requires expr_tree_lexer<std::ranges::range_value_t<R>, char_type>
+    constexpr explicit expr_tree(R&& lex_range, parser_flags flags = {});
+
+    constexpr explicit expr_tree(sv_type sv, parser_flags flags = {})
+        : expr_tree(lexer::lexer{ sv }, flags) {}
 
     friend class parser::ll1<char_type>;
 
@@ -4482,7 +4513,7 @@ private:
     [[nodiscard]] constexpr std::vector<std::size_t> subtrees_equivalent(std::size_t x, std::size_t y) const;
 
     std::size_t root_idx_{ 0 };
-    std::vector<type> expressions_;
+    std::vector<type> expressions_{};
     capture_info capture_info_;
     tag_number_t tag_count_{ 0 };
     parser_flags flags_;
@@ -5353,11 +5384,30 @@ public:
     using token_t = token_type<char_type>;
     using sv_type = std::basic_string_view<char_type>;
 
-    constexpr ll1(ast_t& ast, sv_type sv);
-    constexpr ll1(ast_t& ast, const std::vector<sv_type>& svs);
+    template<expr_tree_lexer<char_type> L>
+    constexpr ll1(ast_t& ast, L&& lex)
+        : ref_{ ast }
+    {
+        ast.root_idx_ = parse(std::forward<L>(lex));
+    }
+
+    template<std::ranges::range R>
+        requires expr_tree_lexer<std::ranges::range_value_t<R>, char_type>
+    constexpr ll1(ast_t& ast, R&& lex_range)
+        : ref_{ ast }
+    {
+        ast.root_idx_ = new_expression<alt>();
+
+        for (auto&& lex : lex_range)
+        {
+            const auto subtree_root = parse(std::forward<std::remove_cvref_t<decltype(lex)>>(lex));
+            const auto& root = std::get<alt>(get_expr(ast.root_idx_));
+            root.idxs.emplace_back(subtree_root);
+        }
+    }
 
 private:
-    [[nodiscard]] constexpr std::size_t parse(lexer<char_type> lex);
+    [[nodiscard]] constexpr std::size_t parse(expr_tree_lexer<char_type> auto lex);
 
     using assertion  = ast_t::assertion;
     using alt        = ast_t::alt;
@@ -5508,35 +5558,12 @@ private:
     std::vector<elem_t> data_{};
 };
 
-/* constructors for ll1 */
-
-template<typename CharT>
-constexpr ll1<CharT>::ll1(ast_t& ast, const sv_type sv)
-    : ref_{ ast }
-{
-    ast.root_idx_ = parse(lexer<char_type>{ sv });
-}
-
-template<typename CharT>
-constexpr ll1<CharT>::ll1(ast_t& ast, const std::vector<sv_type>& svs)
-    : ref_{ ast }
-{
-    ast.root_idx_ = new_expression<alt>();
-
-    for (const auto& sv : svs)
-    {
-        const std::size_t subtree_root = parse(lexer<char_type>{ sv });
-        const auto& root = std::get<alt>(get_expr(ast.root_idx_));
-        root.idxs.emplace_back(subtree_root);
-    }
-}
-
 /* parser implementation */
 
 template<typename CharT>
-constexpr std::size_t ll1<CharT>::parse(lexer<char_type> lex)
+constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
 {
-    using terminal = lexer<char_type>::token_t;
+    using terminal = token_t;
 
     if (lex.empty()) /* ensure expressions is non-empty */
         return new_expression<char_str>(/* empty string */);
@@ -6534,17 +6561,20 @@ constexpr std::size_t ll1<CharT>::sa_next_alternative()
 /* constructors for tree */
 
 template<typename CharT>
-constexpr expr_tree<CharT>::expr_tree(const sv_type sv, const parser_flags flags)
+template<expr_tree_lexer<CharT> L>
+constexpr expr_tree<CharT>::expr_tree(L&& lex, parser_flags flags)
     : flags_{ flags }
 {
-    parser::ll1<char_type> ll1_parser(*this, sv);
+    parser::ll1<char_type> ll1_parser(*this, std::forward<L>(lex));
 }
 
 template<typename CharT>
-constexpr expr_tree<CharT>::expr_tree(const std::vector<sv_type>& svs, const parser_flags flags)
-    : flags_{ flags }, enable_alt_mode_{ true }
+template<std::ranges::range R>
+    requires expr_tree_lexer<std::ranges::range_value_t<R>, CharT>
+constexpr expr_tree<CharT>::expr_tree(R&& lex_range, parser_flags flags)
+     : flags_{ flags }, enable_alt_mode_{ true }
 {
-    parser::ll1<char_type> ll1_parser(*this, svs);
+    parser::ll1<char_type> ll1_parser(*this, std::forward<R>(lex_range));
 }
 
 }

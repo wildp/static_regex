@@ -95,12 +95,16 @@ struct special
 
 /* ast definition */
 
+template<typename T, typename CharT>
+concept expr_tree_lexer = lexer_like<T> and std::same_as<typename T::token_t, token_type<CharT>>;
+
 template<typename CharT>
 class expr_tree
 {
 public:
     using char_type = CharT;
     using sv_type = std::basic_string_view<char_type>;
+    // using default_lexer = <char_type>;
 
     using assertion     = tok::assertion;
     using char_str      = tok::char_str<char_type>;
@@ -114,8 +118,15 @@ public:
 
     using type = std::variant<assertion, char_str, char_class, backref, alt, concat, tag, repeat>;
 
-    constexpr expr_tree(sv_type sv, parser_flags flags = {});
-    constexpr expr_tree(const std::vector<sv_type>& svs, parser_flags flags = {});
+    template<expr_tree_lexer<char_type> L>
+    constexpr explicit expr_tree(L&& lex, parser_flags flags = {});
+
+    template<std::ranges::range R>
+        requires expr_tree_lexer<std::ranges::range_value_t<R>, char_type>
+    constexpr explicit expr_tree(R&& lex_range, parser_flags flags = {});
+
+    constexpr explicit expr_tree(sv_type sv, parser_flags flags = {})
+        : expr_tree(lexer::lexer{ sv }, flags) {}
 
     friend class parser::ll1<char_type>;
 
@@ -144,7 +155,7 @@ private:
     [[nodiscard]] constexpr std::vector<std::size_t> subtrees_equivalent(std::size_t x, std::size_t y) const;
 
     std::size_t root_idx_{ 0 };
-    std::vector<type> expressions_;
+    std::vector<type> expressions_{};
     capture_info capture_info_;
     tag_number_t tag_count_{ 0 };
     parser_flags flags_;

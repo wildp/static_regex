@@ -148,7 +148,24 @@ using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::doll
                                 tok::backref, tok::assertion>;
 
 
-/* lexer class definition */
+/* lexer concept definitions */
+
+template<typename T>
+concept lexer_like = requires (T l) {
+    typename T::token_t;
+    { l.empty() } -> std::same_as<bool>;
+    { l.nexttok() } -> std::same_as<typename T::token_t>;
+};
+
+template<typename T>
+concept extended_lexer_like = lexer_like<T> and requires (T l) {
+    { l.set_extended() } -> std::same_as<void>;
+    { l.set_extended_more() } -> std::same_as<void>;
+    { l.reset_extended() } -> std::same_as<void>;
+};
+
+
+namespace lexer {
 
 template<typename CharT>
 class lexer
@@ -160,6 +177,10 @@ public:
     constexpr explicit lexer(std::basic_string_view<CharT> sv) : it_{ sv.begin() }, end_{ sv.end() } {}
     [[nodiscard]] constexpr token_t nexttok();
     [[nodiscard]] constexpr bool empty() { return it_ == end_; }
+
+    constexpr void set_extended() { extended_mode = 1; }
+    constexpr void set_extended_more() { extended_mode = 2; }
+    constexpr void reset_extended() { extended_mode = 0; }
 
 private:
     using it_type = std::basic_string_view<CharT>::const_iterator;
@@ -1018,5 +1039,6 @@ constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type fir
         throw pattern_error("Invalid POSIX Character Class");
 }
 
+} // namespace lexer
 } // namespace detail
 } // namespace srx
