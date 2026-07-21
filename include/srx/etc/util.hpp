@@ -24,6 +24,9 @@ struct overloads : Ts... { using Ts::operator()...; };
 template<typename T, typename... Ts>
 concept one_of = (std::same_as<T, Ts> or ...);
 
+template<typename T, typename U>
+concept not_same_as = (not std::same_as<T, U>);
+
 template<typename CharT>
 concept character = one_of<CharT, char, wchar_t, char8_t, char16_t, char32_t>;
 

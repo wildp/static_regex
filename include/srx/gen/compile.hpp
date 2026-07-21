@@ -14,7 +14,6 @@
 #include "srx/ast/tree.hpp"
 #include "srx/etc/static_charset.hpp"
 #include "srx/etc/static_span.hpp"
-#include "srx/etc/string_literal.hpp"
 #include "srx/fsm/flags.hpp"
 #include "srx/fsm/tdfa.hpp"
 #include "srx/fsm/tnfa.hpp"
@@ -219,6 +218,31 @@ public:
 
     fsm_flags flags;
     bool alt_mode;
+};
+
+template<typename CharT>
+struct lexer_info
+{
+    using char_type = CharT;
+
+    lexer_info() = delete;
+
+    template<std::ranges::range R>
+        requires std::same_as<std::ranges::range_value_t<R>, std::meta::info>
+    consteval lexer_info(tdfa_info<CharT>&& dfa, R&& actions, std::meta::info eof_act, std::meta::info err_act, std::meta::info ret_ty)
+        : dfa{ std::move(dfa) }
+        , actions{ std::forward<R>(actions) }
+        , eof_action{ eof_act }
+        , error_action{ err_act }
+        , return_type{ ret_ty } {}
+
+
+    /* data members (public so that tdfa_info is structural) */
+    tdfa_info<CharT> dfa;
+    static_span<std::meta::info> actions;
+    std::meta::info eof_action;
+    std::meta::info error_action;
+    std::meta::info return_type;
 };
 
 

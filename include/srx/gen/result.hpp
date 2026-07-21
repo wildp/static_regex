@@ -197,6 +197,19 @@ private:
             match_success_ = false;
     }
 
+    constexpr void reset(I new_start)
+    {
+        clear_match();
+        if constexpr (has_match_start)
+            match_start_ = std::move(new_start);
+        if constexpr (has_registers and not has_enabled)
+            reg_.fill(I{});
+        if constexpr (has_enabled)
+            enabled_.fill(false);
+        if constexpr (has_continue)
+            continue_at_ = detail::tdfa::no_continue;
+    }
+
     template<detail::tag_number_t N>
     [[nodiscard]] constexpr bool tag_enabled() const noexcept
     {
