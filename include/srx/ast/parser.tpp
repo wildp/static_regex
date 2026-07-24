@@ -9,7 +9,6 @@
 #include "tree.hpp"
 
 #include <ranges>
-#include <type_traits>
 
 #include "srx/api/regex_error.hpp"
 #include "srx/ast/capstack.hpp"
@@ -48,6 +47,7 @@ enum class semantic_action : unsigned char
 
     cap_push,
     cap_pop,
+    set_flags,
     next_alt,
 };
 
@@ -79,8 +79,8 @@ public:
 
         for (auto&& lex : lex_range)
         {
-            const auto subtree_root = parse(std::forward<std::remove_cvref_t<decltype(lex)>>(lex));
-            const auto& root = std::get<alt>(get_expr(ast.root_idx_));
+            const std::size_t subtree_root{ parse(std::forward<std::remove_cvref_t<decltype(lex)>>(lex)) };
+            auto& root = std::get<alt>(get_expr(ast.root_idx_));
             root.idxs.emplace_back(subtree_root);
         }
     }
@@ -99,6 +99,7 @@ private:
     using type       = ast_t::type;
 
     using repeat_n_m = tok::repeat_n_m;
+    using set_flags  = tok::set_flags;
     using lparen     = tok::lparen<CharT>;
 
     [[nodiscard]] constexpr std::size_t sa_make_empty();
@@ -118,8 +119,9 @@ private:
     [[nodiscard]] constexpr repeater_mode sa_rep_greedy() const;
     [[nodiscard]] constexpr repeater_mode sa_rep_lazy() const;
     [[nodiscard]] constexpr repeater_mode sa_rep_possessive() const;
-    [[nodiscard]] constexpr std::size_t sa_cap_pop(std::size_t child_idx, std::basic_string_view<CharT> group_name);
-    [[nodiscard]] constexpr std::basic_string_view<CharT> sa_cap_push(const lparen& flag_info);
+    [[nodiscard]] constexpr std::size_t sa_cap_pop(std::size_t child_idx);
+    [[nodiscard]] constexpr std::size_t sa_cap_push(const lparen& flag_info);
+    [[nodiscard]] constexpr std::size_t sa_set_flags(const set_flags& flag_info);
     [[nodiscard]] constexpr std::size_t sa_next_alternative();
 
     [[nodiscard]] constexpr parser_flags& flags() { return ref_.get().flags_; }
@@ -219,7 +221,7 @@ class semantic_stack
 public:
     using char_type = CharT;
     using terminal = ll1<char_type>::token_t;
-    using elem_t = std::variant<std::size_t, terminal, repeater_mode, std::basic_string_view<CharT>>;
+    using elem_t = std::variant<std::size_t, terminal, repeater_mode>;
 
     [[nodiscard]] constexpr elem_t pop() { elem_t tmp{ std::move(data_.back()) }; data_.pop_back(); return tmp; }
     constexpr void push(elem_t&& elems) { data_.push_back(std::move(elems)); }
@@ -283,6 +285,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
         case tok_index<char_class>:
         case tok_index<backref>:
         case tok_index<assertion>:
+        case tok_index<set_flags>:
             if (top == tok_index<tok::end_of_input>)
             {
                 /* parsing is done */
@@ -316,6 +319,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 stack.push({ se(nt::E), tok_index<end_of_input> });
                 break;
             default:
@@ -336,6 +340,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 stack.push({ se(nt::F), se(nt::E_) });
                 break;
             default:
@@ -372,6 +377,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 stack.push({ se(nt::G), se(nt::F_) });
                 break;
             default:
@@ -394,6 +400,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 stack.push({ se(nt::G), se(nt::F_), se(sa::make_concat) });
                 break;
             default:
@@ -411,6 +418,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 stack.push({ se(nt::H), se(nt::R) });
                 break;
             default:
@@ -431,6 +439,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 /* epsilon */
                 break;
             case tok_index<star>:
@@ -461,6 +470,7 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
             case tok_index<char_str>:
             case tok_index<char_class>:
             case tok_index<backref>:
+            case tok_index<set_flags>:
                 stack.push({ /* epsilon, */ se(sa::rep_greedy) });
                 break;
             case tok_index<quest>:
@@ -499,6 +509,9 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
                 break;
             case tok_index<backref>:
                 stack.push({ tok_index<backref>, se(sa::make_bref) });
+                break;
+            case tok_index<set_flags>:
+                stack.push({ tok_index<set_flags>, se(sa::set_flags) });
                 break;
             default:
                 throw pattern_error("Invalid pattern");
@@ -648,8 +661,14 @@ constexpr std::size_t ll1<CharT>::parse(expr_tree_lexer<char_type> auto lex)
         {
             std::ignore = semstack.pop(); /* pop tok::rparen */
             const auto child_idx = get<std::size_t>(semstack.pop());
-            const auto cap_name = get<std::basic_string_view<CharT>>(semstack.pop());
-            semstack.push(sa_cap_pop(child_idx, cap_name));
+            std::ignore = semstack.pop(); /* pop dummy integer */
+            semstack.push(sa_cap_pop(child_idx));
+            break;
+        }
+        case se(sa::set_flags):
+        {
+            const auto set = get<set_flags>(get<terminal>(semstack.pop()));
+            semstack.push(sa_set_flags(set));
             break;
         }
         case se(sa::next_alt):
@@ -1140,9 +1159,11 @@ constexpr repeater_mode ll1<CharT>::sa_rep_possessive() const
 }
 
 template<typename CharT>
-constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx, std::basic_string_view<CharT> /* group_name */)
+constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx)
 {
     const auto cap_number = capstack_.pop();
+
+    // TODO: refactor to support special actions and named capturing groups
 
     if (cap_number.has_value())
     {
@@ -1202,7 +1223,7 @@ constexpr std::size_t ll1<CharT>::sa_cap_pop(const std::size_t child_idx, std::b
 }
 
 template<typename CharT>
-constexpr std::basic_string_view<CharT> ll1<CharT>::sa_cap_push(const tok::lparen<CharT>& flag_info)
+constexpr std::size_t ll1<CharT>::sa_cap_push(const tok::lparen<CharT>& flag_info)
 {
     if (not flags().enable_branchreset and flag_info.mode == group_modes::branch_reset)
         throw parser_error("Branch resetting in captures is not enabled");
@@ -1210,7 +1231,15 @@ constexpr std::basic_string_view<CharT> ll1<CharT>::sa_cap_push(const tok::lpare
     // TODO: implement these features
     if (flag_info.mode == group_modes::atomic)
         throw pattern_error("Atomic capture groups are unsupported");
-    if (flag_info.is_named)
+    else if (flag_info.mode == group_modes::positive_lookahead)
+        throw pattern_error("Positive lookahead is unsupported");
+    else if (flag_info.mode == group_modes::negative_lookahead)
+        throw pattern_error("Negative lookahead is unsupported");
+    else if (flag_info.mode == group_modes::positive_lookbehind)
+        throw pattern_error("Positive lookbehind is unsupported");
+    else if (flag_info.mode == group_modes::negative_lookbehind)
+        throw pattern_error("Negative lookbehind is unsupported");
+    else if (flag_info.is_named)
         throw pattern_error("Named capture groups are unsupported");
 
     // TODO: implement these flags
@@ -1229,7 +1258,14 @@ constexpr std::basic_string_view<CharT> ll1<CharT>::sa_cap_push(const tok::lpare
         capstack_.push_non_capturing(flag_info.flags, flag_info.mode);
     }
 
-    return (flag_info.is_named) ? flag_info.name : std::basic_string_view<CharT>{};
+    return -1uz; /* dummy return value */
+}
+
+template<typename CharT>
+constexpr std::size_t ll1<CharT>::sa_set_flags(const set_flags& flag_info)
+{
+    capstack_.set_flags(flag_info.flags);
+    return new_expression<char_str>(/* empty string */);
 }
 
 template<typename CharT>

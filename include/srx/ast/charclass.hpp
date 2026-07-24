@@ -35,9 +35,8 @@ enum class named_character_class : unsigned char
     uppercase,
     word,
     hexdigits,
-    not_digits,
-    not_perl_whitespace,
-    not_word,
+
+    /* for internal use */
     octdigits,
     nucs_char,
 };
@@ -71,6 +70,7 @@ public:
     constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
     constexpr void insert(char_type first, char_type last) noexcept(IsNarrow) { data_.insert(first, last); }
     constexpr void insert(named_character_class ncc) noexcept(IsNarrow);
+    constexpr void insert(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow);
     constexpr void insert(const char_class_impl& cc) noexcept(IsNarrow) { data_ |= cc.data_; };
 
     [[nodiscard]] constexpr bool empty() const noexcept { return data_.empty(); }
@@ -86,6 +86,27 @@ public:
     friend constexpr bool operator==(const char_class_impl& x, const char_class_impl& y) = default;
 
 private:
+    using static_charset = nontransient_constexpr_version_of_t<underlying_type>;
+    using p = static_charset::char_interval;
+
+    static constexpr static_charset alnum{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' } };
+    static constexpr static_charset alpha{ p{ 'A', 'Z' }, p{ 'a', 'z' } };
+    static constexpr static_charset ascii{ p{ 0x00, 0x7F } };
+    static constexpr static_charset blank{ '\t', ' ' };
+    static constexpr static_charset cntrl{ p{ 0x00, 0x1F }, 0x7F };
+    static constexpr static_charset digit{ p{ '0', '9' } };
+    static constexpr static_charset graph{ p{ '!', '~' } };
+    static constexpr static_charset lower{ p{ 'a', 'z' } };
+    static constexpr static_charset print{ p{ ' ', '~' } };
+    static constexpr static_charset punct{ p{ '!', '/' }, p{ ':', '@' }, p{ '[', '`' }, p{ '{', '~' } };
+    static constexpr static_charset space{ '\v', '\t', '\n', '\f', '\r', ' ' };
+    static constexpr static_charset perls{ '\t', '\n', '\f', '\r', ' ' };
+    static constexpr static_charset upper{ p{ 'A', 'Z' } };
+    static constexpr static_charset word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
+    static constexpr static_charset xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
+    static constexpr static_charset octal{ p{ '0', '7' } };
+    static constexpr static_charset nucsc{ p{ '0', '9' }, p{ 'A', 'Z' }, ' ', '-' };
+
     underlying_type data_;
 };
 
@@ -132,27 +153,6 @@ constexpr void char_class_impl<IsNarrow>::make_caseless() noexcept(IsNarrow)
 template<bool IsNarrow>
 constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noexcept(IsNarrow)
 {
-    using cs = nontransient_constexpr_version_of_t<underlying_type>;
-    using p = cs::char_interval;
-
-    static constexpr cs alnum{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' } };
-    static constexpr cs alpha{ p{ 'A', 'Z' }, p{ 'a', 'z' } };
-    static constexpr cs ascii{ p{ 0x00, 0x7F } };
-    static constexpr cs blank{ '\t', ' ' };
-    static constexpr cs cntrl{ p{ 0x00, 0x1F }, 0x7F };
-    static constexpr cs digit{ p{ '0', '9' } };
-    static constexpr cs graph{ p{ '!', '~' } };
-    static constexpr cs lower{ p{ 'a', 'z' } };
-    static constexpr cs print{ p{ ' ', '~' } };
-    static constexpr cs punct{ p{ '!', '/' }, p{ ':', '@' }, p{ '[', '`' }, p{ '{', '~' } };
-    static constexpr cs space{ '\v', '\t', '\n', '\f', '\r', ' ' };
-    static constexpr cs perls{ '\t', '\n', '\f', '\r', ' ' };
-    static constexpr cs upper{ p{ 'A', 'Z' } };
-    static constexpr cs word{ p{ '0', '9' }, p{ 'A', 'Z' }, p{ 'a', 'z' }, '_' };
-    static constexpr cs xdigit{ p{ '0', '9' }, p{ 'A', 'F' }, p{ 'a', 'f' } };
-    static constexpr cs octal{ p{ '0', '7' } };
-    static constexpr cs nucsc{ p{ '0', '9' }, p{ 'A', 'Z' }, ' ', '-' };
-
     switch (ncc)
     {
     case named_character_class::alphanumeric:     data_ |= alnum;  break;
@@ -171,14 +171,36 @@ constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc) noex
     case named_character_class::word:             data_ |= word;   break;
     case named_character_class::hexdigits:        data_ |= xdigit; break;
 
-    /* negated named char classes */
-    case named_character_class::not_digits:          data_ |= ~digit; break;
-    case named_character_class::not_perl_whitespace: data_ |= ~perls; break;
-    case named_character_class::not_word:            data_ |= ~word;  break;
-
-    /* used internally only */
+    /* for internal use */
     case named_character_class::octdigits: data_ |= octal; break;
     case named_character_class::nucs_char: data_ |= nucsc; break;
+    }
+}
+
+template<bool IsNarrow>
+constexpr void char_class_impl<IsNarrow>::insert(named_character_class ncc, negated_cc_tag_t) noexcept(IsNarrow)
+{
+    switch (ncc)
+    {
+    case named_character_class::alphanumeric:     data_ |= ~alnum;  break;
+    case named_character_class::alphabetic:       data_ |= ~alpha;  break;
+    case named_character_class::ascii:            data_ |= ~ascii;  break;
+    case named_character_class::blank:            data_ |= ~blank;  break;
+    case named_character_class::control:          data_ |= ~cntrl;  break;
+    case named_character_class::digits:           data_ |= ~digit;  break;
+    case named_character_class::graphical:        data_ |= ~graph;  break;
+    case named_character_class::lowercase:        data_ |= ~lower;  break;
+    case named_character_class::printable:        data_ |= ~print;  break;
+    case named_character_class::punctuation:      data_ |= ~punct;  break;
+    case named_character_class::posix_whitespace: data_ |= ~space;  break;
+    case named_character_class::perl_whitespace:  data_ |= ~perls;  break;
+    case named_character_class::uppercase:        data_ |= ~upper;  break;
+    case named_character_class::word:             data_ |= ~word;   break;
+    case named_character_class::hexdigits:        data_ |= ~xdigit; break;
+
+    /* for internal use */
+    case named_character_class::octdigits: data_ |= ~octal; break;
+    case named_character_class::nucs_char: data_ |= ~nucsc; break;
     }
 }
 

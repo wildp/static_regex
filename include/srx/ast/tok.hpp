@@ -73,13 +73,29 @@ struct assertion
     friend constexpr bool operator==(const assertion& x, const assertion& y) = default;
 };
 
+struct set_flags
+{
+    parser::capture_flags flags{};
+};
+
 template<typename CharT>
 struct lparen
 {
     parser::capture_flags flags{};
     parser::group_modes mode{ parser::group_modes::normal };
-    bool is_named { false };
+    bool is_named{ false };
     std::basic_string_view<CharT> name{};
+
+    lparen() = default;
+
+    constexpr explicit lparen(std::basic_string_view<CharT> sv)
+        : is_named{ true }, name{ sv } {}
+
+    constexpr explicit lparen(parser::group_modes mode)
+        : mode{ mode } {}
+
+    constexpr explicit lparen(parser::capture_flags flags)
+        : flags{ flags }, mode{ parser::group_modes::non_capturing } {}
 };
 
 template<typename CharT>
@@ -103,9 +119,9 @@ struct char_str
 
     char_str() = default;
 
-    constexpr explicit(false) char_str(CharT c) : data{ c } {}
+    constexpr explicit char_str(CharT c) : data{ c } {}
 
-    constexpr explicit(false) char_str(char c)
+    constexpr explicit char_str(char c)
         requires (not std::same_as<CharT, char>)
         : data{ static_cast<CharT>(c) } {};
 
@@ -145,7 +161,7 @@ using token_type = std::variant<tok::end_of_input, tok::dot, tok::hat, tok::doll
                                 tok::lparen<CharT>, tok::rparen, tok::vert,
                                 tok::star, tok::plus, tok::quest, tok::repeat_n_m,
                                 tok::char_str<CharT>, tok::char_class<CharT>,
-                                tok::backref, tok::assertion>;
+                                tok::backref, tok::assertion, tok::set_flags>;
 
 
 /* lexer concept definitions */
@@ -178,9 +194,9 @@ public:
     [[nodiscard]] constexpr token_t nexttok();
     [[nodiscard]] constexpr bool empty() { return it_ == end_; }
 
-    constexpr void set_extended() { extended_mode = 1; }
-    constexpr void set_extended_more() { extended_mode = 2; }
-    constexpr void reset_extended() { extended_mode = 0; }
+    constexpr void set_extended() { extended_mode_ = 1; }
+    constexpr void set_extended_more() { extended_mode_ = 2; }
+    constexpr void reset_extended() { extended_mode_ = 0; }
 
 private:
     using it_type = std::basic_string_view<CharT>::const_iterator;
@@ -190,16 +206,16 @@ private:
     constexpr std::size_t            parse_arbitrary_oct();
     constexpr tok::backref           parse_bref();
     constexpr tok::repeat_n_m        parse_repeat();
-    constexpr tok::lparen<CharT>     parse_lparen();
+    constexpr token_t                parse_lparen();
     constexpr token_t                parse_bref_or_octal(CharT init);
     constexpr token_t                parse_literal_string();
     constexpr tok::char_class<CharT> parse_char_class();
-    constexpr named_character_class  parse_posix_char_class(it_type first, it_type last);
+    constexpr named_character_class  parse_posix_char_class(it_type first, it_type last, bool& ncc_negated);
 
     it_type it_;
     it_type end_;
-    bool literal_string_mode{ false };
-    unsigned char extended_mode{ 0 };
+    bool literal_string_mode_{ false };
+    unsigned char extended_mode_{ 0 };
 };
 
 
@@ -212,7 +228,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
     using char_str = char_str<CharT>;
     using char_class = char_class<CharT>;
 
-    if (literal_string_mode)
+    if (literal_string_mode_)
         return parse_literal_string();
 
     while (true)
@@ -265,11 +281,11 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
             /* perl character classes */
 
             case 'd': return char_class{ ncc::digits };
-            case 'D': return char_class{ ncc::not_digits };
+            case 'D': return char_class{ ncc::digits, negated_cc_tag };
             case 's': return char_class{ ncc::perl_whitespace };
-            case 'S': return char_class{ ncc::not_perl_whitespace };
+            case 'S': return char_class{ ncc::perl_whitespace, negated_cc_tag };
             case 'w': return char_class{ ncc::word };
-            case 'W': return char_class{ ncc::not_word };
+            case 'W': return char_class{ ncc::word, negated_cc_tag };
 
             /* octal escape sequences and backreferences */
 
@@ -298,7 +314,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
 
             /* literal string */
 
-            case 'Q': literal_string_mode = true; return parse_literal_string();
+            case 'Q': literal_string_mode_ = true; return parse_literal_string();
 
             default:
                 if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z'))
@@ -317,7 +333,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::nexttok()
         case '\r':
         case '\v':
         case ' ':
-            if (extended_mode >= 1)
+            if (extended_mode_ >= 1)
                 break;
         [[fallthrough]];
 
@@ -644,12 +660,10 @@ constexpr tok::repeat_n_m lexer<CharT>::parse_repeat()
 }
 
 template<typename CharT>
-constexpr tok::lparen<CharT> lexer<CharT>::parse_lparen()
+constexpr lexer<CharT>::token_t lexer<CharT>::parse_lparen()
 {
-    tok::lparen<CharT> result{};
-
     if (it_ == end_ or *it_ != '?')
-        return result;
+        return tok::lparen<CharT>{};
 
     if (++it_ == end_)
         throw pattern_error("Invalid Pattern");;
@@ -661,60 +675,57 @@ constexpr tok::lparen<CharT> lexer<CharT>::parse_lparen()
     {
     case '#':
         ++it_;
-        while (it_ != end_ and *it_ != ')')
-            ++it_; /* skip comment */
-        result.mode = gm::comment;
-        break;
+        while (it_ != end_)
+            if (*it_++ == ')')
+                break;
+        return nexttok();
 
     case '|':
         ++it_;
-        result.mode = gm::branch_reset;
-        break;
+        return tok::lparen<CharT>{ gm::branch_reset };
 
     case '>':
         ++it_;
-        result.mode = gm::atomic;
-        break;
+        return tok::lparen<CharT>{ gm::atomic };
 
     case 'P':
     case '<':
     case '\'':
         ++it_;
-        result.is_named = true;
         throw pattern_error("Named capture groups are unsupported");
 
     default: /* parse options */
-        result.mode = gm::flag_assigning;
-        for (bool loop{ true }, flag_value{ true }; loop;)
+    {
+        parser::capture_flags flags{};
+        bool flag_value{ true };
+
+        while (true)
         {
             if (it_ == end_)
                 throw pattern_error("Invalid Pattern");
 
-            const auto lookahead = *it_;
-            bool increment{ true };
-
-            switch (lookahead)
+            switch (*it_++)
             {
             case 'i':
-                result.flags.caseless = (flag_value) ? cf::enabled : cf::disabled;
+                flags.caseless = (flag_value) ? cf::enabled : cf::disabled;
                 break;
             case 'm':
-                result.flags.multiline = (flag_value) ? cf::enabled : cf::disabled;
+                flags.multiline = (flag_value) ? cf::enabled : cf::disabled;
                 break;
             case 'n':
-                result.flags.noautocap = (flag_value) ? cf::enabled : cf::disabled;
+                flags.noautocap = (flag_value) ? cf::enabled : cf::disabled;
                 break;
             case 's':
-                result.flags.dotall = (flag_value) ? cf::enabled : cf::disabled;
+                flags.dotall = (flag_value) ? cf::enabled : cf::disabled;
                 break;
             case 'U':
-                result.flags.ungreedy = (flag_value) ? cf::enabled : cf::disabled;
+                flags.ungreedy = (flag_value) ? cf::enabled : cf::disabled;
                 break;
             case 'x':
-                result.flags.extended = (flag_value) ? cf::enabled : cf::disabled;
-                if (auto lit = it_ + 1; lit != end_ and *lit == 'x')
+                flags.extended = (flag_value) ? cf::enabled : cf::disabled;
+                if (it_ != end_ and *it_ == 'x')
                     if (++it_, flag_value)
-                        result.flags.extended = cf::enabled_more;
+                        flags.extended = cf::enabled_more;
                 break;
             case '-':
                 if (not flag_value)
@@ -723,26 +734,18 @@ constexpr tok::lparen<CharT> lexer<CharT>::parse_lparen()
                 break;
 
             case ':':
-                result.mode = gm::non_capturing;
-                loop = false;
-                break;
+                return tok::lparen<CharT>{ flags };
 
             case ')':
-                loop = false;
-                increment = false;
-                break;
+                return tok::set_flags{ flags };
 
             default:
                 throw pattern_error("Invalid capturing group");
             }
-
-            if (increment)
-                ++it_;
         }
         break;
     }
-
-    return result;
+    }
 }
 
 template<typename CharT>
@@ -789,7 +792,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::parse_literal_string()
     if (std::ranges::starts_with(std::ranges::subrange{ it_, end_ }, "\\E"sv, {}, proj))
     {
         std::ranges::advance(it_, 2);
-        literal_string_mode = false;
+        literal_string_mode_ = false;
         return nexttok();
     }
 
@@ -820,6 +823,8 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 
     for (bool loop{ true }; loop;)
     {
+        bool ncc_negated{ false };
+
         if (it_ == end_)
             throw pattern_error("EOF in character class");
 
@@ -881,12 +886,12 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 
             /* perl character classes */
 
+            case 'D': ncc_negated = true; [[fallthrough]];
             case 'd': selected_cc = ncc::digits; break;
-            case 'D': selected_cc = ncc::not_digits; break;
+            case 'S': ncc_negated = true; [[fallthrough]];
             case 's': selected_cc = ncc::perl_whitespace; break;
-            case 'S': selected_cc = ncc::not_perl_whitespace; break;
+            case 'W': ncc_negated = true; [[fallthrough]];
             case 'w': selected_cc = ncc::word; break;
-            case 'W': selected_cc = ncc::not_word; break;
 
             default:
                 if (('A' <= escaped and escaped <= 'Z') or ('a' <= escaped and escaped <= 'z') or escaped == '8' or escaped == '9')
@@ -908,7 +913,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 
                 if (first != end_)
                 {
-                    selected_cc = parse_posix_char_class(it_ + 1, first);
+                    selected_cc = parse_posix_char_class(it_ + 1, first, ncc_negated);
                     it_ = last;
                 }
             }
@@ -922,7 +927,7 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
         case '\r':
         case '\v':
         case ' ':
-            if (extended_mode >= 2)
+            if (extended_mode_ >= 2)
                 continue;
             [[fallthrough]];
 
@@ -946,7 +951,11 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
             }
 
             /* insert char class */
-            result.data.insert(*selected_cc);
+            if (ncc_negated)
+                result.data.insert(*selected_cc, negated_cc_tag);
+            else
+                result.data.insert(*selected_cc);
+
             selected_cc.reset();
         }
         else if (next)
@@ -990,41 +999,48 @@ constexpr tok::char_class<CharT> lexer<CharT>::parse_char_class()
 }
 
 template<typename CharT>
-constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type first, it_type last)
+constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type first, it_type last, bool& ncc_negated)
 {
     using namespace std::string_view_literals;
     using ncc = named_character_class;
 
     static constexpr auto proj = [](CharT c){ return static_cast<char>(c); };
     std::string str{ std::from_range, std::ranges::subrange{ first, last } | std::views::transform(proj) };
+    std::string_view sv{ str };
 
-    if (str == "alnum"sv)
+    if (sv.starts_with('^'))
+    {
+        sv.remove_prefix(1);
+        ncc_negated = true;
+    }
+
+    if (sv == "alnum"sv)
         return ncc::alphanumeric;
-    else if (str == "alpha"sv)
+    else if (sv == "alpha"sv)
         return ncc::alphabetic;
-    else if (str == "ascii"sv)
+    else if (sv == "ascii"sv)
         return ncc::ascii;
-    else if (str == "blank"sv)
+    else if (sv == "blank"sv)
         return ncc::blank;
-    else if (str == "cntrl"sv)
+    else if (sv == "cntrl"sv)
         return ncc::control;
-    else if (str == "digit"sv)
+    else if (sv == "digit"sv)
         return ncc::digits;
-    else if (str == "graph"sv)
+    else if (sv == "graph"sv)
         return ncc::graphical;
-    else if (str == "lower"sv)
+    else if (sv == "lower"sv)
         return ncc::lowercase;
-    else if (str == "print"sv)
+    else if (sv == "print"sv)
         return ncc::printable;
-    else if (str == "punct"sv)
+    else if (sv == "punct"sv)
         return ncc::punctuation;
-    else if (str == "space"sv)
+    else if (sv == "space"sv)
         return ncc::posix_whitespace;
-    else if (str == "upper"sv)
+    else if (sv == "upper"sv)
         return ncc::uppercase;
-    else if (str == "word"sv)
+    else if (sv == "word"sv)
         return ncc::word;
-    else if (str == "xdigit"sv)
+    else if (sv == "xdigit"sv)
         return ncc::hexdigits;
     else
         throw pattern_error("Invalid POSIX Character Class");

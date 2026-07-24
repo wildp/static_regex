@@ -38,11 +38,13 @@ struct capture_flags
 enum class group_modes : unsigned char
 {
     normal,
-    comment,
-    flag_assigning,
     non_capturing,
     branch_reset,
     atomic,
+    positive_lookahead,
+    negative_lookahead,
+    positive_lookbehind,
+    negative_lookbehind,
 };
 
 class capture_stack
@@ -129,23 +131,26 @@ public:
 
         auto& target = elems_.empty() ? base_ : elems_.back();
 
-        /* overwrite containing capturing group's flags when elem is an empty capturing group */
-        if (elem.mode == gm::flag_assigning)
-            template for (constexpr auto e : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
-                if (elem.flags.[: e // line break to avoid breaking syntax highlighting
-                                :] != cf::inherit)
-                    target.flags.[: e :] = elem.flags.[: e :];
-
         if (elem.mode == gm::branch_reset)
             target.number_end = std::max(target.number_end, elem.number_end);
         else
             target.number_end = elem.number_end;
 
+        // TODO: change return type here!!!
         if (elem.mode == gm::normal)
             return elem.number;
         else
             return {};
     }
+
+    constexpr void set_flags(capture_flags input_flags)
+    {
+        auto& target = elems_.empty() ? base_ : elems_.back();
+        template for (constexpr auto flag : define_static_array(nonstatic_data_members_of(^^capture_flags, std::meta::access_context::unchecked())))
+            if (input_flags.[: flag
+                             :] != cf::inherit)
+                target.flags.[: flag :] = input_flags.[: flag :];
+}
 
 private:
     template<std::meta::info CaptureFlagReflection>

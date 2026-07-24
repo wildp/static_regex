@@ -299,6 +299,7 @@ static_assert(test("[\\W]"));
 
 /* other character class tests */
 static_assert(parse("[ [:graph:]]", "[ -~]"));
+static_assert(equal_to("[[:^alpha:]]", "[^[:alpha:]]"));
 static_assert(equal_to("[[:alpha:][:digit:]]", "[[:alnum:]]"));
 static_assert(equal_to("[\\d[:upper:]a-z]", "[[:alnum:]]"));
 static_assert(equal_to("[[:abc]", "[:\\[abc]"));
