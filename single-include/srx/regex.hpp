@@ -1320,15 +1320,19 @@ private:
 template<typename CharT>
 constexpr auto bitcharset<CharT>::partition(const std::vector<ref>& input) -> partition_result
 {
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { input.back().get() };
+    std::vector<bitcharset> partitions;
+
+    if (input.size() <= 1 )
+    {
+        if (not input.empty())
+            partitions.emplace_back(input.back().get());
+        return partitions;
+    }
 
     /* note: partitions.size() >= 1 is always true, since for each iteration we insert
      *       at least one element into next_gen per element in partitions, since at
      *       most one of partitions[i] & val and partitions[i] & ~val will be empty */
-    std::vector<bitcharset> partitions(1);
+    partitions.emplace_back();
     partitions.back().negate();
 
     for (const bitcharset& val : input)
@@ -1367,10 +1371,14 @@ constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& 
 {
     using part_pair = std::pair<bitcharset, bitset_t>;
 
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { { input.back().first, { input.back().second } } };
+    partition_pair_result<T> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            result.emplace_back(input.back().first, std::vector<T>{ input.back().second });
+        return result;
+    }
 
     std::vector<part_pair> partitions(1);
     partitions.back().first.negate();
@@ -1403,7 +1411,6 @@ constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& 
         partitions = std::move(next_gen);
     }
 
-    partition_pair_result<T> result;
     const bitset_t empty(input.size(), false);
 
     for (const auto& [v, from] : partitions)
@@ -1426,10 +1433,14 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
 {
     using part_pair = std::pair<bitcharset, bitset_t>;
 
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { std::vector<T>{ input.back().second } };
+    std::vector<std::vector<T>> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            return result.emplace_back(std::vector<T>{ input.back().second });
+        return result;
+    }
 
     std::vector<part_pair> partitions(1);
     partitions.back().first.negate();
@@ -1462,7 +1473,6 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
         partitions = std::move(next_gen);
     }
 
-    std::vector<std::vector<T>> result;
     const bitset_t empty(input.size(), false);
 
     for (const auto& [v, from] : partitions)
@@ -4136,7 +4146,6 @@ constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type fir
 {
     using namespace std::string_view_literals;
     using ncc = named_character_class;
-    using sv_type = std::string_view;
 
     static constexpr auto proj = [](CharT c){ return static_cast<char>(c); };
     std::string str{ std::from_range, std::ranges::subrange{ first, last } | std::views::transform(proj) };
@@ -5204,6 +5213,8 @@ constexpr auto expr_tree<CharT>::tag_to_register()
 template<typename CharT>
 constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::size_t x, std::size_t y) const
 {
+    std::vector<std::size_t> result;
+
     /* always same size */
     std::vector lhs{ x };
     std::vector rhs{ y };
@@ -5225,33 +5236,33 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
         const auto& ref2 = expressions_.at(index2);
 
         if (ref1.index() != ref2.index())
-            return {};
+            return result;
 
         switch (ref1.index())
         {
         case ast_index<assertion>:
             if (get<assertion>(ref1) != get<assertion>(ref2))
-                return {};
+                return result; /* empty */
             break;
 
         case ast_index<tag>:
             if (get<tag>(ref1).number != get<tag>(ref2).number)
-                return {};
+                return result; /* empty */
             break;
 
         case ast_index<char_str>:
             if (get<char_str>(ref1) != get<char_str>(ref2))
-                return {};
+                return result; /* empty */
             break;
 
         case ast_index<char_class>:
             if (get<char_class>(ref1) != get<char_class>(ref2))
-                return {};
+                return result; /* empty */
             break;
 
         case ast_index<backref>:
          if (get<backref>(ref1) != get<backref>(ref2))
-                return {};
+                return result; /* empty */
             break;
 
         case ast_index<concat>:
@@ -5260,7 +5271,7 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
             const auto& cat2 = get<concat>(ref2);
 
             if (cat1.idxs.size() != cat2.idxs.size())
-                return {};
+                return result; /* empty */
 
             lhs.append_range(cat1.idxs);
             rhs.append_range(cat2.idxs);
@@ -5273,7 +5284,7 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
             const auto& alt2 = get<alt>(ref2);
 
             if (alt1.idxs.size() != alt2.idxs.size())
-                return {};
+                return result; /* empty */
 
             lhs.append_range(alt1.idxs);
             rhs.append_range(alt2.idxs);
@@ -5286,7 +5297,7 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
             const auto& rep2 = get<repeat>(ref2);
 
             if (rep1.reps != rep2.reps or rep1.mode != rep2.mode)
-                return {};
+                return result; /* empty */
 
             lhs.emplace_back(rep1.idx);
             rhs.emplace_back(rep2.idx);
@@ -5299,17 +5310,20 @@ constexpr std::vector<std::size_t> expr_tree<CharT>::subtrees_equivalent(std::si
     }
 
     if (overlap_idxs.empty())
-        return rhs;
-
-    std::vector<std::size_t> result;
-    std::ptrdiff_t pos{ 0 };
-    overlap_idxs.emplace_back(rhs.size());
-
-    for (const auto skipped_idx : overlap_idxs)
     {
-        /* assume overlap_idxs is sorted and unique */
-        result.insert(result.end(), rhs.cbegin() + pos, rhs.cbegin() + skipped_idx);
-        pos = skipped_idx + 1;
+        result = std::move(rhs);
+    }
+    else
+    {
+        std::ptrdiff_t pos{ 0 };
+        overlap_idxs.emplace_back(rhs.size());
+
+        for (const auto skipped_idx : overlap_idxs)
+        {
+            /* assume overlap_idxs is sorted and unique */
+            result.insert(result.end(), rhs.cbegin() + pos, rhs.cbegin() + skipped_idx);
+            pos = skipped_idx + 1;
+        }
     }
 
     return result;
@@ -8296,7 +8310,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
         make_epsilon(default_start_node, q0, i);
 
         /* generate tag-aware nfa if necessary */
-        if (tag_vec.empty() or tag_vec.at(root_idx).empty())
+        if (not (tag_vec.empty() or tag_vec.at(root_idx).empty()))
         {
             /* insert ntags beforehand */
             std::vector<int> ntags_before;

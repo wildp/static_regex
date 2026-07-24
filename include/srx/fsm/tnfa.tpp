@@ -1540,7 +1540,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
         make_epsilon(default_start_node, q0, i);
 
         /* generate tag-aware nfa if necessary */
-        if (tag_vec.empty() or tag_vec.at(root_idx).empty())
+        if (not (tag_vec.empty() or tag_vec.at(root_idx).empty()))
         {
             /* insert ntags beforehand */
             std::vector<int> ntags_before;

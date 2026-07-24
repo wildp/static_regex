@@ -994,7 +994,6 @@ constexpr named_character_class lexer<CharT>::parse_posix_char_class(it_type fir
 {
     using namespace std::string_view_literals;
     using ncc = named_character_class;
-    using sv_type = std::string_view;
 
     static constexpr auto proj = [](CharT c){ return static_cast<char>(c); };
     std::string str{ std::from_range, std::ranges::subrange{ first, last } | std::views::transform(proj) };

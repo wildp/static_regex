@@ -420,15 +420,19 @@ private:
 template<typename CharT>
 constexpr auto bitcharset<CharT>::partition(const std::vector<ref>& input) -> partition_result
 {
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { input.back().get() };
+    std::vector<bitcharset> partitions;
+
+    if (input.size() <= 1 )
+    {
+        if (not input.empty())
+            partitions.emplace_back(input.back().get());
+        return partitions;
+    }
 
     /* note: partitions.size() >= 1 is always true, since for each iteration we insert
      *       at least one element into next_gen per element in partitions, since at
      *       most one of partitions[i] & val and partitions[i] & ~val will be empty */
-    std::vector<bitcharset> partitions(1);
+    partitions.emplace_back();
     partitions.back().negate();
 
     for (const bitcharset& val : input)
@@ -467,10 +471,14 @@ constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& 
 {
     using part_pair = std::pair<bitcharset, bitset_t>;
 
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { { input.back().first, { input.back().second } } };
+    partition_pair_result<T> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            result.emplace_back(input.back().first, std::vector<T>{ input.back().second });
+        return result;
+    }
 
     std::vector<part_pair> partitions(1);
     partitions.back().first.negate();
@@ -503,7 +511,6 @@ constexpr auto bitcharset<CharT>::partition_ext(const std::vector<ref_pair<T>>& 
         partitions = std::move(next_gen);
     }
 
-    partition_pair_result<T> result;
     const bitset_t empty(input.size(), false);
 
     for (const auto& [v, from] : partitions)
@@ -526,10 +533,14 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
 {
     using part_pair = std::pair<bitcharset, bitset_t>;
 
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { std::vector<T>{ input.back().second } };
+    std::vector<std::vector<T>> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            return result.emplace_back(std::vector<T>{ input.back().second });
+        return result;
+    }
 
     std::vector<part_pair> partitions(1);
     partitions.back().first.negate();
@@ -562,7 +573,6 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
         partitions = std::move(next_gen);
     }
 
-    std::vector<std::vector<T>> result;
     const bitset_t empty(input.size(), false);
 
     for (const auto& [v, from] : partitions)
