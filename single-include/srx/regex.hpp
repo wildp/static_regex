@@ -1433,7 +1433,7 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
 {
     using part_pair = std::pair<bitcharset, bitset_t>;
 
-    std::vector<std::vector<T>> result;
+    partition_contents_result<T> result;
 
     if (input.size() <= 1)
     {
@@ -1937,12 +1937,18 @@ constexpr auto charset<CharT>::make_union(const charset_interval_range<char_type
 template<typename CharT>
 constexpr auto charset<CharT>::make_symmetric_difference(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
 {
-    if (lhs.empty())
-        return underlying_t(std::from_range, rhs);
-    if (rhs.empty())
-        return underlying_t(std::from_range, lhs);
-
     underlying_t result;
+
+    if (lhs.empty())
+    {
+        result.assign_range(rhs);
+        return result;
+    }
+    if (rhs.empty())
+    {
+        result.assign_range(lhs);
+        return result;
+    }
 
     auto lit = std::ranges::cbegin(lhs);
     auto rit = std::ranges::cbegin(rhs);
@@ -2021,10 +2027,13 @@ constexpr auto charset<CharT>::make_symmetric_difference(const charset_interval_
 template<typename CharT>
 constexpr auto charset<CharT>::make_relative_complement(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
 {
-    if (rhs.empty())
-        return underlying_t(std::from_range, lhs);
-
     underlying_t result;
+
+    if (rhs.empty())
+    {
+        result.assign_range(lhs);
+        return result;
+    }
 
     auto lit = lhs.cbegin();
     auto rit = rhs.cbegin();
@@ -2354,10 +2363,14 @@ template<typename CharT>
 template<typename T>
 constexpr auto charset<CharT>::partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>
 {
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { { input.back().first, { input.back().second } } };
+    partition_pair_result<T> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            result.emplace_back(input.back().first, std::vector<T>{ input.back().second });
+        return result;
+    }
 
     partitioned_intervals part;
 
@@ -2376,8 +2389,6 @@ constexpr auto charset<CharT>::partition_ext(const std::vector<ref_pair<T>>& inp
     part_sort_and_dedup(part);
     part_merge_intervals(part);
     auto map = part_make_map(part);
-
-    partition_pair_result<T> result;
 
     for (auto it = map.begin(), end{ map.end() }; it != end; ++it)
     {
@@ -2398,6 +2409,15 @@ template<typename CharT>
 template<typename T>
 constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>
 {
+    partition_contents_result<T> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            return result.emplace_back(std::vector<T>{ input.back().second });
+        return result;
+    }
+
     if (input.empty())
         return {};
     else if (input.size() == 1)
@@ -2420,8 +2440,6 @@ constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>
     part_sort_and_dedup(part);
     part_merge_intervals(part);
     const auto map = part_make_map(part);
-
-    partition_contents_result<T> result;
 
     for (auto it = map.cbegin(), end{ map.cend() }; it != end; ++it)
     {
@@ -2899,9 +2917,11 @@ public:
     constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c) { negate(); }
 
     template<std::same_as<char_type>... Ts>
+        requires (sizeof...(Ts) > 1)
     constexpr explicit char_class_impl(Ts... c) noexcept(IsNarrow) { ([&]{ insert(c); }() , ...); }
 
     template<std::same_as<char_type>... Ts>
+        requires (sizeof...(Ts) > 1)
     constexpr explicit char_class_impl(Ts... c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c...) { negate(); }
 
     constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
@@ -3318,7 +3338,7 @@ struct char_str
 
     constexpr explicit char_str(std::basic_string_view<CharT> str) : data{ str } {}
 
-    constexpr explicit char_str(std::basic_string_view<char>& str)
+    constexpr explicit char_str(std::basic_string_view<char> str)
         requires (not std::same_as<CharT, char>)
         : data{ std::from_range, str | std::views::transform([](char c){ return static_cast<CharT>(c); })} {}
 
@@ -12745,10 +12765,10 @@ template<static_charset Sc>
         {
             uchar_type d{ c };
 
-            if constexpr (ote.msk != ~0)
+            if constexpr (ote.msk != ~0u)
                 d &= ote.msk;
 
-            if constexpr (ote.rng == 0)
+            if constexpr (ote.rng == 0u)
             {
                 if (d == ote.sub)
                     return not inverted;
@@ -12803,13 +12823,13 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
         {
             auto d_vec{ c_vec };
 
-            if constexpr (ote.msk != ~0)
+            if constexpr (ote.msk != ~0u)
             {
                 static constexpr vec_type mask_vec{ ote.msk };
                 d_vec &= mask_vec;
             }
 
-            if constexpr (ote.rng == 0)
+            if constexpr (ote.rng == 0u)
             {
                 static constexpr vec_type cmp_vec{ ote.sub };
 
@@ -12848,11 +12868,9 @@ static constexpr auto exec_lexer_action(const ResultType& res)
     {
 
         if constexpr (is_invocable_type(type_of(Action), {}))
-            return std::invoke([: Action
-                :]);
+            return [: Action :]();
         else if constexpr (is_invocable_type(type_of(Action), { type_of(^^res) }))
-            return std::invoke([: Action
-                 :], res);
+            return [: Action :](res);
         else
             return [: Action :];
     }
@@ -12865,9 +12883,9 @@ static constexpr auto exec_lexer_action(const ResultType& res)
         else if constexpr (not is_default_constructible_type(Action))
             static_assert(false, "Invalid lexer action: type is not default-constructible");
         else if constexpr (is_invocable_type(Action, {}))
-            return std::invoke(action_type{});
+            return action_type{}();
         else if constexpr (is_invocable_type(Action, { type_of(^^res) }))
-            return std::invoke(action_type{}, res);
+            return action_type{}(res);
         else
             return action_type{};
     }
@@ -12930,11 +12948,14 @@ private:
     using gen_ref = maybe_type_t<(DFA.register_count > 0), std::add_lvalue_reference_t<generation>>;
 
     template<typename I>
+    using token_ref = maybe_type_t<is_lexer, std::add_lvalue_reference_t<token<I>>>;
+
+    template<typename I>
     using result_ref = std::add_lvalue_reference_t<result<I>>;
 
     using no_result = terminal_object;
 
-    template<typename I, bool HasGen>
+    template<typename I, int X>
     struct result_t
     {
         result_ref<I> res;
@@ -12942,18 +12963,26 @@ private:
     };
 
     template<typename I>
-    struct result_t<I, false>
+    struct result_t<I, 1>
     {
         result_ref<I> res;
     };
 
     template<typename I>
-    result_t(result<I>&) -> result_t<I, false>;
+    struct result_t<I, 2>
+    {
+        token_ref<I> tok;
+        result_ref<I> res;
+    };
 
     template<typename I>
-    result_t(result<I>&, gen_info&) -> result_t<I, true>;
+    result_t(result<I>&, gen_info&) -> result_t<I, 0>;
 
-    static constexpr bool has_fallback_it{ not DFA.flags.return_bool };
+    template<typename I>
+    result_t(result<I>&) -> result_t<I, 1>;
+
+    template<typename I>
+    result_t(token<I>&, result<I>&) -> result_t<I, 2>;
 
     template<typename I>
     struct fallback_info
@@ -12966,9 +12995,6 @@ private:
 
     template<typename I>
     using maybe_fallback_t = maybe_type_t<DFA.flags.enable_fallback, fallback_info<I>>;
-
-    template<typename I>
-    using internal_return_t = std::conditional_t<is_lexer, token<I>, bool>;
 
     template<std::bidirectional_iterator I>
     static constexpr void clean_generations(result<I>& res, const gen_info& gen)
@@ -12990,35 +13016,8 @@ private:
 
     /* register operations */
 
-    template<std::size_t Blk, std::bidirectional_iterator I>
-    static constexpr void register_operations(result_t<I, true> result, const I it)
-    {
-        if constexpr (Blk != tdfa::no_transition_regops)
-        {
-            static_assert(DFA.register_count > 0);
-
-            template for (constexpr register_operation op : DFA.regops[Blk])
-            {
-                if constexpr (op.is_copy)
-                    result.res.reg_[op.dst] = result.res.reg_[op.cpy_src];
-                else if constexpr (op.set_val)
-                    result.res.reg_[op.dst] = it;
-            }
-
-            template for (constexpr register_operation op : DFA.regops[Blk])
-            {
-                if constexpr (op.is_copy)
-                    result.gen.reg[op.dst] = result.gen.reg[op.cpy_src];
-                else if constexpr (op.set_val)
-                    result.gen.reg[op.dst] = result.gen.current;
-                else
-                    result.gen.reg[op.dst] = 0;
-            }
-        }
-    }
-
-    template<std::size_t Blk, std::bidirectional_iterator I>
-    static constexpr void register_operations(result_t<I, false> result, const I it)
+    template<std::size_t Blk, std::bidirectional_iterator I, int X>
+    static constexpr void register_operations(result_t<I, X> result, const I it)
     {
         if constexpr (Blk != tdfa::no_transition_regops)
         {
@@ -13028,15 +13027,28 @@ private:
                     result.res.reg_[op.dst] = result.res.reg_[op.cpy_src];
                 else if constexpr (op.set_val)
                     result.res.reg_[op.dst] = it;
-                else if constexpr (std::contiguous_iterator<I>)
+                else if constexpr (X != 0 and std::contiguous_iterator<I>)
                     result.res.reg_[op.dst] = I{};
 
-                if constexpr (not std::contiguous_iterator<I>)
+                if constexpr (X != 0 and not std::contiguous_iterator<I>)
                 {
                     if constexpr (op.is_copy)
                         result.res.enabled_[op.dst] = result.res.enabled_[op.cpy_src];
                     else
                         result.res.enabled_[op.dst] = op.set_val;
+                }
+            }
+
+            if constexpr (X == 0)
+            {
+                template for (constexpr register_operation op : DFA.regops[Blk])
+                {
+                    if constexpr (op.is_copy)
+                        result.gen.reg[op.dst] = result.gen.reg[op.cpy_src];
+                    else if constexpr (op.set_val)
+                        result.gen.reg[op.dst] = result.gen.current;
+                    else
+                        result.gen.reg[op.dst] = 0;
                 }
             }
         }
@@ -13075,7 +13087,7 @@ private:
     /* lexer actions */
 
     template<std::meta::info Action, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr token<I> lexer_action(result_t<I, false> rag, I it, const S end, maybe_fallback_t<I> fallback)
+    static constexpr bool lexer_action(result_t<I, 2> rag, I it, const S end, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
         static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(Action), ^^result<I> }) };
@@ -13084,20 +13096,43 @@ private:
         {
             /* void should be returned to continue */
             [: func :](rag.res);
-
             rag.res.reset(it);
             [[clang::musttail]] return skip_current(rag, it, end, fallback);
         }
         else
         {
-            return token<I>{ [: func
-                :](rag.res) };
+            rag.tok = token<I>([: func
+                :](rag.res));
+            return true;
         }
     }
 
-    template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr internal_return_t<I> skip_current(result_t<I, false> rag, I it, const S last, maybe_fallback_t<I> /* fallback */)
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr void token_end_of_input(result_t<I, 2> rag, I it, const S /* last */)
+        requires is_lexer
     {
+        /* note: similar to lexer_action but always returns */
+        static constexpr auto action = [: Info :].eof_action;
+        static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(action), ^^result<I> }) };
+
+        set_final<tdfa::no_transition_regops, 0>(rag, it);
+
+        if constexpr (return_type_of(func) == ^^void)
+            [: func :](rag.res);
+        else
+            rag.tok = token<I>([: func
+                :](rag.res));
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr bool skip_current(result_t<I, 2> rag, I it, const S last, maybe_fallback_t<I> /* fallback */)
+    {
+        if (it == last) [[unlikely]]
+        {
+            token_end_of_input(rag, it, last);
+            return false;
+        }
+
         if constexpr (not result<I>::has_continue)
         {
             if constexpr (DFA.flags.maybe_no_empty and not never_empty
@@ -13105,7 +13140,6 @@ private:
             {
                 const bool empty{ rag.res.template force_get<0>().empty() };
                 rag.res.reset(it);
-
                 if (empty)
                     [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(rag, it, last, it);
             }
@@ -13132,8 +13166,6 @@ private:
                     [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[i]>(rag, it, last, it);
                 }
             }
-
-            std::unreachable();
         }
         else
         {
@@ -13143,9 +13175,9 @@ private:
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size))
                 if (i == continue_at)
                     [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(rag, it, last, it);
-
-            std::unreachable();
         }
+
+        return false;
     }
 
     /* end of input actions */
@@ -13158,7 +13190,7 @@ private:
     }
 
     template<std::size_t Alt, not_same_as<no_result> Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr token<I> success(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool success(Result result, I it, const S last, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
         [[clang::musttail]] return lexer_action<[: Info :].actions[Alt]>(result, it, last, fallback);
@@ -13172,25 +13204,18 @@ private:
     }
 
     template<not_same_as<no_result> Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr token<I> failure(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool failure(Result result, I it, const S last, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
-        result.res.match_end_ = it;
+        set_final<tdfa::no_transition_regops, 0>(result, it);
         [[clang::musttail]] return lexer_action<[: Info :].error_action>(result, it, last, fallback);
-    }
-
-    template<not_same_as<no_result> Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr token<I> token_end_of_input(Result result, I it, const S last, maybe_fallback_t<I> fallback)
-        requires is_lexer
-    {
-        [[clang::musttail]] return lexer_action<[: Info :].eof_action>(result, it, last, fallback);
     }
 
     /* state fallback */
 
     template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
         requires (DFA.flags.enable_fallback)
-    static constexpr internal_return_t<I> fallback_state(Result result, I it, const S last, fallback_info<I> fallback)
+    static constexpr bool fallback_state(Result result, I it, const S last, fallback_info<I> fallback)
     {
         if (fallback.state == fallback_disabled)
             [[clang::musttail]] return failure(result, it, last, fallback);
@@ -13212,7 +13237,7 @@ private:
     /* next state functions */
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr internal_return_t<I> state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
     {
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
@@ -13259,7 +13284,7 @@ private:
     }
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I>
-    static constexpr internal_return_t<I> state(Result result, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
+    static constexpr bool state(Result result, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
     {
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
@@ -13303,7 +13328,7 @@ private:
     }
 
     template<std::size_t DFAState, std::size_t Count, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr internal_return_t<I> unchecked_state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool unchecked_state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
     {
         if constexpr (Count == 0)
         {
@@ -13325,7 +13350,7 @@ private:
     }
 
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr internal_return_t<I> unchecked_state_skip(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool unchecked_state_skip(Result result, I it, const S last, maybe_fallback_t<I> fallback)
     {
         if constexpr (sequence_helper<Skip>::empty or Count == 0 or DFA.nodes[DFAState].size() != 1)
         {
@@ -13353,7 +13378,7 @@ private:
     /* next state function entry point */
 
     template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr internal_return_t<I> initial_state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool initial_state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -13810,7 +13835,15 @@ public:
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last)
     {
         result<I> res{ first };
-        token<I> tok{ initial_state<DFA.match_start>(result_t{ res }, first, last, first) };
+        token<I> tok;
+
+        if (first == last) [[unlikely]]
+        {
+            token_end_of_input(result_t{ tok, res }, first, last);
+            return tok;
+        }
+
+        initial_state<DFA.match_start>(result_t{ tok, res }, first, last, first);
         first = res.match_end_;
         return tok;
     }
@@ -13822,11 +13855,17 @@ public:
         result<I> res{ first };
         token<I> tok;
 
+        if (first == last) [[unlikely]]
+        {
+            token_end_of_input(result_t{ tok, res }, first, last);
+            return tok;
+        }
+
         template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
-                tok = initial_state<DFA.continue_nodes[i]>(result_t{ res }, first, last, first);
+                initial_state<DFA.continue_nodes[i]>(result_t{ tok, res }, first, last, first);
 #ifndef __GNUC_MINOR__
                 break;
 #else
@@ -13847,7 +13886,15 @@ public:
         static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
 
         result<I> res{ first };
-        token<I> tok{ initial_state<start_state>(result_t{ res }, first, last, first) };
+        token<I> tok;
+
+        if (first == last) [[unlikely]]
+        {
+            token_end_of_input(result_t{ tok, res }, first, last);
+            return tok;
+        }
+
+        initial_state<start_state>(result_t{ tok, res }, first, last, first);
         first = res.match_end_;
         return tok;
     }
@@ -13859,12 +13906,18 @@ public:
         result<I> res{ first };
         token<I> tok;
 
+        if (first == last) [[unlikely]]
+        {
+            token_end_of_input(result_t{ tok, res }, first, last);
+            return tok;
+        }
+
         template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
                 static constexpr auto start_state{ never_empty ? DFA.continue_nodes[i] : DFA.additional_continue_nodes[i] };
-                tok = initial_state<start_state>(result_t{ res }, first, last, first);
+                initial_state<start_state>(result_t{ tok, res }, first, last, first);
 #ifndef __GNUC_MINOR__
                 break;
 #else

@@ -92,8 +92,40 @@ template<typename CharT>
         }
         else
         {
-            if (c == '-' or c == '[' or c == ']' or c == '^') result += '\\';
+            switch (c)
+            {
+            case '-':
+            case '[':
+            case ']':
+            case '^':
+                result += '\\';
+                [[fallthrough]];
+            default:
+                result += c;
+                break;
+            }
+        }
+    };
+
+    static constexpr auto escape2 = [](string_type& result, char_type c){
+        switch (c)
+        {
+        case '.':
+        case '*':
+        case '+':
+        case '?':
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case '|':
+        case '^':
+        case '$':
+            result += '\\';
+            [[fallthrough]];
+        default:
             result += c;
+            break;
         }
     };
 
@@ -224,7 +256,8 @@ template<typename CharT>
         case index_in_variant(^^typename ast_t::char_str, ^^typename ast_t::type):
         {
             const auto& lit = std::get<typename ast_t::char_str>(entry);
-            result += lit.data;
+            for (const auto& c : lit.data)
+                escape2(result, c);
             break;
         }
         case index_in_variant(^^typename ast_t::char_class, ^^typename ast_t::type):

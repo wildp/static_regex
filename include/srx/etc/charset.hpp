@@ -471,12 +471,18 @@ constexpr auto charset<CharT>::make_union(const charset_interval_range<char_type
 template<typename CharT>
 constexpr auto charset<CharT>::make_symmetric_difference(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
 {
-    if (lhs.empty())
-        return underlying_t(std::from_range, rhs);
-    if (rhs.empty())
-        return underlying_t(std::from_range, lhs);
-
     underlying_t result;
+
+    if (lhs.empty())
+    {
+        result.assign_range(rhs);
+        return result;
+    }
+    if (rhs.empty())
+    {
+        result.assign_range(lhs);
+        return result;
+    }
 
     auto lit = std::ranges::cbegin(lhs);
     auto rit = std::ranges::cbegin(rhs);
@@ -555,10 +561,13 @@ constexpr auto charset<CharT>::make_symmetric_difference(const charset_interval_
 template<typename CharT>
 constexpr auto charset<CharT>::make_relative_complement(const charset_interval_range<char_type> auto& lhs, const charset_interval_range<char_type> auto& rhs) -> underlying_t
 {
-    if (rhs.empty())
-        return underlying_t(std::from_range, lhs);
-
     underlying_t result;
+
+    if (rhs.empty())
+    {
+        result.assign_range(lhs);
+        return result;
+    }
 
     auto lit = lhs.cbegin();
     auto rit = rhs.cbegin();
@@ -888,10 +897,14 @@ template<typename CharT>
 template<typename T>
 constexpr auto charset<CharT>::partition_ext(const std::vector<ref_pair<T>>& input) -> partition_pair_result<T>
 {
-    if (input.empty())
-        return {};
-    else if (input.size() == 1)
-        return { { input.back().first, { input.back().second } } };
+    partition_pair_result<T> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            result.emplace_back(input.back().first, std::vector<T>{ input.back().second });
+        return result;
+    }
 
     partitioned_intervals part;
 
@@ -910,8 +923,6 @@ constexpr auto charset<CharT>::partition_ext(const std::vector<ref_pair<T>>& inp
     part_sort_and_dedup(part);
     part_merge_intervals(part);
     auto map = part_make_map(part);
-
-    partition_pair_result<T> result;
 
     for (auto it = map.begin(), end{ map.end() }; it != end; ++it)
     {
@@ -932,6 +943,15 @@ template<typename CharT>
 template<typename T>
 constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>& input) -> partition_contents_result<T>
 {
+    partition_contents_result<T> result;
+
+    if (input.size() <= 1)
+    {
+        if (not input.empty())
+            return result.emplace_back(std::vector<T>{ input.back().second });
+        return result;
+    }
+
     if (input.empty())
         return {};
     else if (input.size() == 1)
@@ -954,8 +974,6 @@ constexpr auto charset<CharT>::partition_contents(const std::vector<ref_pair<T>>
     part_sort_and_dedup(part);
     part_merge_intervals(part);
     const auto map = part_make_map(part);
-
-    partition_contents_result<T> result;
 
     for (auto it = map.cbegin(), end{ map.cend() }; it != end; ++it)
     {

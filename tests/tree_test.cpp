@@ -106,13 +106,13 @@ static_assert(parse("$"));
 static_assert(parse("\n"));
 static_assert(parse("\\n", "\n"));
 static_assert(parse("\\t", "\t"));
-static_assert(parse("\\.", "."));
-static_assert(parse("\\^", "^"));
-static_assert(parse("\\$", "$"));
-static_assert(parse("\\*", "*"));
-static_assert(parse("\\+", "+"));
-static_assert(parse("\\?", "?"));
-static_assert(parse("\\???", "???"));
+static_assert(parse("\\."));
+static_assert(parse("\\^"));
+static_assert(parse("\\$"));
+static_assert(parse("\\*"));
+static_assert(parse("\\+"));
+static_assert(parse("\\?"));
+static_assert(parse("\\???"));
 
 /* chaining tests */
 static_assert(parse("abcdefg"));
@@ -211,11 +211,11 @@ static_assert(parse(R"(\U00000061)", "a"));
 static_assert(parse(R"(\U0000004F)", "O"));
 static_assert(parse(R"(\x{61})", "a"));
 static_assert(parse(R"(\u{49})", "I"));
-static_assert(parse(R"(\U{6F})", "o"));
+static_assert(parse(R"(\u{6F})", "o"));
 // static_assert(parse(uR"(\u2705)", u"✅"));
 static_assert(parse(UR"(\x{1F30D})", U"🌍"));
 static_assert(parse(UR"(\u{1F30E})", U"🌎"));
-static_assert(parse(UR"(\U{1F30F})", U"🌏"));
+static_assert(parse(UR"(\u{1F30F})", U"🌏"));
 static_assert(parse(UR"(\U0001F310)", U"🌐"));
 // TODO: replace previous 5 tests with tests for multibyte chars
 
@@ -327,7 +327,7 @@ static_assert(alt_to_cc("(a|bcdef|g|ab|c|d|e|efg|fg)*", "(a|bcdef|g|ab|[c-e]|efg
 static_assert(parse("ab{0}a", "aa"));
 static_assert(parse("(?# comment )", ""));
 static_assert(parse("(?:aaa)", "aaa"));
-static_assert(parse("\\Q...\\E", "..."));
+static_assert(parse("\\Q...\\E", "\\.\\.\\."));
 static_assert(test("(v*)*|j*"));
 
 /* anchor parsing tests */

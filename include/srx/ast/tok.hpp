@@ -131,7 +131,7 @@ struct char_str
 
     constexpr explicit char_str(std::basic_string_view<CharT> str) : data{ str } {}
 
-    constexpr explicit char_str(std::basic_string_view<char>& str)
+    constexpr explicit char_str(std::basic_string_view<char> str)
         requires (not std::same_as<CharT, char>)
         : data{ std::from_range, str | std::views::transform([](char c){ return static_cast<CharT>(c); })} {}
 

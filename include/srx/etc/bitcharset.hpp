@@ -533,7 +533,7 @@ constexpr auto bitcharset<CharT>::partition_contents(const std::vector<ref_pair<
 {
     using part_pair = std::pair<bitcharset, bitset_t>;
 
-    std::vector<std::vector<T>> result;
+    partition_contents_result<T> result;
 
     if (input.size() <= 1)
     {

@@ -62,9 +62,11 @@ public:
     constexpr explicit char_class_impl(char_type c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c) { negate(); }
 
     template<std::same_as<char_type>... Ts>
+        requires (sizeof...(Ts) > 1)
     constexpr explicit char_class_impl(Ts... c) noexcept(IsNarrow) { ([&]{ insert(c); }() , ...); }
 
     template<std::same_as<char_type>... Ts>
+        requires (sizeof...(Ts) > 1)
     constexpr explicit char_class_impl(Ts... c, negated_cc_tag_t) noexcept(IsNarrow) : char_class_impl(c...) { negate(); }
 
     constexpr void insert(char_type c) noexcept(IsNarrow) { data_.insert(c); }
