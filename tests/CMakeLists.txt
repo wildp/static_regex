@@ -7,6 +7,8 @@ set_target_properties(tests PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
+target_compile_options(tests PRIVATE -Wall -Wextra -Wnrvo -Wno-musttail-local-addr)
+
 target_precompile_headers(tests PRIVATE <srx/regex.hpp>)
 
 target_sources(tests

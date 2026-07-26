@@ -39,27 +39,41 @@ constexpr std::string make_pretty_charset_string(const CharSetType& cs)
 
     const auto intervals = ((is_negated) ? negated_cs : cs).get_intervals();
 
+    std::string result;
+
     if (is_negated and intervals.empty())
-        return ".";
+    {
+        result += ".";
+        return result;
+    }
 
     if (not is_negated and intervals.size() == 1)
-        if (const auto& [lower, upper] = intervals.back(); lower == upper)
-            if (('0' <= lower and lower <= '9') or ('A' <= lower and lower <= 'Z') or ('a' <= lower and lower <= 'z'))
-                return std::string{ lower };
+    {
+        const auto& [lower, upper] = intervals.back();
+        if (lower == upper and (('0' <= lower and lower <= '9') or ('A' <= lower and lower <= 'Z') or ('a' <= lower and lower <= 'z')))
+        {
+            result += lower;
+            return result;
+        }
+    }
 
-    std::string result;
     result += '[';
 
     if (is_negated)
         result += '^';
 
     static constexpr auto get_char = [](char_type c){
+        std::string str;
         if (c == '-' or c == '[' or c == ']' or c == '^')
-            return std::format("\\{}", c);
-
-        std::string str{ std::format("{:?}", c) };
-        str.pop_back();
-        str.erase(str.begin());
+        {
+            str = std::format("\\{}", c);
+        }
+        else
+        {
+            str = std::format("{:?}", c);
+            str.pop_back();
+            str.erase(str.begin());
+        }
         return str;
     };
 
