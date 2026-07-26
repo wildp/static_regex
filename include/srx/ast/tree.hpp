@@ -104,7 +104,7 @@ class expr_tree
 public:
     using char_type = CharT;
     using sv_type = std::basic_string_view<char_type>;
-    // using default_lexer = <char_type>;
+    using default_lexer = lexer::lexer<char_type>;
 
     using assertion     = tok::assertion;
     using char_str      = tok::char_str<char_type>;
@@ -126,7 +126,7 @@ public:
     constexpr explicit expr_tree(R&& lex_range, parser_flags flags = {});
 
     constexpr explicit expr_tree(sv_type sv, parser_flags flags = {})
-        : expr_tree(lexer::lexer{ sv }, flags) {}
+        : expr_tree(default_lexer{ sv }, flags) {}
 
     friend class parser::ll1<char_type>;
 

@@ -184,6 +184,31 @@ concept extended_lexer_like = lexer_like<T> and requires (T l) {
 namespace lexer {
 
 template<typename CharT>
+class generated
+{
+public:
+    static_assert(character<CharT>);
+    using token_t = token_type<CharT>;
+
+    constexpr explicit generated(std::basic_string_view<CharT> sv) : it_{ sv.begin() }, end_{ sv.end() } {}
+    constexpr explicit generated(const CharT* cstr) : generated(std::basic_string_view<CharT>{ cstr }) {}
+    [[nodiscard]] constexpr token_t nexttok();
+    [[nodiscard]] constexpr bool empty() { return it_ == end_; }
+
+    constexpr void set_extended() { extended_mode_ = 1; }
+    constexpr void set_extended_more() { extended_mode_ = 2; }
+    constexpr void reset_extended() { extended_mode_ = 0; }
+
+private:
+    using it_type = std::basic_string_view<CharT>::const_iterator;
+
+    it_type it_;
+    it_type end_;
+    bool literal_string_mode_{ false };
+    unsigned char extended_mode_{ 0 };
+};
+
+template<typename CharT>
 class lexer
 {
 public:

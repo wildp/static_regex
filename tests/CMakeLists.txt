@@ -7,10 +7,14 @@ set_target_properties(tests PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
+target_precompile_headers(tests PRIVATE <srx/regex.hpp>)
+
 target_sources(tests
     PRIVATE
         expo_test.cpp
         iter_test.cpp
+        lex1_test.cpp
+        lex2_test.cpp
         repl_test.cpp
         setb_test.cpp
         setc_test.cpp
@@ -21,7 +25,6 @@ target_sources(tests
         srxn_test.cpp
         tdfa_test.cpp
         tnfa_test.cpp
-        tree_test.cpp
 )
 
 target_link_libraries(tests PUBLIC static_regex)
