@@ -10831,12 +10831,14 @@ public:
         , flags{ f }
         , alt_mode{ alt_mode }{}
 
-    [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
+    [[nodiscard]] consteval static_match_result_info make_match_result_info() const
     {
-        if (has_continue and continue_nodes.size() == 1 and continue_nodes[0] == match_start)
-            has_continue = false;
+        return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue() };
+    }
 
-        return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue };
+    [[nodiscard]] consteval bool has_continue() const
+    {
+        return flags.is_iterator and not (continue_nodes.size() == 1 and continue_nodes[0] == match_start);
     }
 
     /* data members (public so that tdfa_info is structural) */
@@ -12949,10 +12951,12 @@ struct p1306dfa
                                         and DFA.min_max_lengths.first == DFA.min_max_lengths.second };
     static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
 
-    template<typename I>
-    using result = static_match_results<I, DFA.make_match_result_info(DFA.flags.is_iterator)>;
+    template<std::bidirectional_iterator I>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+    using result = static_match_results<I, DFA.make_match_result_info()>;
 
-    template<typename I>
+    template<std::bidirectional_iterator I>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     using token = typename [: [] consteval {
         if constexpr (not is_lexer)
             return ^^terminal_object;
@@ -12960,18 +12964,51 @@ struct p1306dfa
             return [: Info :].return_type;
     }() :];
 
+    template<std::bidirectional_iterator I>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+    struct iterated_result;
+
+    struct stateful
+    {
+        static constexpr bool has_continue{ DFA.has_continue() };
+
+        using continue_type = maybe_type_t<has_continue, tdfa::continue_at_t>;
+
+        [[no_unique_address]] continue_type continue_at{ detail::tdfa::no_continue };
+    };
+
 private:
     static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
     static constexpr std::size_t avoid_simd_threshold{ (1uz << std::numeric_limits<std::make_unsigned_t<char_type>>::digits) / 2 };
 
     struct generation
     {
+        static constexpr bool enabled{ DFA.flags.adapted_search and DFA.register_count > 0 };
+
         std::array<std::size_t, DFA.register_count> reg{};
         std::size_t current{ 0 };
     };
 
-    using gen_info = maybe_type_t<(DFA.register_count > 0), generation>;
-    using gen_ref = maybe_type_t<(DFA.register_count > 0), std::add_lvalue_reference_t<generation>>;
+    using gen_info = maybe_type_t<generation::enabled, generation>;
+
+    template<typename I, bool B = false>
+    struct overspill
+    {
+        [[no_unique_address]] gen_info gen;
+
+        overspill() = default;
+    };
+
+    template<typename I>
+    struct overspill<I, true>
+    {
+        result<I> res;
+        [[no_unique_address]] gen_info gen;
+        [[no_unique_address]] stateful stf;
+
+        overspill() = default;
+        constexpr overspill(I first) noexcept(noexcept(result<I>{ first })) : res{ first } {}
+    };
 
     template<typename I>
     using token_ref = maybe_type_t<is_lexer, std::add_lvalue_reference_t<token<I>>>;
@@ -12979,36 +13016,58 @@ private:
     template<typename I>
     using result_ref = std::add_lvalue_reference_t<result<I>>;
 
-    using no_result = terminal_object;
+    template<typename I>
+    using iterated_result_ref = std::add_lvalue_reference_t<iterated_result<I>>;
 
-    template<typename I, int X>
-    struct result_t
+    template<typename I, bool B = false>
+    using overspill_ref = std::add_lvalue_reference_t<overspill<I, B>>;
+
+    template<typename I, int X = 0>
+    struct context
     {
-        result_ref<I> res;
-        [[no_unique_address]] gen_ref gen;
+        /* empty context */
     };
 
     template<typename I>
-    struct result_t<I, 1>
+    struct context<I, 1>
     {
+        /* store results */
         result_ref<I> res;
+        [[no_unique_address]] overspill_ref<I> osr;
+
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res; }
     };
 
     template<typename I>
-    struct result_t<I, 2>
+    struct context<I, 2>
     {
+        /* store results with iterated search info */
+        iterated_result_ref<I> itr;
+        [[no_unique_address]] overspill_ref<I> osr;
+
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return itr.result_; }
+        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return itr.state_info_; }
+    };
+
+    template<typename I>
+    struct context<I, 3>
+    {
+        /* store token, with result in overspill only */
         token_ref<I> tok;
-        result_ref<I> res;
+        overspill_ref<I, true> osr;
+
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return osr.res; }
+        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return osr.stf; }
     };
 
     template<typename I>
-    result_t(result<I>&, gen_info&) -> result_t<I, 0>;
+    context(result<I>&, overspill<I>&) -> context<I, 1>;
 
     template<typename I>
-    result_t(result<I>&) -> result_t<I, 1>;
+    context(iterated_result<I>&, overspill<I>&) -> context<I, 2>;
 
     template<typename I>
-    result_t(token<I>&, result<I>&) -> result_t<I, 2>;
+    context(token<I>&, overspill<I, true>&) -> context<I, 3>;
 
     template<typename I>
     struct fallback_info
@@ -13022,185 +13081,203 @@ private:
     template<typename I>
     using maybe_fallback_t = maybe_type_t<DFA.flags.enable_fallback, fallback_info<I>>;
 
+    /* post-match register cleaning */
+
     template<std::bidirectional_iterator I>
-    static constexpr void clean_generations(result<I>& res, const gen_info& gen)
+    static constexpr void clean_generations(result<I>& res, const overspill<I, false>& osp)
+        requires generation::enabled
     {
-        if constexpr (DFA.register_count > 0)
+        if constexpr (std::contiguous_iterator<I>)
         {
-            if constexpr (std::contiguous_iterator<I>)
-            {
-                for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                    res.reg_[i] = (gen.reg[i] == gen.current) ? res.reg_[i] : I{};
-            }
-            else
-            {
-                for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                    res.enabled_[i] = (gen.reg[i] == gen.current);
-            }
+            for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
+                res.reg_[i] = (osp.gen.reg[i] == osp.gen.current) ? res.reg_[i] : I{};
+        }
+        else
+        {
+            for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
+                res.enabled_[i] = (osp.gen.reg[i] == osp.gen.current);
+        }
+    }
+
+    template<std::bidirectional_iterator I>
+    static constexpr void clean_generations(overspill<I, true>& osp)
+        requires generation::enabled
+    {
+        if constexpr (std::contiguous_iterator<I>)
+        {
+            for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
+                osp.res.reg_[i] = (osp.gen.reg[i] == osp.gen.current) ? osp.res.reg_[i] : I{};
+        }
+        else
+        {
+            for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
+                osp.res.enabled_[i] = (osp.gen.reg[i] == osp.gen.current);
         }
     }
 
     /* register operations */
 
     template<std::size_t Blk, std::bidirectional_iterator I, int X>
-    static constexpr void register_operations(result_t<I, X> result, const I it)
+    static constexpr void register_operations(context<I, X> ctx, const I it)
     {
-        if constexpr (Blk != tdfa::no_transition_regops)
+        if constexpr (Blk != tdfa::no_transition_regops and X != 0)
         {
             template for (constexpr register_operation op : DFA.regops[Blk])
             {
                 if constexpr (op.is_copy)
-                    result.res.reg_[op.dst] = result.res.reg_[op.cpy_src];
+                    ctx.get_res().reg_[op.dst] = ctx.get_res().reg_[op.cpy_src];
                 else if constexpr (op.set_val)
-                    result.res.reg_[op.dst] = it;
-                else if constexpr (X != 0 and std::contiguous_iterator<I>)
-                    result.res.reg_[op.dst] = I{};
+                    ctx.get_res().reg_[op.dst] = it;
+                else if constexpr (not generation::enabled and std::contiguous_iterator<I>)
+                    ctx.get_res().reg_[op.dst] = I{};
 
-                if constexpr (X != 0 and not std::contiguous_iterator<I>)
+                if constexpr (not generation::enabled and not std::contiguous_iterator<I>)
                 {
                     if constexpr (op.is_copy)
-                        result.res.enabled_[op.dst] = result.res.enabled_[op.cpy_src];
+                        ctx.get_res().enabled_[op.dst] = ctx.get_res().enabled_[op.cpy_src];
                     else
-                        result.res.enabled_[op.dst] = op.set_val;
+                        ctx.get_res().enabled_[op.dst] = op.set_val;
                 }
             }
 
-            if constexpr (X == 0)
+            if constexpr (generation::enabled)
             {
                 template for (constexpr register_operation op : DFA.regops[Blk])
                 {
                     if constexpr (op.is_copy)
-                        result.gen.reg[op.dst] = result.gen.reg[op.cpy_src];
+                        ctx.osr.gen.reg[op.dst] = ctx.osr.gen.reg[op.cpy_src];
                     else if constexpr (op.set_val)
-                        result.gen.reg[op.dst] = result.gen.current;
+                        ctx.osr.gen.reg[op.dst] = ctx.osr.gen.current;
                     else
-                        result.gen.reg[op.dst] = 0;
+                        ctx.osr.gen.reg[op.dst] = 0;
                 }
             }
         }
     }
 
-    template<std::size_t Blk, std::bidirectional_iterator I>
-    static constexpr void register_operations(no_result /* result */, const I /* it */) {}
-
     /* final and fallback */
 
-    template<std::size_t Blk, std::ptrdiff_t Offset, typename Result, std::bidirectional_iterator I>
-    static constexpr void set_final(Result rag, const I it)
+    template<std::size_t Blk, std::ptrdiff_t Offset, std::bidirectional_iterator I, int X>
+    static constexpr void set_final(context<I, X> ctx, const I it)
     {
-        if constexpr (not std::same_as<Result, no_result>)
+        if constexpr (X != 0)
         {
-            register_operations<Blk>(rag, it);
-            rag.res.match_end_ = std::ranges::prev(it, Offset);
+            register_operations<Blk>(ctx, it);
+            ctx.get_res().match_end_ = std::ranges::prev(it, Offset);
 
             if constexpr (not std::contiguous_iterator<I>)
-                rag.res.match_success_ = true;
+                ctx.get_res().match_success_ = true;
         }
     }
 
-    template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, typename Result, std::bidirectional_iterator I>
-    static constexpr void set_fallback(Result rag, const I it)
+    template<std::size_t Blk, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I, int X>
+    static constexpr void set_fallback(context<I, X> ctx, const I it)
     {
-        if constexpr (not std::same_as<Result, no_result>)
+        if constexpr (X != 0)
         {
-            set_final<Blk, Offset>(rag, it);
+            set_final<Blk, Offset>(ctx, it);
 
-            if constexpr (result<I>::has_continue and ContinueAt != tdfa::no_continue)
-                rag.res.continue_at_ = ContinueAt;
+            if constexpr (stateful::has_continue and ContinueAt != tdfa::no_continue)
+            {
+                if constexpr (X == 1)
+                    ctx.res.continue_at_ = ContinueAt;
+                else
+                    ctx.get_stf().continue_at = ContinueAt;
+            }
         }
     }
 
     /* lexer actions */
 
     template<std::meta::info Action, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool lexer_action(result_t<I, 2> rag, I it, const S end, maybe_fallback_t<I> fallback)
-        requires is_lexer
+    static constexpr bool lexer_action(context<I, 3> ctx, I it, const S end, maybe_fallback_t<I> fallback)
     {
         static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(Action), ^^result<I> }) };
 
         if constexpr (return_type_of(func) == ^^void)
         {
             /* void should be returned to continue */
-            [: func :](rag.res);
-            rag.res.reset(it);
-            [[clang::musttail]] return skip_current(rag, it, end, fallback);
+            [: func :](ctx.osr.res);
+            [[clang::musttail]] return skip_current(ctx, it, end, fallback);
         }
         else
         {
-            rag.tok = token<I>([: func
-                :](rag.res));
+            ctx.tok = token<I>([: func
+                :](ctx.osr.res));
             return true;
         }
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr void token_end_of_input(result_t<I, 2> rag, I it, const S /* last */)
-        requires is_lexer
+    static constexpr void token_end_of_input(context<I, 3> ctx, I it, const S /* last */)
     {
         /* note: similar to lexer_action but always returns */
         static constexpr auto action = [: Info :].eof_action;
         static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(action), ^^result<I> }) };
 
-        set_final<tdfa::no_transition_regops, 0>(rag, it);
+        set_final<tdfa::no_transition_regops, 0>(ctx, it);
 
         if constexpr (return_type_of(func) == ^^void)
-            [: func :](rag.res);
+            [: func :](ctx.osr.res);
         else
-            rag.tok = token<I>([: func
-                :](rag.res));
+            ctx.tok = token<I>([: func
+                :](ctx.osr.res));
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool skip_current(result_t<I, 2> rag, I it, const S last, maybe_fallback_t<I> /* fallback */)
+    static constexpr bool skip_current(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
     {
         if (it == last) [[unlikely]]
         {
-            token_end_of_input(rag, it, last);
+            token_end_of_input(ctx, it, last);
             return false;
         }
 
-        if constexpr (not result<I>::has_continue)
+        if constexpr (generation::enabled)
+            ++ctx.osr.gen.current;
+
+        if constexpr (not stateful::has_continue)
         {
             if constexpr (DFA.flags.maybe_no_empty and not never_empty
                           and DFA.match_start != DFA.additional_continue_nodes.back())
             {
-                const bool empty{ rag.res.template force_get<0>().empty() };
-                rag.res.reset(it);
+                const bool empty{ ctx.osr.res.template force_get<0>().empty() };
+                ctx.osr.res.reset(it);
                 if (empty)
-                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(rag, it, last, it);
+                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(ctx, it, last, it);
             }
             else
             {
-                rag.res.reset(it);
+                ctx.osr.res.reset(it);
             }
 
-            [[clang::musttail]] return initial_state<DFA.match_start>(rag, it, last, it);
+            [[clang::musttail]] return initial_state<DFA.match_start>(ctx, it, last, it);
         }
         else if constexpr (DFA.flags.maybe_no_empty and not never_empty)
         {
-            const auto continue_at{ rag.res.continue_at_ };
-            const bool empty{ rag.res.template force_get<0>().empty() };
-            rag.res.reset(it);
+            const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
+            const bool empty{ ctx.osr.res.template force_get<0>().empty() };
+            ctx.osr.res.reset(it);
 
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
             {
-                if (i == continue_at)
+                if (i == state_info.continue_at)
                 {
                     if constexpr (DFA.continue_nodes[i] != DFA.additional_continue_nodes[i])
                         if (empty)
-                            [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(rag, it, last, it);
-                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[i]>(rag, it, last, it);
+                            [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
+                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[i]>(ctx, it, last, it);
                 }
             }
         }
         else
         {
-            const auto continue_at = rag.res.continue_at_;
-            rag.res.reset(it);
+            const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
+            ctx.osr.res.reset(it);
 
             template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size))
-                if (i == continue_at)
-                    [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(rag, it, last, it);
+                if (i == state_info.continue_at)
+                    [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
         }
 
         return false;
@@ -13208,43 +13285,45 @@ private:
 
     /* end of input actions */
 
-    template<std::size_t Alt, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    [[gnu::always_inline]] static constexpr bool success(Result /* result */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
+    template<std::size_t Alt, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    [[gnu::always_inline]] static constexpr bool success(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
         requires is_regex
     {
         return true;
     }
 
-    template<std::size_t Alt, not_same_as<no_result> Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool success(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    template<std::size_t Alt, std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr bool success(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
-        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt]>(result, it, last, fallback);
+        if constexpr (generation::enabled)
+            clean_generations(ctx.osr);
+        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt]>(ctx, it, last, fallback);
     }
 
-    template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    [[gnu::always_inline]] static constexpr bool failure(Result /* result */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    [[gnu::always_inline]] static constexpr bool failure(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
         requires is_regex
     {
         return false;
     }
 
-    template<not_same_as<no_result> Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool failure(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr bool failure(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
-        set_final<tdfa::no_transition_regops, 0>(result, it);
-        [[clang::musttail]] return lexer_action<[: Info :].error_action>(result, it, last, fallback);
+        set_final<tdfa::no_transition_regops, 0>(ctx, it);
+        [[clang::musttail]] return lexer_action<[: Info :].error_action>(ctx, it, last, fallback);
     }
 
     /* state fallback */
 
-    template<typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
         requires (DFA.flags.enable_fallback)
-    static constexpr bool fallback_state(Result result, I it, const S last, fallback_info<I> fallback)
+    static constexpr bool fallback_state(context<I, X> ctx, I it, const S last, fallback_info<I> fallback)
     {
         if (fallback.state == fallback_disabled)
-            [[clang::musttail]] return failure(result, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last, fallback);
 
         template for (constexpr auto pair : DFA.fallback_nodes)
         {
@@ -13252,18 +13331,18 @@ private:
             {
                 static constexpr auto fni = DFA.final_nodes.at(pair.first);
                 if constexpr (not DFA.flags.return_bool)
-                    set_fallback<pair.second.op_index, fni.offset, pair.second.continue_at>(result, fallback.it);
-                [[clang::musttail]] return success<fni.alternative>(result, it, last, fallback);
+                    set_fallback<pair.second.op_index, fni.offset, pair.second.continue_at>(ctx, fallback.it);
+                [[clang::musttail]] return success<fni.alternative>(ctx, it, last, fallback);
             }
         }
 
-        [[clang::musttail]] return failure(result, it, last, fallback);
+        [[clang::musttail]] return failure(ctx, it, last, fallback);
     }
 
     /* next state functions */
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr bool state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
     {
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
@@ -13281,15 +13360,15 @@ private:
             {
                 if (tr_possible<tr.cs>(*it))
                 {
-                    register_operations<tr.op_index>(result, it);
-                    [[clang::musttail]] return state<tr.next>(result, ++it, last, fallback);
+                    register_operations<tr.op_index>(ctx, it);
+                    [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
                 }
             }
 
             if constexpr (final_node != nullptr and DFA.flags.enable_fallback and fallback_node != nullptr)
             {
-                set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
-                [[clang::musttail]] return success<final_node->alternative>(result, it, last, fallback);
+                set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
+                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
             }
         }
         else
@@ -13297,20 +13376,20 @@ private:
             if constexpr (final_node != nullptr)
             {
                 if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
-                    set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
+                    set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
                 else
-                    set_final<final_node->op_index, final_node->offset>(result, it);
-                [[clang::musttail]] return success<final_node->alternative>(result, it, last, fallback);
+                    set_final<final_node->op_index, final_node->offset>(ctx, it);
+                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
             }
         }
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
-            [[clang::musttail]] return fallback_state(result, it, last, fallback);
-        [[clang::musttail]] return failure(result, it, last, fallback);
+            [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
+        [[clang::musttail]] return failure(ctx, it, last, fallback);
     }
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I>
-    static constexpr bool state(Result result, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
+    template<std::size_t DFAState, std::bidirectional_iterator I, int X>
+    static constexpr bool state(context<I, X> ctx, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
     {
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
@@ -13326,8 +13405,8 @@ private:
         {
             if (tr_possible_exclude_null<tr.cs>(*it))
             {
-                register_operations<tr.op_index>(result, it);
-                [[clang::musttail]] return state<tr.next>(result, ++it, last, fallback);
+                register_operations<tr.op_index>(ctx, it);
+                [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
             }
         }
 
@@ -13335,30 +13414,30 @@ private:
         {
             if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
-                set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(result, it);
-                [[clang::musttail]] return success<final_node->alternative>(result, it, last, fallback);
+                set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
+                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
             }
             else
             {
                 if (it == last) [[likely]]
                 {
-                    set_final<final_node->op_index, final_node->offset>(result, it);
-                    [[clang::musttail]] return success<final_node->alternative>(result, it, last, fallback);
+                    set_final<final_node->op_index, final_node->offset>(ctx, it);
+                    [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
                 }
             }
         }
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
-            [[clang::musttail]] return fallback_state(result, it, last, fallback);
-        [[clang::musttail]] return failure(result, it, last, fallback);
+            [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
+        [[clang::musttail]] return failure(ctx, it, last, fallback);
     }
 
-    template<std::size_t DFAState, std::size_t Count, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool unchecked_state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    template<std::size_t DFAState, std::size_t Count, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
+    static constexpr bool unchecked_state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
     {
         if constexpr (Count == 0)
         {
-            [[clang::musttail]] return state<DFAState>(result, it, last, fallback);
+            [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
         }
         else
         {
@@ -13366,80 +13445,80 @@ private:
             {
                 if (tr_possible<tr.cs>(*it))
                 {
-                    register_operations<tr.op_index>(result, it);
-                    [[clang::musttail]] return unchecked_state<tr.next, Count - 1>(result, ++it, last, fallback);
+                    register_operations<tr.op_index>(ctx, it);
+                    [[clang::musttail]] return unchecked_state<tr.next, Count - 1>(ctx, ++it, last, fallback);
                 }
             }
 
-            [[clang::musttail]] return failure(result, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last, fallback);
         }
     }
 
-    template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool unchecked_state_skip(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
+    static constexpr bool unchecked_state_skip(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
     {
         if constexpr (sequence_helper<Skip>::empty or Count == 0 or DFA.nodes[DFAState].size() != 1)
         {
-            [[clang::musttail]] return unchecked_state<DFAState, Count>(result, it, last, fallback);
+            [[clang::musttail]] return unchecked_state<DFAState, Count>(ctx, it, last, fallback);
         }
         else if constexpr (Count == sequence_helper<Skip>::head)
         {
             static constexpr auto tr = DFA.nodes[DFAState].front();
-            register_operations<tr.op_index>(result, it);
-            [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(result, ++it, last, fallback);
+            register_operations<tr.op_index>(ctx, it);
+            [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(ctx, ++it, last, fallback);
         }
         else
         {
             static constexpr auto tr = DFA.nodes[DFAState].front();
             if (tr_possible<tr.cs>(*it))
             {
-                register_operations<tr.op_index>(result, it);
-                [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, Skip>(result, ++it, last, fallback);
+                register_operations<tr.op_index>(ctx, it);
+                [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, Skip>(ctx, ++it, last, fallback);
             }
 
-            [[clang::musttail]] return failure(result, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last, fallback);
         }
     }
 
     /* next state function entry point */
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool initial_state(Result result, I it, const S last, maybe_fallback_t<I> fallback)
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr bool initial_state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
         if constexpr (not std::sized_sentinel_for<S, I>)
         {
-            [[clang::musttail]] return state<DFAState>(result, it, last, fallback);
+            [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
         }
         else if constexpr (fixed_length and not DFA.flags.enable_fallback)
         {
             if (std::ranges::distance(it, last) == min_length)
-                [[clang::musttail]] return unchecked_state<DFAState, min_length>(result, it, last, fallback);
+                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
         }
         else
         {
             if (std::ranges::distance(it, last) >= min_length)
-                [[clang::musttail]] return unchecked_state<DFAState, min_length>(result, it, last, fallback);
+                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
         }
 
-        [[clang::musttail]] return failure(result, it, last, it);
+        [[clang::musttail]] return failure(ctx, it, last, it);
     }
 
     /* outer dfa next state functions  */
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool scalar_outer_state(Result result, I it, const S last)
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
     {
-        if constexpr (DFA.register_count > 0)
-            ++result.gen.current;
+        if constexpr (generation::enabled)
+            ++ctx.osr.gen.current;
 
         if (it != last)
         {
-            if (state<DFAState>(result, it, last, it))
+            if (state<DFAState>(ctx, it, last, it))
             {
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
+                if constexpr (X != 0 and result<I>::has_match_start)
+                    ctx.get_res().match_start_ = it;
                 return true;
             }
         }
@@ -13447,9 +13526,9 @@ private:
         {
             if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
             {
-                set_final<final_node->op_index, final_node->offset>(result, it);
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
+                set_final<final_node->op_index, final_node->offset>(ctx, it);
+                if constexpr (X != 0 and result<I>::has_match_start)
+                     ctx.get_res().match_start_ = it;
                 return true;
             }
             return false;
@@ -13458,26 +13537,26 @@ private:
         template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
         {
             if (tr_possible<tr.cs>(*it))
-                [[clang::musttail]] return scalar_outer_state<tr.next>(result, ++it, last);
+                [[clang::musttail]] return scalar_outer_state<tr.next>(ctx, ++it, last);
         }
 
         return false;
     }
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
-    static constexpr bool scalar_outer_state(Result result, I it, const S last)
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
+    static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
     {
-        if constexpr (DFA.register_count > 0)
-            ++result.gen.current;
+        if constexpr (generation::enabled)
+            ++ctx.osr.gen.current;
 
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
         if (std::ranges::distance(it, last) >= min_length)
         {
-            if (unchecked_state<DFAState, min_length>(result, it, last, it))
+            if (unchecked_state<DFAState, min_length>(ctx, it, last, it))
             {
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
+                if constexpr (X != 0 and result<I>::has_match_start)
+                    ctx.get_res().match_start_ = it;
                 return true;
             }
         }
@@ -13485,9 +13564,9 @@ private:
         {
             if constexpr (static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState); final_node != nullptr)
             {
-                set_final<final_node->op_index, final_node->offset>(result, it);
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
+                set_final<final_node->op_index, final_node->offset>(ctx, it);
+                if constexpr (X != 0 and result<I>::has_match_start)
+                    ctx.get_res().match_start_ = it;
                 return true;
             }
             return false;
@@ -13496,28 +13575,28 @@ private:
         template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
         {
             if (tr_possible<tr.cs>(*it))
-                [[clang::musttail]] return scalar_outer_state<tr.next>(result, ++it, last);
+                [[clang::musttail]] return scalar_outer_state<tr.next>(ctx, ++it, last);
         }
 
         return false;
     }
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and (DFA.flags.enable_fallback or not fixed_length))
-    static constexpr bool scalar_outer_state(Result result, I it, const S last)
+    static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
         while (std::ranges::distance(it, last) >= min_length)
         {
-            if constexpr (DFA.register_count > 0)
-                ++result.gen.current;
+            if constexpr (generation::enabled)
+                ++ctx.osr.gen.current;
 
-            if (unchecked_state<DFAState, min_length>(result, it, last, it))
+            if (unchecked_state<DFAState, min_length>(ctx, it, last, it))
             {
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
+                if constexpr (X != 0 and result<I>::has_match_start)
+                    ctx.get_res().match_start_ = it;
                 return true;
             }
 
@@ -13530,10 +13609,10 @@ private:
         return false;
     }
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sized_sentinel_for<I> S>
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and (/* degenerate case */ fixed_length and not DFA.flags.enable_fallback))
-    static constexpr bool scalar_outer_state(Result result, I it, const S last)
+    static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
@@ -13541,10 +13620,10 @@ private:
         {
             std::ranges::advance(it, input_size - length);
 
-            if (unchecked_state<DFAState, length>(result, it, last, it))
+            if (unchecked_state<DFAState, length>(ctx, it, last, it))
             {
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it;
+                if constexpr (X != 0 and result<I>::has_match_start)
+                    ctx.get_res().match_start_ = it;
                 return true;
             }
         }
@@ -13558,35 +13637,35 @@ private:
     /* simd outer dfa next state functions */
 
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip,
-             typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+             std::contiguous_iterator I, std::sized_sentinel_for<I> S, int X>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
-    [[gnu::always_inline]] static constexpr bool vector_candidate_check(Result result, I it, const S last, unsigned long long mask)
+    [[gnu::always_inline]] static constexpr bool vector_candidate_check(context<I, X> ctx, I it, const S last, unsigned long long mask)
     {
         while (mask != 0) [[unlikely]]
         {
             const auto offset = std::countr_zero(mask);
             mask &= (mask - 1);
 
-            if (unchecked_state_skip<DFAState, Count, Skip>(result, it + offset, last, it + offset))
+            if (unchecked_state_skip<DFAState, Count, Skip>(ctx, it + offset, last, it + offset))
             {
-                if constexpr (not std::same_as<Result, no_result> and p1306dfa::result<I>::has_match_start)
-                    result.res.match_start_ = it + offset;
+                if constexpr (X != 0 and result<I>::has_match_start)
+                    ctx.get_res().match_start_ = it + offset;
                 return true;
             }
             else
             {
-                if constexpr (DFA.register_count > 0)
-                    ++result.gen.current;
+                if constexpr (generation::enabled)
+                    ++ctx.osr.gen.current;
             }
         }
 
         return false;
     }
 
-    template<std::size_t DFAState, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+    template<std::size_t DFAState, std::contiguous_iterator I, std::sized_sentinel_for<I> S, int X>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and fixed_length and branch_free)
-    static constexpr bool vector_outer_state(Result result, I it, const S last)
+    static constexpr bool vector_outer_state(context<I, X> ctx, I it, const S last)
     {
         static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
         static constexpr auto states = define_static_array(get_flattened_states(DFA, DFAState));
@@ -13614,7 +13693,7 @@ private:
         if constexpr (avoid_simd)
         {
             /* using simd in this case is likely a pessimisation; resort to non-vectorised implementation instead */
-            return scalar_outer_state<DFAState>(result, it, last);
+            return scalar_outer_state<DFAState>(ctx, it, last);
         }
         else
         {
@@ -13628,7 +13707,7 @@ private:
                 const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                 const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
 
-                if (vector_candidate_check<DFAState, length, skipped>(result, it, last, (mask1 & mask2).to_ullong()))
+                if (vector_candidate_check<DFAState, length, skipped>(ctx, it, last, (mask1 & mask2).to_ullong()))
                     return true;
 
                 it += vec_type::size();
@@ -13650,17 +13729,17 @@ private:
                 const auto mask1 = vector_tr_find<DFA.nodes[states[position1]].front().cs>(block1);
                 const auto mask2 = vector_tr_find<DFA.nodes[states[position2]].front().cs>(block2);
 
-                return vector_candidate_check<DFAState, length, skipped>(result, it, last, (mask1 & mask2 & epi_mask).to_ullong());
+                return vector_candidate_check<DFAState, length, skipped>(ctx, it, last, (mask1 & mask2 & epi_mask).to_ullong());
             }
 
             return false;
         }
     }
 
-    template<std::size_t DFAState, typename Result, std::contiguous_iterator I, std::sized_sentinel_for<I> S>
+    template<std::size_t DFAState, std::contiguous_iterator I, std::sized_sentinel_for<I> S, int X>
         requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
                   and (not fixed_length or not branch_free))
-    static constexpr bool vector_outer_state(Result result, I it, const S last)
+    static constexpr bool vector_outer_state(context<I, X> ctx, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
         static constexpr auto states = define_static_array(get_flattened_states(DFA, DFAState, true));
@@ -13691,7 +13770,7 @@ private:
         if constexpr (avoid_simd)
         {
             /* using simd in this case is likely a pessimisation; resort to non-vectorised implementation instead */
-            return scalar_outer_state<DFAState>(result, it, last);
+            return scalar_outer_state<DFAState>(ctx, it, last);
         }
         else
         {
@@ -13702,7 +13781,7 @@ private:
                 const auto block = std::simd::unchecked_load<vec_type>(it + position, last, flags);
                 const auto mask = vector_tr_find<combined_cs>(block);
 
-                if (vector_candidate_check<DFAState, min_length, skipped>(result, it, last, mask.to_ullong()))
+                if (vector_candidate_check<DFAState, min_length, skipped>(ctx, it, last, mask.to_ullong()))
                     return true;
 
                 it += vec_type::size();
@@ -13720,7 +13799,7 @@ private:
 #endif
                 const auto mask = vector_tr_find<combined_cs>(block);
 
-                return vector_candidate_check<DFAState, min_length, skipped>(result, it, last, (mask & epi_mask).to_ullong());
+                return vector_candidate_check<DFAState, min_length, skipped>(ctx, it, last, (mask & epi_mask).to_ullong());
             }
 
             return false;
@@ -13729,14 +13808,14 @@ private:
 
     /* outer state function dispatch */
 
-    template<std::size_t DFAState, typename Result, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool outer_state(Result result, I it, const S last)
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr bool outer_state(context<I, X> ctx, I it, const S last)
     {
         if constexpr (std::contiguous_iterator<I> and std::sized_sentinel_for<S, I>
                       and never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState)
-            return vector_outer_state<DFAState>(result, it, last);
+            return vector_outer_state<DFAState>(ctx, it, last);
         else
-            return scalar_outer_state<DFAState>(result, it, last);
+            return scalar_outer_state<DFAState>(ctx, it, last);
     }
 
     static constexpr bool regex_return_bool{ is_regex and DFA.flags.return_bool };
@@ -13744,92 +13823,91 @@ private:
     static constexpr bool regex_nonempty{ regex_normal and DFA.flags.maybe_no_empty };
     static constexpr bool lexer_normal{ is_lexer };
     static constexpr bool lexer_nonempty{ lexer_normal and DFA.flags.maybe_no_empty };
-    using maybe_gen_t = maybe_type_t<(DFA.flags.adapted_search), gen_info>;
 
 public:
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and regex_return_bool
+        requires regex_return_bool
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         if constexpr (DFA.flags.adapted_search)
-            return outer_state<DFA.match_start>(no_result{}, first, last);
+            return outer_state<DFA.match_start>(context<I, 0>{}, first, last);
         else
-            return initial_state<DFA.match_start>(no_result{}, first, last, first);
+            return initial_state<DFA.match_start>(context<I, 0>{}, first, last, first);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and regex_normal
+        requires regex_normal
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last)
     {
         result<I> res{ first };
-        maybe_gen_t gen{};
+        overspill<I> osp{};
 
         if constexpr (DFA.flags.adapted_search)
-            outer_state<DFA.match_start>(result_t{ res, gen }, first, last);
+            outer_state<DFA.match_start>(context{ res, osp }, first, last);
         else
-            initial_state<DFA.match_start>(result_t{ res }, first, last, first);
+            initial_state<DFA.match_start>(context{ res, osp }, first, last, first);
 
-        if constexpr (DFA.flags.adapted_search)
-            clean_generations(res, gen);
+        if constexpr (generation::enabled)
+            clean_generations(res, osp);
         return res;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and regex_normal and result<I>::has_continue
+        requires regex_normal and result<I>::has_continue
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, const tdfa::continue_at_t continue_at)
     {
         result<I> res{ first };
-        maybe_gen_t gen{};
+        overspill<I> osp{};
 
         template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
                 if constexpr (DFA.flags.adapted_search)
-                    outer_state<DFA.continue_nodes[i]>(result_t{ res, gen }, first, last);
+                    outer_state<DFA.continue_nodes[i]>(context{ res, osp }, first, last);
                 else
-                    initial_state<DFA.continue_nodes[i]>(result_t{ res }, first, last, first);
+                    initial_state<DFA.continue_nodes[i]>(context{ res, osp }, first, last, first);
 
 #ifndef __GNUC_MINOR__
                 break;
 #else
-                if constexpr (DFA.flags.adapted_search)
-                    clean_generations(res, gen);
+                if constexpr (generation::enabled)
+                    clean_generations(res, osp);
                 return res;
 #endif
             }
         }
 
-        if constexpr (DFA.flags.adapted_search)
-            clean_generations(res, gen);
+        if constexpr (generation::enabled)
+            clean_generations(res, osp);
         return res;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and regex_nonempty
+        requires regex_nonempty
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, match_non_empty_t)
     {
         result<I> res{ first };
-        maybe_gen_t gen{};
+        overspill<I> osp{};
 
         static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
 
         if constexpr (DFA.flags.adapted_search)
-            outer_state<start_state>(result_t{ res, gen }, first, last);
+            outer_state<start_state>(context{ res, osp }, first, last);
         else
-            initial_state<start_state>(result_t{ res }, first, last, first);
+            initial_state<start_state>(context{ res, osp }, first, last, first);
 
-        if constexpr (DFA.flags.adapted_search)
-            clean_generations(res, gen);
+        if constexpr (generation::enabled)
+            clean_generations(res, osp);
         return res;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and regex_nonempty and result<I>::has_continue
+        requires regex_nonempty and result<I>::has_continue
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t)
     {
         result<I> res{ first };
-        maybe_gen_t gen{};
+        overspill<I> osp{};
 
         template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
         {
@@ -13838,52 +13916,52 @@ public:
                 static constexpr std::size_t start_state{ never_empty ? DFA.continue_nodes[i] : DFA.additional_continue_nodes[i] };
 
                 if constexpr (DFA.flags.adapted_search)
-                    outer_state<start_state>(result_t{ res, gen }, first, last);
+                    outer_state<start_state>(context{ res, osp }, first, last);
                 else
-                    initial_state<start_state>(result_t{ res }, first, last, first);
+                    initial_state<start_state>(context{ res, osp }, first, last, first);
 #ifndef __GNUC_MINOR__
                 break;
 #else
-                if constexpr (DFA.flags.adapted_search)
-                    clean_generations(res, gen);
+                if constexpr (generation::enabled)
+                    clean_generations(res, osp);
                 return res;
 #endif
             }
         }
 
-        if constexpr (DFA.flags.adapted_search)
-            clean_generations(res, gen);
+        if constexpr (generation::enabled)
+            clean_generations(res, osp);
         return res;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and lexer_normal
+        requires lexer_normal
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last)
     {
-        result<I> res{ first };
         token<I> tok;
+        overspill<I, true> osp{ first };
 
         if (first == last) [[unlikely]]
         {
-            token_end_of_input(result_t{ tok, res }, first, last);
+            token_end_of_input(context{ tok, osp }, first, last);
             return tok;
         }
 
-        initial_state<DFA.match_start>(result_t{ tok, res }, first, last, first);
-        first = res.match_end_;
+        initial_state<DFA.match_start>(context{ tok, osp }, first, last, first);
+        first = osp.res.match_end_;
         return tok;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and lexer_normal and result<I>::has_continue
+        requires lexer_normal and result<I>::has_continue
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, const tdfa::continue_at_t continue_at)
     {
-        result<I> res{ first };
         token<I> tok;
+        overspill<I, true> osp{ first };
 
         if (first == last) [[unlikely]]
         {
-            token_end_of_input(result_t{ tok, res }, first, last);
+            token_end_of_input(context{ tok, osp }, first, last);
             return tok;
         }
 
@@ -13891,50 +13969,50 @@ public:
         {
             if (i == continue_at)
             {
-                initial_state<DFA.continue_nodes[i]>(result_t{ tok, res }, first, last, first);
+                initial_state<DFA.continue_nodes[i]>(context{ tok, osp }, first, last, first);
 #ifndef __GNUC_MINOR__
                 break;
 #else
-                first = res.match_end_;
+                first = osp.res.match_end_;
                 return tok;
 #endif
             }
         }
 
-        first = res.match_end_;
+        first = osp.res.match_end_;
         return tok;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and lexer_nonempty
+        requires lexer_nonempty
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, match_non_empty_t)
     {
         static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
 
-        result<I> res{ first };
         token<I> tok;
+        overspill<I, true> osp{ first };
 
         if (first == last) [[unlikely]]
         {
-            token_end_of_input(result_t{ tok, res }, first, last);
+            token_end_of_input(context{ tok, osp }, first, last);
             return tok;
         }
 
-        initial_state<start_state>(result_t{ tok, res }, first, last, first);
-        first = res.match_end_;
+        initial_state<start_state>(context{ tok, osp }, first, last, first);
+        first = osp.res.match_end_;
         return tok;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type> and lexer_nonempty and result<I>::has_continue
+        requires lexer_nonempty and result<I>::has_continue
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t)
     {
-        result<I> res{ first };
         token<I> tok;
+        overspill<I, true> osp{ first };
 
         if (first == last) [[unlikely]]
         {
-            token_end_of_input(result_t{ tok, res }, first, last);
+            token_end_of_input(context{ tok, osp }, first, last);
             return tok;
         }
 
@@ -13943,19 +14021,29 @@ public:
             if (i == continue_at)
             {
                 static constexpr auto start_state{ never_empty ? DFA.continue_nodes[i] : DFA.additional_continue_nodes[i] };
-                initial_state<start_state>(result_t{ tok, res }, first, last, first);
+                initial_state<start_state>(context{ tok, osp }, first, last, first);
 #ifndef __GNUC_MINOR__
                 break;
 #else
-                first = res.match_end_;
+                first = osp.res.match_end_;
                 return tok;
 #endif
             }
         }
 
-        first = res.match_end_;
+        first = osp.res.match_end_;
         return tok;
     }
+};
+
+template<std::meta::info Info>
+template<std::bidirectional_iterator I>
+    requires std::is_nothrow_convertible_v<std::iter_value_t<I>, typename p1306dfa<Info>::char_type>
+class p1306dfa<Info>::iterated_result
+{
+private:
+    result<I> result_;
+    stateful state_info_;
 };
 
 template<string_literal Pattern, fsm_flags Flags>

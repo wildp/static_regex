@@ -192,12 +192,14 @@ public:
         , flags{ f }
         , alt_mode{ alt_mode }{}
 
-    [[nodiscard]] consteval static_match_result_info make_match_result_info(bool has_continue) const
+    [[nodiscard]] consteval static_match_result_info make_match_result_info() const
     {
-        if (has_continue and continue_nodes.size() == 1 and continue_nodes[0] == match_start)
-            has_continue = false;
+        return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue() };
+    }
 
-        return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue };
+    [[nodiscard]] consteval bool has_continue() const
+    {
+        return flags.is_iterator and not (continue_nodes.size() == 1 and continue_nodes[0] == match_start);
     }
 
     /* data members (public so that tdfa_info is structural) */
