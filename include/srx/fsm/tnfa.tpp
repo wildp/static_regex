@@ -1503,7 +1503,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
     dfn.is_final = true;
     dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
 
-    if (flags_.is_iterator)
+    if (flags_.is_iterator or flags_.adapted_search)
         cont_info_.emplace_back(default_start_node, ~charset_type{});
 
     std::vector<std::vector<int>> tag_vec{};

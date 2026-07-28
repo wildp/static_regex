@@ -190,7 +190,7 @@ public:
     [[nodiscard]] consteval static_match_result_info make_match_result_info() const
     {
         static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
-        return { .fci = fci, .final_registers = regs, .register_count = tag_count, .continue_from_it = true };
+        return { .fci = fci, .final_registers = regs, .register_count = tag_count };
     }
 
     std::size_t root_idx;
@@ -941,158 +941,10 @@ private:
     // };
 
 public:
-    struct full_match
-    {
-        static constexpr bool never_empty{ not ast.empty_match_possible };
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last)
-        {
-            result<I> res{ first };
-            staging_info<I> si{};
-            if (I it{ first }; state<true, ast.root_idx, require_full_match>::operator()(res, si, first, last, it))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = it;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-            }
-            return res;
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
-    };
+    struct full_match;
 
     template<bool IsSearch, bool IsIterator>
-    struct partial_match
-    {
-    private:
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
-        {
-            result<I> res{ continue_from };
-            staging_info<I> si{};
-            if (state<true, ast.root_idx>::operator()(res, si, first, last, continue_from))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = continue_from;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-            }
-            return res;
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
-            requires IsSearch
-        {
-            result<I> res{};
-            staging_info<I> si{};
-            while (true)
-            {
-                if (I it{ continue_from }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
-                {
-                    apply_final_staging_info(res, si);
-                    res.match_end_ = it;
-                    res.match_start_ = continue_from;
-
-                    if constexpr (not std::contiguous_iterator<I>)
-                        res.match_success_ = true;
-                    return res;
-                }
-
-                res.clear_match();
-
-                if (continue_from == last)
-                    return res;
-
-                ++continue_from;
-            }
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
-        {
-            result<I> res{ continue_from };
-            staging_info<I> si{};
-            if (state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, continue_from))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = continue_from;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-            }
-            return res;
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
-            requires IsSearch
-        {
-            result<I> res{ continue_from };
-            staging_info<I> si{};
-
-            if (I it{ continue_from }; state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, it))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = it;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-
-                return res;
-            }
-
-            if (continue_from == last)
-                return res;
-
-            ++continue_from;
-
-            [[clang::musttail]] return outer_state(first, last, continue_from);
-        }
-
-    public:
-        static constexpr bool never_empty{ not ast.empty_match_possible };
-
-        template<std::bidirectional_iterator I>
-        using result = naive_matcher::result<I>;
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last)
-        {
-            return outer_state(first, last, first);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, I continue_from)
-            requires IsIterator
-        {
-            return outer_state(first, last, continue_from);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, match_non_empty_t)
-        {
-            if constexpr (ast.empty_match_possible)
-                return non_empty_outer_state(first, last, first);
-            else
-                return outer_state(first, last, first);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, I continue_from, match_non_empty_t)
-            requires IsIterator
-        {
-            if constexpr (ast.empty_match_possible)
-                return non_empty_outer_state(first, last, continue_from);
-            else
-                return outer_state(first, last, continue_from);
-        }
-    };
+    struct partial_match;
 
     static consteval auto get_matcher(fsm_flags f)
     {
@@ -1109,6 +961,207 @@ public:
         /* invalid flag combination */
         throw regex_error("naive_matcher_adaptor: invalid fsm flag combination");
     }
+};
+
+template<string_literal Pattern>
+struct naive_matcher<Pattern>::full_match
+{
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr auto operator()(const I first, const S last)
+    {
+        result<I> res{ first };
+        staging_info<I> si{};
+        if (I it{ first }; state<true, ast.root_idx, require_full_match>::operator()(res, si, first, last, it))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = it;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        return res;
+    }
+};
+
+template<string_literal Pattern>
+template<bool IsSearch, bool IsIterator>
+struct naive_matcher<Pattern>::partial_match
+{
+private:
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto outer_state(const I first, I continue_from, const S last)
+    {
+        result<I> res{ continue_from };
+        staging_info<I> si{};
+        if (state<true, ast.root_idx>::operator()(res, si, first, last, continue_from))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = continue_from;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        return res;
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto outer_state(const I first, I continue_from, const S last)
+        requires IsSearch
+    {
+        result<I> res{};
+        staging_info<I> si{};
+        while (true)
+        {
+            if (I it{ continue_from }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
+            {
+                apply_final_staging_info(res, si);
+                res.match_end_ = it;
+                res.match_start_ = continue_from;
+
+                if constexpr (not std::contiguous_iterator<I>)
+                    res.match_success_ = true;
+                return res;
+            }
+
+            res.clear_match();
+
+            if (continue_from == last)
+                return res;
+
+            ++continue_from;
+        }
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, I continue_from, const S last)
+    {
+        result<I> res{ continue_from };
+        staging_info<I> si{};
+        if (state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, continue_from))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = continue_from;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        return res;
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, I continue_from, const S last)
+        requires IsSearch
+    {
+        result<I> res{ continue_from };
+        staging_info<I> si{};
+
+        if (I it{ continue_from }; state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, it))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = it;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        else if (continue_from != last)
+        {
+            res = outer_state(first, ++continue_from, last);
+        }
+
+        return res;
+    }
+
+public:
+    template<std::bidirectional_iterator I>
+    using result = naive_matcher::result<I>;
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr auto operator()(const I first, const S last)
+        requires (not IsIterator)
+    {
+        return outer_state(first, first, last);
+    }
+
+    template<std::bidirectional_iterator I>
+    struct iterated_result;
+};
+
+template<string_literal Pattern>
+template<bool IsSearch, bool IsIterator>
+template<std::bidirectional_iterator I>
+struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_result
+{
+    static constexpr bool needs_begin{ true };
+
+    struct state_type
+    {
+        using continue_type = terminal_object;
+
+        // TODO: add simd vec mask?
+        [[no_unique_address]] continue_type continue_at{};
+    };
+
+    iterated_result() = default;
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
+    {
+        resume(first, first, last);
+    }
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
+    {
+        resume<true>(first, first, last);
+    }
+
+    constexpr iterated_result(const I first, const I it, const std::sentinel_for<I> auto last, state_type stf, bool prev_empty)
+        : res{ it }, stf{ stf }
+    {
+        if constexpr (ast.empty_match_possible)
+        {
+            if (prev_empty)
+            {
+                resume<true>(first, it, last);
+                return;
+            }
+        }
+        resume(first, it, last);
+    }
+
+    constexpr I advance(const I first, const std::sentinel_for<I> auto last)
+    {
+        const auto& match = res.template force_get<0>();
+        const I current = match.end();
+
+        if constexpr (ast.empty_match_possible)
+        {
+            if (match.empty())
+            {
+                if (current == last)
+                    res.clear_match();
+                else
+                    resume<true>(first, current, last);
+                return current;
+            }
+        }
+
+        resume(first, current, last);
+        return current;
+    }
+
+
+private:
+    template<bool NonEmptyMatch = false>
+    constexpr void resume(const I first, const I current, const std::sentinel_for<I> auto last)
+    {
+        if constexpr (NonEmptyMatch and ast.empty_match_possible)
+            res = non_empty_outer_state(first, current, last);
+        else
+            res = outer_state(first, current, last);
+    }
+
+public:
+    result<I> res{};
+    state_type stf{};
 };
 
 

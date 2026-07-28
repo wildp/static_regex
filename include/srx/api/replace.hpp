@@ -30,59 +30,39 @@ template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal P
 class stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>
 {
     using matcher_type  = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
-    using result_type   = matcher_type::template result<I>;
+    using result_type   = matcher_type::template iterated_result<I>;
 
 public:
     using iterator_concept  = std::input_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-    using value_type        = result_type;
+    using value_type        = matcher_type::template result<I>;;
     using difference_type   = std::ptrdiff_t;
 
     stashing_regex_iterator() requires std::default_initializable<I> and std::default_initializable<S> = default;
 
     constexpr explicit stashing_regex_iterator(I first, S last)
-        : first_{ std::move(first) }, last_{ std::move(last) }
-    {
-        find_first(first_);
-    }
+        : result_{ first, last }, first_{ std::move(first) }, last_{ std::move(last) } {}
 
     constexpr const value_type& operator*() const noexcept
     {
-        return result_;
+        return result_.res;
     }
 
     constexpr const value_type* operator->() const noexcept
     {
-        return &result_;
+        return &result_.res;
     }
 
     constexpr stashing_regex_iterator& operator++()
     {
-        if (not result_.has_value())
+        if (not result_.res)
             return *this;
 
-        const auto& [prev_start, current] = result_.template force_get<0>();
+        if constexpr (result_type::needs_begin)
+            result_.advance(first_, last_);
+        else
+            result_.advance(last_);
 
-        if constexpr (not matcher_type::never_empty)
-        {
-            if (current == prev_start)
-            {
-                if (current == last_)
-                {
-                    result_.clear_match();
-                    return *this;
-                }
-
-                if (current == first_)
-                    find_first<true>(current);
-                else
-                    find_next<true>(current);
-
-                return *this;
-            }
-        }
-
-        find_next(current);
         return *this;
     }
 
@@ -93,7 +73,7 @@ public:
 
     friend constexpr bool operator==(const stashing_regex_iterator& x, std::default_sentinel_t)
     {
-        return not x.result_.has_value();
+        return not x.result_.res.has_value();
     }
 
     template<std::ranges::input_range W, int...>
@@ -101,41 +81,10 @@ public:
     friend class submatches_view;
 
 private:
-    template<bool MatchNonEmpty = false>
-    constexpr void find_first(I current)
-    {
-        if constexpr (MatchNonEmpty)
-            result_ = matcher_(current, last_, detail::match_non_empty);
-        else
-            result_ = matcher_(current, last_);
-    }
+    using maybe_it = maybe_type_t<result_type::needs_begin, I>;
 
-    template<bool MatchNonEmpty = false>
-    constexpr void find_next(I current)
-    {
-        if constexpr (MatchNonEmpty)
-        {
-            if constexpr (result_type::continue_from_it)
-                result_ = matcher_(first_, last_, current, detail::match_non_empty);
-            else if constexpr (result_type::has_continue)
-                result_ = matcher_(current, last_, result_.continue_at_, detail::match_non_empty);
-            else
-                result_ = matcher_(current, last_, detail::match_non_empty);
-        }
-        else
-        {
-            if constexpr (result_type::continue_from_it)
-                result_ = matcher_(first_, last_, current);
-            else if constexpr (result_type::has_continue)
-                result_ = matcher_(current, last_, result_.continue_at_);
-            else
-                result_ = matcher_(current, last_);
-        }
-    }
-
-
-    value_type result_;
-    I first_;
+    result_type result_;
+    [[no_unique_address]] maybe_it first_;
     [[no_unique_address]] S last_;
     [[no_unique_address]] matcher_type matcher_;
 };
@@ -222,27 +171,22 @@ public:
     constexpr replace_fmt(I first, S last, const std::size_t submatch_count)
     {
         using matcher_type = [: detail::get_matcher_refl(mode::standard, true) :]<detail::replace_fmt_pattern<char_type>(), detail::default_fsm_flags::search_all>;
-        using result_type = matcher_type::template result<I>;
+        using result_type = matcher_type::template iterated_result<I>;
 
-        matcher_type delim_matcher;
-        result_type match_result{ delim_matcher(first, last) };
+        result_type delim_matcher_result{ first, last };
 
-        while (match_result.has_value())
+        while (delim_matcher_result.res)
         {
-            const auto& [mfirst, mlast] = get<0>(match_result);
+            const auto& [mfirst, mlast] = get<0>(delim_matcher_result.res);
             const auto& cap = captures_.emplace_back(detail::parse_fmt_replace(std::ranges::next(mfirst), mlast, submatch_count));
 
-            if (cap == replace_constants::skip)
+            if (cap == replace_constants::skip) /* treat $$ in format as single $ */
                 subranges_.emplace_back(first, std::ranges::next(mfirst));
             else
                 subranges_.emplace_back(first, mfirst);
 
             first = mlast;
-
-            if constexpr (result_type::has_continue)
-                match_result = delim_matcher(first, last, match_result.continue_at_);
-            else
-                match_result = delim_matcher(first, last);
+            delim_matcher_result.advance(last);
         }
 
         if constexpr (std::same_as<I, S>)

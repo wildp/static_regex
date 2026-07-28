@@ -169,6 +169,9 @@ struct terminal_object
 {
     template<typename... Ts>
     constexpr explicit(false) terminal_object(Ts&&...) {}
+
+    template<not_same_as<terminal_object> T>
+    constexpr terminal_object& operator=(T&&) { return *this; }
 };
 
 template<bool Enabled, typename T>

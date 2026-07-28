@@ -66,7 +66,7 @@ public:
         /* since regex_match_view is an input range, there
             is no need to cache future calls to begin() */
         auto current = std::ranges::begin(base_);
-        find_first(current);
+        cached_result_ = result_type{ current, std::ranges::end(base_) };
         return iterator{ *this, std::move(current) };
     }
 
@@ -78,39 +78,7 @@ public:
 private:
     static constexpr auto flags = Sequential ? detail::default_fsm_flags::match_sequential : detail::default_fsm_flags::search_all;
     using matcher_type = [: detail::get_matcher_refl(Mode, not Sequential) :]<Pattern, flags>;
-    using result_type = matcher_type::template result<std::ranges::iterator_t<V>>;
-
-    template<bool MatchNonEmpty = false>
-    constexpr void find_first(std::ranges::iterator_t<V> current)
-    {
-        if constexpr (MatchNonEmpty)
-            cached_result_ = matcher(current, std::ranges::end(base_), detail::match_non_empty);
-        else
-            cached_result_ = matcher(current, std::ranges::end(base_));
-    }
-
-    template<bool MatchNonEmpty = false>
-    constexpr void find_next(std::ranges::iterator_t<V> current)
-    {
-        if constexpr (MatchNonEmpty)
-        {
-            if constexpr (result_type::continue_from_it)
-                cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current, detail::match_non_empty);
-            else if constexpr (result_type::has_continue)
-                cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_, detail::match_non_empty);
-            else
-                cached_result_ = matcher(current, std::ranges::end(base_), detail::match_non_empty);
-        }
-        else
-        {
-            if constexpr (result_type::continue_from_it)
-                cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current);
-            else if constexpr (result_type::has_continue)
-                cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_);
-            else
-                cached_result_ = matcher(current, std::ranges::end(base_));
-        }
-    }
+    using result_type = matcher_type::template iterated_result<std::ranges::iterator_t<V>>;
 
     static constexpr matcher_type matcher{};
 
@@ -125,7 +93,7 @@ class regex_match_view<V, static_regex<Pattern, Mode>, Sequential>::iterator
 public:
     using iterator_concept  = std::input_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-    using value_type        = result_type;
+    using value_type        = matcher_type::template result<std::ranges::iterator_t<V>>;
     using difference_type   = std::ranges::range_difference_t<V>;
 
     iterator() requires std::default_initializable<std::ranges::iterator_t<V>> = default;
@@ -140,37 +108,19 @@ public:
 
     constexpr const value_type& operator*() const noexcept
     {
-        return parent_->cached_result_;
+        return parent_->cached_result_.res;
     }
 
     constexpr iterator& operator++()
     {
-        if (not parent_->cached_result_.has_value())
+        if (not parent_->cached_result_.res)
             return *this;
 
-        const auto& [mfirst, mlast] = parent_->cached_result_.template force_get<0>();
-        current_ = mlast;
+        if constexpr (result_type::needs_begin)
+            current_ = parent_->cached_result_.advance(begin(), end());
+        else
+            current_ = parent_->cached_result_.advance(end());
 
-        if constexpr (not matcher_type::never_empty)
-        {
-            if (mfirst == mlast)
-            {
-                if (current_ == end())
-                {
-                    parent_->cached_result_.clear_match();
-                    return *this;
-                }
-
-                if (current_ == begin())
-                    parent_->template find_first<true>(current_);
-                else
-                    parent_->template find_next<true>(current_);
-
-                return *this;
-            }
-        }
-
-        parent_->find_next(current_);
         return *this;
     }
 
@@ -181,7 +131,7 @@ public:
 
     friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
     {
-        return not x.parent_->cached_result_.has_value();
+        return not x.parent_->cached_result_.res.has_value();
     }
 
     template<std::ranges::input_range W, int...>
@@ -828,35 +778,25 @@ public:
         {
             const auto beg = std::ranges::begin(base_);
             const auto end = std::ranges::end(base_);
-            auto result = matcher(beg, end, detail::match_non_empty);
+            result_type result{ beg, end, detail::match_non_empty };
 
-            if (result.has_value())
+            if (result.res)
             {
-                if constexpr (result_type::has_continue)
-                    cached_begin_continue_at_ = result.continue_at_;
-                auto [mfirst, mlast] = result.template force_get<0>();
+                auto [mfirst, mlast] = get<0>(result.res);
                 cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
+                cached_begin_continue_at_ = result.stf.continue_at;
+                // TODO: add more members as necessary;
             }
             else
             {
-                if constexpr (std::ranges::common_range<V>)
-                {
-                    cached_begin_next_ = { end, end };
-                }
-                else
-                {
-                    const auto it = std::ranges::next(beg, end);
-                    cached_begin_next_ = { it, it };
-                }
+                const auto it = std::ranges::next(beg, end);
+                cached_begin_next_ = { it, it };
             }
 
             cache_engaged_ = true;
         }
 
-        if constexpr (result_type::has_continue)
-            return iterator{ *this, std::ranges::begin(base_), cached_begin_next_, cached_begin_continue_at_ };
-        else
-            return iterator{ *this, std::ranges::begin(base_), cached_begin_next_ };
+        return iterator{ *this, std::ranges::begin(base_), cached_begin_next_, cached_begin_continue_at_ };
     }
 
     [[nodiscard]] constexpr sentinel end()
@@ -879,16 +819,15 @@ public:
 
 private:
     using matcher_type   = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
-    using result_type    = matcher_type::template result<std::ranges::iterator_t<V>>;
+    using result_type    = matcher_type::template iterated_result<std::ranges::iterator_t<V>>;
     using next_type      = std::ranges::subrange<std::ranges::iterator_t<V>>;
-    using continue_type  = detail::tdfa::continue_at_t;
-    using maybe_continue = detail::maybe_type_t<result_type::has_continue, continue_type>;
+    using state_type     = result_type::state_type;
 
     static constexpr matcher_type matcher{};
 
     V base_{};
     next_type cached_begin_next_;
-    [[no_unique_address]] maybe_continue cached_begin_continue_at_{ 0 };
+    [[no_unique_address]] state_type::continue_type cached_begin_continue_at_;
     bool cache_engaged_{ false };
 };
 
@@ -907,8 +846,7 @@ public:
     constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
-    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
-        requires result_type::has_continue
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, state_type::continue_type cont)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 
     constexpr std::ranges::iterator_t<V>& base() const
@@ -936,46 +874,19 @@ public:
             }
             else
             {
-                const auto result = [&]{
-                    if constexpr (not matcher_type::never_empty)
-                    {
-                        if (next_.begin() == next_.end())
-                        {
-                            if constexpr (result_type::continue_from_it)
-                                return matcher(std::ranges::begin(parent_->base_), end, current_, detail::match_non_empty);
-                            else if constexpr (result_type::has_continue)
-                                return matcher(current_, end, continue_at_, detail::match_non_empty);
-                            else
-                                return matcher(current_, end, detail::match_non_empty);
-                        }
-                    }
+                result_type result{ std::ranges::begin(parent_->base_), current_, end, state_type{ continue_at_ }, next_.empty() };
 
-                    if constexpr (result_type::continue_from_it)
-                        return matcher(std::ranges::begin(parent_->base_), end, current_);
-                    else if constexpr (result_type::has_continue)
-                        return matcher(current_, end, continue_at_);
-                    else
-                        return matcher(current_, end);
-                }();
-
-                if (result.has_value())
+                if (result.res)
                 {
-                    if constexpr (result_type::has_continue)
-                        continue_at_ = result.continue_at_;
-                    auto [mfirst, mlast] = result.template force_get<0>();
+                    auto [mfirst, mlast] = get<0>(result.res);
                     next_ = { std::move(mfirst), std::move(mlast) };
+                    continue_at_ = result.stf.continue_at;
+                    // TODO: add more members as necessary;
                 }
                 else
                 {
-                    if constexpr (std::ranges::common_range<V>)
-                    {
-                        next_ = { end, end };
-                    }
-                    else
-                    {
-                        const auto it = std::ranges::next(current_, end);
-                        next_ = { it, it };
-                    }
+                    const auto it = std::ranges::next(current_, end);
+                    next_ = { it, it };
                 }
             }
         }
@@ -1006,7 +917,7 @@ private:
     regex_split_view* parent_{ nullptr };
     std::ranges::iterator_t<V> current_{};
     next_type next_{};
-    [[no_unique_address]] maybe_continue continue_at_{ 0 };
+    [[no_unique_address]] state_type::continue_type continue_at_{};
     bool trailing_empty_{ false };
 };
 

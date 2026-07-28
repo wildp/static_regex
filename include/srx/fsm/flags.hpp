@@ -93,7 +93,6 @@ inline constexpr fsm_flags match_sequential{
 constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
 {
     f.is_search = false;
-    f.is_iterator = true;
     f.adapted_search = true;
     return f;
 }

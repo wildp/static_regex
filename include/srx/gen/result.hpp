@@ -29,12 +29,6 @@ struct p1306dfa;
 template<srx::string_literal Pattern>
 struct naive_matcher;
 
-template<std::bidirectional_iterator I, std::sentinel_for<I> S, typename Regex>
-class stashing_regex_iterator;
-
-template<std::bidirectional_iterator I>
-class replace_fmt;
-
 } // namespace detail
 
 
@@ -158,19 +152,6 @@ public:
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;
 
-    template<std::ranges::bidirectional_range V, typename Regex, bool Sequential>
-        requires std::ranges::view<V>
-    friend class regex_match_view;
-
-    template<std::ranges::bidirectional_range V, typename Regex>
-        requires std::ranges::view<V>
-    friend class regex_split_view;
-
-    template<std::bidirectional_iterator J, std::sentinel_for<J> S, typename Regex>
-    friend class detail::stashing_regex_iterator;
-
-    friend class detail::replace_fmt<I>;
-
 private:
     /* implementation helpers */
 
@@ -178,8 +159,6 @@ private:
     static constexpr bool has_success{ not std::contiguous_iterator<I> };
     static constexpr bool has_enabled{ has_registers and has_success };
     static constexpr bool has_match_start{ Captures.fci.has_match_start() };
-    static constexpr bool has_continue{ Captures.has_continue };
-    static constexpr bool continue_from_it{ Captures.continue_from_it };
 
     constexpr explicit static_match_results(I start)
         noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
@@ -206,8 +185,6 @@ private:
             reg_.fill(I{});
         if constexpr (has_enabled)
             enabled_.fill(false);
-        if constexpr (has_continue)
-            continue_at_ = detail::tdfa::no_continue;
     }
 
     template<detail::tag_number_t N>
@@ -274,14 +251,12 @@ private:
     using registers_type   = detail::maybe_type_t<has_registers, std::array<I, Captures.register_count>>;
     using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, Captures.register_count>>;
     using match_start_type = detail::maybe_type_t<has_match_start, I>;
-    using continue_type    = detail::maybe_type_t<has_continue, detail::tdfa::continue_at_t>;
     using success_type     = detail::maybe_type_t<has_success, bool>;
 
     [[no_unique_address]] registers_type reg_;
     [[no_unique_address]] match_start_type match_start_{};
     I match_end_{};
     [[no_unique_address]] enabled_type enabled_{};
-    [[no_unique_address]] continue_type continue_at_{ detail::tdfa::no_continue };
     [[no_unique_address]] success_type match_success_{ false };
 };
 

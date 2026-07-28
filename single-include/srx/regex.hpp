@@ -581,6 +581,9 @@ struct terminal_object
 {
     template<typename... Ts>
     constexpr explicit(false) terminal_object(Ts&&...) {}
+
+    template<not_same_as<terminal_object> T>
+    constexpr terminal_object& operator=(T&&) { return *this; }
 };
 
 template<bool Enabled, typename T>
@@ -671,7 +674,6 @@ inline constexpr fsm_flags match_sequential{
 constexpr fsm_flags adapt_searcher_flags_to_matcher(fsm_flags f)
 {
     f.is_search = false;
-    f.is_iterator = true;
     f.adapted_search = true;
     return f;
 }
@@ -8397,7 +8399,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
     dfn.is_final = true;
     dfn.is_fallback = (flags_.enable_fallback and not flags_.longest_match);
 
-    if (flags_.is_iterator)
+    if (flags_.is_iterator or flags_.adapted_search)
         cont_info_.emplace_back(default_start_node, ~charset_type{});
 
     std::vector<std::vector<int>> tag_vec{};
@@ -10693,8 +10695,6 @@ struct static_match_result_info
     final_capture_info fci;
     static_span<tdfa::reg_t> final_registers;
     std::size_t register_count{ 0 };
-    bool has_continue{ false };
-    bool continue_from_it{ false };
 };
 
 struct register_operation
@@ -10833,7 +10833,7 @@ public:
 
     [[nodiscard]] consteval static_match_result_info make_match_result_info() const
     {
-        return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue() };
+        return { .fci = captures, .final_registers = final_registers, .register_count = register_count };
     }
 
     [[nodiscard]] consteval bool has_continue() const
@@ -11212,12 +11212,6 @@ struct p1306dfa;
 template<srx::string_literal Pattern>
 struct naive_matcher;
 
-template<std::bidirectional_iterator I, std::sentinel_for<I> S, typename Regex>
-class stashing_regex_iterator;
-
-template<std::bidirectional_iterator I>
-class replace_fmt;
-
 }
 
 template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
@@ -11340,19 +11334,6 @@ public:
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;
 
-    template<std::ranges::bidirectional_range V, typename Regex, bool Sequential>
-        requires std::ranges::view<V>
-    friend class regex_match_view;
-
-    template<std::ranges::bidirectional_range V, typename Regex>
-        requires std::ranges::view<V>
-    friend class regex_split_view;
-
-    template<std::bidirectional_iterator J, std::sentinel_for<J> S, typename Regex>
-    friend class detail::stashing_regex_iterator;
-
-    friend class detail::replace_fmt<I>;
-
 private:
     /* implementation helpers */
 
@@ -11360,8 +11341,6 @@ private:
     static constexpr bool has_success{ not std::contiguous_iterator<I> };
     static constexpr bool has_enabled{ has_registers and has_success };
     static constexpr bool has_match_start{ Captures.fci.has_match_start() };
-    static constexpr bool has_continue{ Captures.has_continue };
-    static constexpr bool continue_from_it{ Captures.continue_from_it };
 
     constexpr explicit static_match_results(I start)
         noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
@@ -11388,8 +11367,6 @@ private:
             reg_.fill(I{});
         if constexpr (has_enabled)
             enabled_.fill(false);
-        if constexpr (has_continue)
-            continue_at_ = detail::tdfa::no_continue;
     }
 
     template<detail::tag_number_t N>
@@ -11455,14 +11432,12 @@ private:
     using registers_type   = detail::maybe_type_t<has_registers, std::array<I, Captures.register_count>>;
     using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, Captures.register_count>>;
     using match_start_type = detail::maybe_type_t<has_match_start, I>;
-    using continue_type    = detail::maybe_type_t<has_continue, detail::tdfa::continue_at_t>;
     using success_type     = detail::maybe_type_t<has_success, bool>;
 
     [[no_unique_address]] registers_type reg_;
     [[no_unique_address]] match_start_type match_start_{};
     I match_end_{};
     [[no_unique_address]] enabled_type enabled_{};
-    [[no_unique_address]] continue_type continue_at_{ detail::tdfa::no_continue };
     [[no_unique_address]] success_type match_success_{ false };
 };
 
@@ -11733,7 +11708,7 @@ public:
     [[nodiscard]] consteval static_match_result_info make_match_result_info() const
     {
         static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
-        return { .fci = fci, .final_registers = regs, .register_count = tag_count, .continue_from_it = true };
+        return { .fci = fci, .final_registers = regs, .register_count = tag_count };
     }
 
     std::size_t root_idx;
@@ -12379,158 +12354,10 @@ private:
     };
 
 public:
-    struct full_match
-    {
-        static constexpr bool never_empty{ not ast.empty_match_possible };
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last)
-        {
-            result<I> res{ first };
-            staging_info<I> si{};
-            if (I it{ first }; state<true, ast.root_idx, require_full_match>::operator()(res, si, first, last, it))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = it;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-            }
-            return res;
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, match_non_empty_t) = delete;
-    };
+    struct full_match;
 
     template<bool IsSearch, bool IsIterator>
-    struct partial_match
-    {
-    private:
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
-        {
-            result<I> res{ continue_from };
-            staging_info<I> si{};
-            if (state<true, ast.root_idx>::operator()(res, si, first, last, continue_from))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = continue_from;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-            }
-            return res;
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto outer_state(const I first, const S last, I continue_from)
-            requires IsSearch
-        {
-            result<I> res{};
-            staging_info<I> si{};
-            while (true)
-            {
-                if (I it{ continue_from }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
-                {
-                    apply_final_staging_info(res, si);
-                    res.match_end_ = it;
-                    res.match_start_ = continue_from;
-
-                    if constexpr (not std::contiguous_iterator<I>)
-                        res.match_success_ = true;
-                    return res;
-                }
-
-                res.clear_match();
-
-                if (continue_from == last)
-                    return res;
-
-                ++continue_from;
-            }
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
-        {
-            result<I> res{ continue_from };
-            staging_info<I> si{};
-            if (state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, continue_from))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = continue_from;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-            }
-            return res;
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, const S last, I continue_from)
-            requires IsSearch
-        {
-            result<I> res{ continue_from };
-            staging_info<I> si{};
-
-            if (I it{ continue_from }; state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, it))
-            {
-                apply_final_staging_info(res, si);
-                res.match_end_ = it;
-
-                if constexpr (not std::contiguous_iterator<I>)
-                    res.match_success_ = true;
-
-                return res;
-            }
-
-            if (continue_from == last)
-                return res;
-
-            ++continue_from;
-
-            [[clang::musttail]] return outer_state(first, last, continue_from);
-        }
-
-    public:
-        static constexpr bool never_empty{ not ast.empty_match_possible };
-
-        template<std::bidirectional_iterator I>
-        using result = naive_matcher::result<I>;
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last)
-        {
-            return outer_state(first, last, first);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, I continue_from)
-            requires IsIterator
-        {
-            return outer_state(first, last, continue_from);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, match_non_empty_t)
-        {
-            if constexpr (ast.empty_match_possible)
-                return non_empty_outer_state(first, last, first);
-            else
-                return outer_state(first, last, first);
-        }
-
-        template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        static constexpr auto operator()(const I first, const S last, I continue_from, match_non_empty_t)
-            requires IsIterator
-        {
-            if constexpr (ast.empty_match_possible)
-                return non_empty_outer_state(first, last, continue_from);
-            else
-                return outer_state(first, last, continue_from);
-        }
-    };
+    struct partial_match;
 
     static consteval auto get_matcher(fsm_flags f)
     {
@@ -12547,6 +12374,205 @@ public:
         /* invalid flag combination */
         throw regex_error("naive_matcher_adaptor: invalid fsm flag combination");
     }
+};
+
+template<string_literal Pattern>
+struct naive_matcher<Pattern>::full_match
+{
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr auto operator()(const I first, const S last)
+    {
+        result<I> res{ first };
+        staging_info<I> si{};
+        if (I it{ first }; state<true, ast.root_idx, require_full_match>::operator()(res, si, first, last, it))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = it;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        return res;
+    }
+};
+
+template<string_literal Pattern>
+template<bool IsSearch, bool IsIterator>
+struct naive_matcher<Pattern>::partial_match
+{
+private:
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto outer_state(const I first, I continue_from, const S last)
+    {
+        result<I> res{ continue_from };
+        staging_info<I> si{};
+        if (state<true, ast.root_idx>::operator()(res, si, first, last, continue_from))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = continue_from;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        return res;
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto outer_state(const I first, I continue_from, const S last)
+        requires IsSearch
+    {
+        result<I> res{};
+        staging_info<I> si{};
+        while (true)
+        {
+            if (I it{ continue_from }; state<true, ast.root_idx>::operator()(res, si, first, last, it))
+            {
+                apply_final_staging_info(res, si);
+                res.match_end_ = it;
+                res.match_start_ = continue_from;
+
+                if constexpr (not std::contiguous_iterator<I>)
+                    res.match_success_ = true;
+                return res;
+            }
+
+            res.clear_match();
+
+            if (continue_from == last)
+                return res;
+
+            ++continue_from;
+        }
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, I continue_from, const S last)
+    {
+        result<I> res{ continue_from };
+        staging_info<I> si{};
+        if (state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, continue_from))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = continue_from;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        return res;
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    [[gnu::always_inline]] static constexpr auto non_empty_outer_state(const I first, I continue_from, const S last)
+        requires IsSearch
+    {
+        result<I> res{ continue_from };
+        staging_info<I> si{};
+
+        if (I it{ continue_from }; state<true, ast.root_idx, require_non_empty_match>::operator()(res, si, first, last, it))
+        {
+            apply_final_staging_info(res, si);
+            res.match_end_ = it;
+
+            if constexpr (not std::contiguous_iterator<I>)
+                res.match_success_ = true;
+        }
+        else if (continue_from != last)
+        {
+            res = outer_state(first, ++continue_from, last);
+        }
+
+        return res;
+    }
+
+public:
+    template<std::bidirectional_iterator I>
+    using result = naive_matcher::result<I>;
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr auto operator()(const I first, const S last)
+        requires (not IsIterator)
+    {
+        return outer_state(first, first, last);
+    }
+
+    template<std::bidirectional_iterator I>
+    struct iterated_result;
+};
+
+template<string_literal Pattern>
+template<bool IsSearch, bool IsIterator>
+template<std::bidirectional_iterator I>
+struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_result
+{
+    static constexpr bool needs_begin{ true };
+
+    struct state_type
+    {
+        using continue_type = terminal_object;
+
+        [[no_unique_address]] continue_type continue_at{};
+    };
+
+    iterated_result() = default;
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
+    {
+        resume(first, first, last);
+    }
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
+    {
+        resume<true>(first, first, last);
+    }
+
+    constexpr iterated_result(const I first, const I it, const std::sentinel_for<I> auto last, state_type stf, bool prev_empty)
+        : res{ it }, stf{ stf }
+    {
+        if constexpr (ast.empty_match_possible)
+        {
+            if (prev_empty)
+            {
+                resume<true>(first, it, last);
+                return;
+            }
+        }
+        resume(first, it, last);
+    }
+
+    constexpr I advance(const I first, const std::sentinel_for<I> auto last)
+    {
+        const auto& match = res.template force_get<0>();
+        const I current = match.end();
+
+        if constexpr (ast.empty_match_possible)
+        {
+            if (match.empty())
+            {
+                if (current == last)
+                    res.clear_match();
+                else
+                    resume<true>(first, current, last);
+                return current;
+            }
+        }
+
+        resume(first, current, last);
+        return current;
+    }
+
+private:
+    template<bool NonEmptyMatch = false>
+    constexpr void resume(const I first, const I current, const std::sentinel_for<I> auto last)
+    {
+        if constexpr (NonEmptyMatch and ast.empty_match_possible)
+            res = non_empty_outer_state(first, current, last);
+        else
+            res = outer_state(first, current, last);
+    }
+
+public:
+    result<I> res{};
+    state_type stf{};
 };
 
 template<string_literal Pattern, fsm_flags Flags>
@@ -12937,6 +12963,7 @@ struct p1306dfa
     static constexpr bool is_lexer{ template_of(type_of(Info)) == ^^lexer_info };
     static_assert(is_regex != is_lexer);
 
+private:
     static constexpr tdfa_info<char_type> DFA = [] consteval {
         if constexpr (is_regex)
             return [: Info :];
@@ -12951,6 +12978,7 @@ struct p1306dfa
                                         and DFA.min_max_lengths.first == DFA.min_max_lengths.second };
     static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
 
+public:
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     using result = static_match_results<I, DFA.make_match_result_info()>;
@@ -12971,6 +12999,7 @@ struct p1306dfa
     struct stateful
     {
         static constexpr bool has_continue{ DFA.has_continue() };
+        static constexpr bool is_stateless{ not (has_continue /* and other has_x */) };
 
         using continue_type = maybe_type_t<has_continue, tdfa::continue_at_t>;
 
@@ -13045,8 +13074,8 @@ private:
         iterated_result_ref<I> itr;
         [[no_unique_address]] overspill_ref<I> osr;
 
-        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return itr.result_; }
-        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return itr.state_info_; }
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return itr.res; }
+        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return itr.stf; }
     };
 
     template<typename I>
@@ -13826,7 +13855,7 @@ private:
 
 public:
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_return_bool
+        requires regex_return_bool and stateful::is_stateless
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         if constexpr (DFA.flags.adapted_search)
@@ -13836,7 +13865,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_normal
+        requires regex_normal and stateful::is_stateless
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last)
     {
         result<I> res{ first };
@@ -13853,38 +13882,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_normal and result<I>::has_continue
-    [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, const tdfa::continue_at_t continue_at)
-    {
-        result<I> res{ first };
-        overspill<I> osp{};
-
-        template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
-        {
-            if (i == continue_at)
-            {
-                if constexpr (DFA.flags.adapted_search)
-                    outer_state<DFA.continue_nodes[i]>(context{ res, osp }, first, last);
-                else
-                    initial_state<DFA.continue_nodes[i]>(context{ res, osp }, first, last, first);
-
-#ifndef __GNUC_MINOR__
-                break;
-#else
-                if constexpr (generation::enabled)
-                    clean_generations(res, osp);
-                return res;
-#endif
-            }
-        }
-
-        if constexpr (generation::enabled)
-            clean_generations(res, osp);
-        return res;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_nonempty
+        requires regex_nonempty and stateful::is_stateless
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, match_non_empty_t)
     {
         result<I> res{ first };
@@ -13903,39 +13901,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_nonempty and result<I>::has_continue
-    [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t)
-    {
-        result<I> res{ first };
-        overspill<I> osp{};
-
-        template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
-        {
-            if (i == continue_at)
-            {
-                static constexpr std::size_t start_state{ never_empty ? DFA.continue_nodes[i] : DFA.additional_continue_nodes[i] };
-
-                if constexpr (DFA.flags.adapted_search)
-                    outer_state<start_state>(context{ res, osp }, first, last);
-                else
-                    initial_state<start_state>(context{ res, osp }, first, last, first);
-#ifndef __GNUC_MINOR__
-                break;
-#else
-                if constexpr (generation::enabled)
-                    clean_generations(res, osp);
-                return res;
-#endif
-            }
-        }
-
-        if constexpr (generation::enabled)
-            clean_generations(res, osp);
-        return res;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires lexer_normal
+        requires lexer_normal and stateful::is_stateless
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last)
     {
         token<I> tok;
@@ -13984,7 +13950,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires lexer_nonempty
+        requires lexer_nonempty and stateful::is_stateless
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, match_non_empty_t)
     {
         static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
@@ -14039,11 +14005,138 @@ public:
 template<std::meta::info Info>
 template<std::bidirectional_iterator I>
     requires std::is_nothrow_convertible_v<std::iter_value_t<I>, typename p1306dfa<Info>::char_type>
-class p1306dfa<Info>::iterated_result
+struct p1306dfa<Info>::iterated_result
 {
+    static constexpr bool needs_begin{ not never_empty };
+    using state_type = stateful;
+
+    iterated_result() = default;
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
+        : res{ first }
+    {
+        start(first, last);
+    }
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
+        : res{ first }
+    {
+        start<true>(first, last);
+    }
+
+    constexpr iterated_result(const I /* first */, const I it, const std::sentinel_for<I> auto last, stateful stf, bool prev_empty)
+        : res{ it }, stf{ stf }
+    {
+        if constexpr (not never_empty)
+        {
+            if (prev_empty)
+            {
+                resume<true>(it, last);
+                return;
+            }
+        }
+        resume(it, last);
+    }
+
+    constexpr I advance(const std::sentinel_for<I> auto last)
+        requires never_empty
+    {
+        const auto& match = res.template force_get<0>();
+        const I current = match.end();
+        res.reset(current);
+        resume(current, last);
+        return current;
+    }
+
+    constexpr I advance(const I first, const std::sentinel_for<I> auto last)
+    {
+        const auto& match = res.template force_get<0>();
+        const I current = match.end();
+
+        if constexpr (not never_empty)
+        {
+            if (match.empty())
+            {
+                if (current == last)
+                {
+                    res.clear_match();
+                    return current;
+                }
+
+                res.reset(current);
+                if (current == first)
+                    start<true>(current, last);
+                else
+                    resume<true>(current, last);
+                return current;
+            }
+        }
+
+        res.reset(current);
+        resume(current, last);
+        return current;
+    }
+
 private:
-    result<I> result_;
-    stateful state_info_;
+    template<bool NonEmptyMatch = false>
+    constexpr void start(const I first, const std::sentinel_for<I> auto last)
+    {
+        static constexpr bool use_alt{ NonEmptyMatch and not never_empty };
+        static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes.back() : DFA.match_start };
+
+        overspill<I> osp{};
+
+        if constexpr (DFA.flags.adapted_search)
+            outer_state<start_state>(context{ *this, osp }, first, last);
+        else
+            initial_state<start_state>(context{ *this, osp }, first, last, first);
+
+        if constexpr (generation::enabled)
+            clean_generations(res, osp);
+    }
+
+    template<bool NonEmptyMatch = false>
+    constexpr void resume(const I first, const std::sentinel_for<I> auto last)
+    {
+        if constexpr (not stateful::has_continue)
+        {
+            return start<NonEmptyMatch>(first, last);
+        }
+        else
+        {
+            static constexpr bool use_alt{ NonEmptyMatch and not never_empty };
+            const stateful state_info{ std::exchange(stf, {}) };
+            overspill<I> osp{};
+
+            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+            {
+                static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes[i] : DFA.continue_nodes[i] };
+
+                if (state_info.continue_at == i)
+                {
+                    if constexpr (DFA.flags.adapted_search)
+                        outer_state<start_state>(context{ *this, osp }, first, last);
+                    else
+                        initial_state<start_state>(context{ *this, osp }, first, last, first);
+#ifndef __GNUC_MINOR__
+                    break;
+#else
+                    if constexpr (generation::enabled)
+                        clean_generations(res, osp);
+                    return;
+#endif
+                }
+            }
+
+            if constexpr (generation::enabled)
+                clean_generations(res, osp);
+            return;
+        }
+    }
+
+public:
+    result<I> res;
+    stateful stf;
 };
 
 template<string_literal Pattern, fsm_flags Flags>
@@ -14358,59 +14451,39 @@ template<std::bidirectional_iterator I, std::sentinel_for<I> S, string_literal P
 class stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>
 {
     using matcher_type  = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
-    using result_type   = matcher_type::template result<I>;
+    using result_type   = matcher_type::template iterated_result<I>;
 
 public:
     using iterator_concept  = std::input_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-    using value_type        = result_type;
+    using value_type        = matcher_type::template result<I>;;
     using difference_type   = std::ptrdiff_t;
 
     stashing_regex_iterator() requires std::default_initializable<I> and std::default_initializable<S> = default;
 
     constexpr explicit stashing_regex_iterator(I first, S last)
-        : first_{ std::move(first) }, last_{ std::move(last) }
-    {
-        find_first(first_);
-    }
+        : result_{ first, last }, first_{ std::move(first) }, last_{ std::move(last) } {}
 
     constexpr const value_type& operator*() const noexcept
     {
-        return result_;
+        return result_.res;
     }
 
     constexpr const value_type* operator->() const noexcept
     {
-        return &result_;
+        return &result_.res;
     }
 
     constexpr stashing_regex_iterator& operator++()
     {
-        if (not result_.has_value())
+        if (not result_.res)
             return *this;
 
-        const auto& [prev_start, current] = result_.template force_get<0>();
+        if constexpr (result_type::needs_begin)
+            result_.advance(first_, last_);
+        else
+            result_.advance(last_);
 
-        if constexpr (not matcher_type::never_empty)
-        {
-            if (current == prev_start)
-            {
-                if (current == last_)
-                {
-                    result_.clear_match();
-                    return *this;
-                }
-
-                if (current == first_)
-                    find_first<true>(current);
-                else
-                    find_next<true>(current);
-
-                return *this;
-            }
-        }
-
-        find_next(current);
         return *this;
     }
 
@@ -14421,7 +14494,7 @@ public:
 
     friend constexpr bool operator==(const stashing_regex_iterator& x, std::default_sentinel_t)
     {
-        return not x.result_.has_value();
+        return not x.result_.res.has_value();
     }
 
     template<std::ranges::input_range W, int...>
@@ -14429,40 +14502,10 @@ public:
     friend class submatches_view;
 
 private:
-    template<bool MatchNonEmpty = false>
-    constexpr void find_first(I current)
-    {
-        if constexpr (MatchNonEmpty)
-            result_ = matcher_(current, last_, detail::match_non_empty);
-        else
-            result_ = matcher_(current, last_);
-    }
+    using maybe_it = maybe_type_t<result_type::needs_begin, I>;
 
-    template<bool MatchNonEmpty = false>
-    constexpr void find_next(I current)
-    {
-        if constexpr (MatchNonEmpty)
-        {
-            if constexpr (result_type::continue_from_it)
-                result_ = matcher_(first_, last_, current, detail::match_non_empty);
-            else if constexpr (result_type::has_continue)
-                result_ = matcher_(current, last_, result_.continue_at_, detail::match_non_empty);
-            else
-                result_ = matcher_(current, last_, detail::match_non_empty);
-        }
-        else
-        {
-            if constexpr (result_type::continue_from_it)
-                result_ = matcher_(first_, last_, current);
-            else if constexpr (result_type::has_continue)
-                result_ = matcher_(current, last_, result_.continue_at_);
-            else
-                result_ = matcher_(current, last_);
-        }
-    }
-
-    value_type result_;
-    I first_;
+    result_type result_;
+    [[no_unique_address]] maybe_it first_;
     [[no_unique_address]] S last_;
     [[no_unique_address]] matcher_type matcher_;
 };
@@ -14548,27 +14591,22 @@ public:
     constexpr replace_fmt(I first, S last, const std::size_t submatch_count)
     {
         using matcher_type = [: detail::get_matcher_refl(mode::standard, true) :]<detail::replace_fmt_pattern<char_type>(), detail::default_fsm_flags::search_all>;
-        using result_type = matcher_type::template result<I>;
+        using result_type = matcher_type::template iterated_result<I>;
 
-        matcher_type delim_matcher;
-        result_type match_result{ delim_matcher(first, last) };
+        result_type delim_matcher_result{ first, last };
 
-        while (match_result.has_value())
+        while (delim_matcher_result.res)
         {
-            const auto& [mfirst, mlast] = get<0>(match_result);
+            const auto& [mfirst, mlast] = get<0>(delim_matcher_result.res);
             const auto& cap = captures_.emplace_back(detail::parse_fmt_replace(std::ranges::next(mfirst), mlast, submatch_count));
 
-            if (cap == replace_constants::skip)
+            if (cap == replace_constants::skip) /* treat $$ in format as single $ */
                 subranges_.emplace_back(first, std::ranges::next(mfirst));
             else
                 subranges_.emplace_back(first, mfirst);
 
             first = mlast;
-
-            if constexpr (result_type::has_continue)
-                match_result = delim_matcher(first, last, match_result.continue_at_);
-            else
-                match_result = delim_matcher(first, last);
+            delim_matcher_result.advance(last);
         }
 
         if constexpr (std::same_as<I, S>)
@@ -14884,7 +14922,7 @@ public:
         /* since regex_match_view is an input range, there
             is no need to cache future calls to begin() */
         auto current = std::ranges::begin(base_);
-        find_first(current);
+        cached_result_ = result_type{ current, std::ranges::end(base_) };
         return iterator{ *this, std::move(current) };
     }
 
@@ -14896,39 +14934,7 @@ public:
 private:
     static constexpr auto flags = Sequential ? detail::default_fsm_flags::match_sequential : detail::default_fsm_flags::search_all;
     using matcher_type = [: detail::get_matcher_refl(Mode, not Sequential) :]<Pattern, flags>;
-    using result_type = matcher_type::template result<std::ranges::iterator_t<V>>;
-
-    template<bool MatchNonEmpty = false>
-    constexpr void find_first(std::ranges::iterator_t<V> current)
-    {
-        if constexpr (MatchNonEmpty)
-            cached_result_ = matcher(current, std::ranges::end(base_), detail::match_non_empty);
-        else
-            cached_result_ = matcher(current, std::ranges::end(base_));
-    }
-
-    template<bool MatchNonEmpty = false>
-    constexpr void find_next(std::ranges::iterator_t<V> current)
-    {
-        if constexpr (MatchNonEmpty)
-        {
-            if constexpr (result_type::continue_from_it)
-                cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current, detail::match_non_empty);
-            else if constexpr (result_type::has_continue)
-                cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_, detail::match_non_empty);
-            else
-                cached_result_ = matcher(current, std::ranges::end(base_), detail::match_non_empty);
-        }
-        else
-        {
-            if constexpr (result_type::continue_from_it)
-                cached_result_ = matcher(std::ranges::begin(base_), std::ranges::end(base_), current);
-            else if constexpr (result_type::has_continue)
-                cached_result_ = matcher(current, std::ranges::end(base_), cached_result_.continue_at_);
-            else
-                cached_result_ = matcher(current, std::ranges::end(base_));
-        }
-    }
+    using result_type = matcher_type::template iterated_result<std::ranges::iterator_t<V>>;
 
     static constexpr matcher_type matcher{};
 
@@ -14943,7 +14949,7 @@ class regex_match_view<V, static_regex<Pattern, Mode>, Sequential>::iterator
 public:
     using iterator_concept  = std::input_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-    using value_type        = result_type;
+    using value_type        = matcher_type::template result<std::ranges::iterator_t<V>>;
     using difference_type   = std::ranges::range_difference_t<V>;
 
     iterator() requires std::default_initializable<std::ranges::iterator_t<V>> = default;
@@ -14958,37 +14964,19 @@ public:
 
     constexpr const value_type& operator*() const noexcept
     {
-        return parent_->cached_result_;
+        return parent_->cached_result_.res;
     }
 
     constexpr iterator& operator++()
     {
-        if (not parent_->cached_result_.has_value())
+        if (not parent_->cached_result_.res)
             return *this;
 
-        const auto& [mfirst, mlast] = parent_->cached_result_.template force_get<0>();
-        current_ = mlast;
+        if constexpr (result_type::needs_begin)
+            current_ = parent_->cached_result_.advance(begin(), end());
+        else
+            current_ = parent_->cached_result_.advance(end());
 
-        if constexpr (not matcher_type::never_empty)
-        {
-            if (mfirst == mlast)
-            {
-                if (current_ == end())
-                {
-                    parent_->cached_result_.clear_match();
-                    return *this;
-                }
-
-                if (current_ == begin())
-                    parent_->template find_first<true>(current_);
-                else
-                    parent_->template find_next<true>(current_);
-
-                return *this;
-            }
-        }
-
-        parent_->find_next(current_);
         return *this;
     }
 
@@ -14999,7 +14987,7 @@ public:
 
     friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
     {
-        return not x.parent_->cached_result_.has_value();
+        return not x.parent_->cached_result_.res.has_value();
     }
 
     template<std::ranges::input_range W, int...>
@@ -15638,35 +15626,24 @@ public:
         {
             const auto beg = std::ranges::begin(base_);
             const auto end = std::ranges::end(base_);
-            auto result = matcher(beg, end, detail::match_non_empty);
+            result_type result{ beg, end, detail::match_non_empty };
 
-            if (result.has_value())
+            if (result.res)
             {
-                if constexpr (result_type::has_continue)
-                    cached_begin_continue_at_ = result.continue_at_;
-                auto [mfirst, mlast] = result.template force_get<0>();
+                auto [mfirst, mlast] = get<0>(result.res);
                 cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
+                cached_begin_continue_at_ = result.stf.continue_at;
             }
             else
             {
-                if constexpr (std::ranges::common_range<V>)
-                {
-                    cached_begin_next_ = { end, end };
-                }
-                else
-                {
-                    const auto it = std::ranges::next(beg, end);
-                    cached_begin_next_ = { it, it };
-                }
+                const auto it = std::ranges::next(beg, end);
+                cached_begin_next_ = { it, it };
             }
 
             cache_engaged_ = true;
         }
 
-        if constexpr (result_type::has_continue)
-            return iterator{ *this, std::ranges::begin(base_), cached_begin_next_, cached_begin_continue_at_ };
-        else
-            return iterator{ *this, std::ranges::begin(base_), cached_begin_next_ };
+        return iterator{ *this, std::ranges::begin(base_), cached_begin_next_, cached_begin_continue_at_ };
     }
 
     [[nodiscard]] constexpr sentinel end()
@@ -15689,16 +15666,15 @@ public:
 
 private:
     using matcher_type   = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
-    using result_type    = matcher_type::template result<std::ranges::iterator_t<V>>;
+    using result_type    = matcher_type::template iterated_result<std::ranges::iterator_t<V>>;
     using next_type      = std::ranges::subrange<std::ranges::iterator_t<V>>;
-    using continue_type  = detail::tdfa::continue_at_t;
-    using maybe_continue = detail::maybe_type_t<result_type::has_continue, continue_type>;
+    using state_type     = result_type::state_type;
 
     static constexpr matcher_type matcher{};
 
     V base_{};
     next_type cached_begin_next_;
-    [[no_unique_address]] maybe_continue cached_begin_continue_at_{ 0 };
+    [[no_unique_address]] state_type::continue_type cached_begin_continue_at_;
     bool cache_engaged_{ false };
 };
 
@@ -15717,8 +15693,7 @@ public:
     constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
-    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
-        requires result_type::has_continue
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, state_type::continue_type cont)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 
     constexpr std::ranges::iterator_t<V>& base() const
@@ -15746,46 +15721,18 @@ public:
             }
             else
             {
-                const auto result = [&]{
-                    if constexpr (not matcher_type::never_empty)
-                    {
-                        if (next_.begin() == next_.end())
-                        {
-                            if constexpr (result_type::continue_from_it)
-                                return matcher(std::ranges::begin(parent_->base_), end, current_, detail::match_non_empty);
-                            else if constexpr (result_type::has_continue)
-                                return matcher(current_, end, continue_at_, detail::match_non_empty);
-                            else
-                                return matcher(current_, end, detail::match_non_empty);
-                        }
-                    }
+                result_type result{ std::ranges::begin(parent_->base_), current_, end, state_type{ continue_at_ }, next_.empty() };
 
-                    if constexpr (result_type::continue_from_it)
-                        return matcher(std::ranges::begin(parent_->base_), end, current_);
-                    else if constexpr (result_type::has_continue)
-                        return matcher(current_, end, continue_at_);
-                    else
-                        return matcher(current_, end);
-                }();
-
-                if (result.has_value())
+                if (result.res)
                 {
-                    if constexpr (result_type::has_continue)
-                        continue_at_ = result.continue_at_;
-                    auto [mfirst, mlast] = result.template force_get<0>();
+                    auto [mfirst, mlast] = get<0>(result.res);
                     next_ = { std::move(mfirst), std::move(mlast) };
+                    continue_at_ = result.stf.continue_at;
                 }
                 else
                 {
-                    if constexpr (std::ranges::common_range<V>)
-                    {
-                        next_ = { end, end };
-                    }
-                    else
-                    {
-                        const auto it = std::ranges::next(current_, end);
-                        next_ = { it, it };
-                    }
+                    const auto it = std::ranges::next(current_, end);
+                    next_ = { it, it };
                 }
             }
         }
@@ -15816,7 +15763,7 @@ private:
     regex_split_view* parent_{ nullptr };
     std::ranges::iterator_t<V> current_{};
     next_type next_{};
-    [[no_unique_address]] maybe_continue continue_at_{ 0 };
+    [[no_unique_address]] state_type::continue_type continue_at_{};
     bool trailing_empty_{ false };
 };
 

@@ -53,8 +53,6 @@ struct static_match_result_info
     final_capture_info fci;
     static_span<tdfa::reg_t> final_registers;
     std::size_t register_count{ 0 };
-    bool has_continue{ false };
-    bool continue_from_it{ false };
 };
 
 struct register_operation
@@ -194,7 +192,7 @@ public:
 
     [[nodiscard]] consteval static_match_result_info make_match_result_info() const
     {
-        return { .fci = captures, .final_registers = final_registers, .register_count = register_count, .has_continue = has_continue() };
+        return { .fci = captures, .final_registers = final_registers, .register_count = register_count };
     }
 
     [[nodiscard]] consteval bool has_continue() const
