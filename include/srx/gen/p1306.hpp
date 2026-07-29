@@ -420,7 +420,7 @@ private:
 public:
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
-    using result = static_match_results<I, DFA.make_match_result_info()>;
+    using result = static_match_results<I, smr_layout::reg_map<DFA.register_count, DFA.captures, DFA.final_registers>>;
 
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>

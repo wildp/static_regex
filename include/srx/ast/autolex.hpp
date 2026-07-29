@@ -333,8 +333,8 @@ constexpr auto trim(const submatch<I>& match, int begin_offset = 0, int end_offs
     return sv;
 }
 
-template<std::contiguous_iterator I, static_match_result_info SMRI>
-constexpr auto trim(const static_match_results<I, SMRI>& match, int begin_offset = 0, int end_offset = 0)
+template<std::contiguous_iterator I, class Layout>
+constexpr auto trim(const static_match_results<I, Layout>& match, int begin_offset = 0, int end_offset = 0)
 {
     return trim(get<0>(match), begin_offset, end_offset);
 }

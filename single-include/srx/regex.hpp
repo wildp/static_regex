@@ -10690,13 +10690,6 @@ struct final_capture_info
     static_span<capture_info::tag_pair_t> captures;
 };
 
-struct static_match_result_info
-{
-    final_capture_info fci;
-    static_span<tdfa::reg_t> final_registers;
-    std::size_t register_count{ 0 };
-};
-
 struct register_operation
 {
     tdfa::reg_t dst;
@@ -10830,11 +10823,6 @@ public:
         , min_max_lengths{ mml }
         , flags{ f }
         , alt_mode{ alt_mode }{}
-
-    [[nodiscard]] consteval static_match_result_info make_match_result_info() const
-    {
-        return { .fci = captures, .final_registers = final_registers, .register_count = register_count };
-    }
 
     [[nodiscard]] consteval bool has_continue() const
     {
@@ -11212,9 +11200,57 @@ struct p1306dfa;
 template<srx::string_literal Pattern>
 struct naive_matcher;
 
+namespace smr_layout {
+
+template<std::size_t RegCount, final_capture_info FCI, static_span<tdfa::reg_t> FinalReg>
+struct reg_map
+{
+    static constexpr std::size_t capture_count{ FCI.capture_count() };
+    static constexpr std::size_t register_count{ RegCount };
+    static constexpr bool has_match_start{ FCI.has_match_start() };
+    static constexpr bool has_match_end{ true };
+
+    static consteval std::size_t tag_to_reg(int tag) { return FinalReg[tag]; }
+    static consteval int lhs_tag(std::size_t cap) { return FCI.captures[cap].first.tag_number; }
+    static consteval int rhs_tag(std::size_t cap) { return FCI.captures[cap].second.tag_number; }
+    static consteval int lhs_offset(std::size_t cap) { return FCI.captures[cap].first.offset; }
+    static consteval int rhs_offset(std::size_t cap) { return FCI.captures[cap].second.offset; }
+};
+
+template<std::size_t RegCount, final_capture_info FCI>
+struct reg_id
+{
+    static constexpr std::size_t capture_count{ FCI.capture_count()};
+    static constexpr std::size_t register_count{ RegCount };
+    static constexpr bool has_match_start{ FCI.has_match_start() };
+    static constexpr bool has_match_end{ true };
+
+    static consteval std::size_t tag_to_reg(int tag) { return tag; }
+    static consteval int lhs_tag(std::size_t cap) { return FCI.captures[cap].first.tag_number; }
+    static consteval int rhs_tag(std::size_t cap) { return FCI.captures[cap].second.tag_number; }
+    static consteval int lhs_offset(std::size_t cap) { return FCI.captures[cap].first.offset; }
+    static consteval int rhs_offset(std::size_t cap) { return FCI.captures[cap].second.offset; }
+};
+
+template<int Captures>
+struct [[maybe_unused]] basic
+{
+    static constexpr std::size_t capture_count{ Captures + 1 };
+    static constexpr std::size_t register_count{ Captures * 2 };
+    static constexpr bool has_match_start{ true };
+    static constexpr bool has_match_end{ true };
+
+    static consteval std::size_t tag_to_reg(std::size_t tag) { return tag; }
+    static consteval int lhs_tag(std::size_t cap) { return static_cast<int>(cap) * 2; }
+    static consteval int rhs_tag(std::size_t cap) { return (static_cast<int>(cap) * 2) + 1; }
+    static consteval int lhs_offset(std::size_t /* cap */) { return 0; }
+    static consteval int rhs_offset(std::size_t /* cap */) { return 0; }
+};
+
+}
 }
 
-template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
+template<std::bidirectional_iterator I, class Layout>
 class static_match_results
 {
     using factory = detail::submatch_factory<I>;
@@ -11231,7 +11267,7 @@ public:
     using const_iterator         = proxy_iterator<true>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-    static constexpr size_type submatch_count{ Captures.fci.capture_count() };
+    static constexpr size_type submatch_count{ Layout::capture_count };
 
     constexpr static_match_results() noexcept(std::is_nothrow_default_constructible_v<I>)
     {
@@ -11337,10 +11373,10 @@ public:
 private:
     /* implementation helpers */
 
-    static constexpr bool has_registers{ Captures.register_count != 0 };
+    static constexpr bool has_registers{ Layout::register_count != 0 };
     static constexpr bool has_success{ not std::contiguous_iterator<I> };
     static constexpr bool has_enabled{ has_registers and has_success };
-    static constexpr bool has_match_start{ Captures.fci.has_match_start() };
+    static constexpr bool has_match_start{ Layout::has_match_start };
 
     constexpr explicit static_match_results(I start)
         noexcept(std::is_nothrow_default_constructible_v<I> and std::is_nothrow_move_constructible_v<I>)
@@ -11375,9 +11411,9 @@ private:
         if constexpr (N == detail::start_of_input_tag or N == detail::end_of_input_tag)
             return true;
         else if constexpr (std::contiguous_iterator<I>)
-            return std::to_address(reg_[Captures.final_registers[N]]) != std::to_address(I{});
+            return std::to_address(reg_[Layout::tag_to_reg(N)]) != std::to_address(I{});
         else
-            return enabled_[Captures.final_registers[N]];
+            return enabled_[Layout::tag_to_reg(N)];
     }
 
     template<detail::tag_number_t N>
@@ -11388,34 +11424,19 @@ private:
         else if constexpr (N == detail::end_of_input_tag)
             return match_end_;
         else
-            return reg_[Captures.final_registers[N]];
+            return reg_[Layout::tag_to_reg(N)];
     }
 
     template<size_type N>
         requires (N < submatch_count)
     [[nodiscard]] constexpr submatch_type force_get() const noexcept
     {
-        static constexpr auto current = Captures.fci.captures[N];
-
-        if constexpr (current.first.tag_number == current.second.tag_number)
+        if (tag_enabled<Layout::lhs_tag(N)>() and tag_enabled<Layout::rhs_tag(N)>())
         {
-            if (tag_enabled<current.first.tag_number>())
-            {
-                return factory::make_submatch(
-                    std::ranges::next(get_tag<current.first.tag_number>(), current.first.offset),
-                    std::ranges::next(get_tag<current.second.tag_number>(), current.second.offset)
-                );
-            }
-        }
-        else
-        {
-            if (tag_enabled<current.first.tag_number>() and tag_enabled<current.second.tag_number>())
-            {
-                return factory::make_submatch(
-                    std::ranges::next(get_tag<current.first.tag_number>(), current.first.offset),
-                    std::ranges::next(get_tag<current.second.tag_number>(), current.second.offset)
-                );
-            }
+            return factory::make_submatch(
+                std::ranges::next(get_tag<Layout::lhs_tag(N)>(), Layout::lhs_offset(N)),
+                std::ranges::next(get_tag<Layout::rhs_tag(N)>(), Layout::rhs_offset(N))
+            );
         }
 
         return {};
@@ -11429,8 +11450,8 @@ private:
 
     /* data members and protected trivial accessors */
 
-    using registers_type   = detail::maybe_type_t<has_registers, std::array<I, Captures.register_count>>;
-    using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, Captures.register_count>>;
+    using registers_type   = detail::maybe_type_t<has_registers, std::array<I, Layout::register_count>>;
+    using enabled_type     = detail::maybe_type_t<has_enabled, std::array<bool, Layout::register_count>>;
     using match_start_type = detail::maybe_type_t<has_match_start, I>;
     using success_type     = detail::maybe_type_t<has_success, bool>;
 
@@ -11443,9 +11464,9 @@ private:
 
 /* iterator implementation */
 
-template<std::bidirectional_iterator I, srx::detail::static_match_result_info Captures>
+template<std::bidirectional_iterator I, class Layout>
 template<bool Const>
-class static_match_results<I, Captures>::proxy_iterator
+class static_match_results<I, Layout>::proxy_iterator
 {
 public:
     using iterator_concept  = std::random_access_iterator_tag;
@@ -11544,15 +11565,15 @@ private:
 
 /* structured binding support for static_match_results */
 
-template<std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
-struct std::tuple_size<srx::static_match_results<Iter, Captures>>
-    : integral_constant<std::size_t, srx::static_match_results<Iter, Captures>::submatch_count> {};
+template<std::bidirectional_iterator Iter, class Layout>
+struct std::tuple_size<srx::static_match_results<Iter, Layout>>
+    : integral_constant<std::size_t, srx::static_match_results<Iter, Layout>::submatch_count> {};
 
-template<std::size_t N, std::bidirectional_iterator Iter, srx::detail::static_match_result_info Captures>
-    requires (N < srx::static_match_results<Iter, Captures>::submatch_count)
-struct std::tuple_element<N, srx::static_match_results<Iter, Captures>>
+template<std::size_t N, std::bidirectional_iterator Iter, class Layout>
+    requires (N < srx::static_match_results<Iter, Layout>::submatch_count)
+struct std::tuple_element<N, srx::static_match_results<Iter, Layout>>
 {
-    using type = srx::static_match_results<Iter, Captures>::submatch_type;
+    using type = srx::static_match_results<Iter, Layout>::submatch_type;
 };
 
 namespace srx {
@@ -11705,12 +11726,6 @@ public:
         , fci{ ast.get_capture_info() }
         , empty_match_possible{ ast.empty_match_possible() } {}
 
-    [[nodiscard]] consteval static_match_result_info make_match_result_info() const
-    {
-        static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
-        return { .fci = fci, .final_registers = regs, .register_count = tag_count };
-    }
-
     std::size_t root_idx;
     std::size_t tag_count;
     static_span<type> exprs;
@@ -11768,7 +11783,7 @@ private:
     static constexpr std::size_t require_non_empty_match{ std::numeric_limits<std::size_t>::max() - 1 };
 
     template<typename I>
-    using result = static_match_results<I, ast.make_match_result_info()>;
+    using result = static_match_results<I, smr_layout::reg_id<ast.tag_count, ast.fci>>;
 
     template<typename I>
     struct result_helper
@@ -12981,7 +12996,7 @@ private:
 public:
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
-    using result = static_match_results<I, DFA.make_match_result_info()>;
+    using result = static_match_results<I, smr_layout::reg_map<DFA.register_count, DFA.captures, DFA.final_registers>>;
 
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>

@@ -48,13 +48,6 @@ struct final_capture_info
     static_span<capture_info::tag_pair_t> captures;
 };
 
-struct static_match_result_info
-{
-    final_capture_info fci;
-    static_span<tdfa::reg_t> final_registers;
-    std::size_t register_count{ 0 };
-};
-
 struct register_operation
 {
     tdfa::reg_t dst;
@@ -189,11 +182,6 @@ public:
         , min_max_lengths{ mml }
         , flags{ f }
         , alt_mode{ alt_mode }{}
-
-    [[nodiscard]] consteval static_match_result_info make_match_result_info() const
-    {
-        return { .fci = captures, .final_registers = final_registers, .register_count = register_count };
-    }
 
     [[nodiscard]] consteval bool has_continue() const
     {

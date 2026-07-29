@@ -28,7 +28,7 @@ namespace srx {
   template<string_literal Pattern, mode Mode>
   constexpr auto static_regex_search_all(/* 3 overloads */);
 
-  template<std::bidirectional_iterator I, /* implementation details */>
+  template<std::bidirectional_iterator I, /* layout */>
   class static_match_results;
 
   template<std::bidirectional_iterator I>
@@ -244,7 +244,7 @@ Each invocation of `static_regex_foo<Pattern, Mode>()` is equivalent to calling 
 
 ```cpp
 namespace srx {
-  template<std::bidirectional_iterator I, /* implementation details */>
+  template<std::bidirectional_iterator I, /* layout */>
   class static_match_results {
   public:
     using size_type              = std::size_t;

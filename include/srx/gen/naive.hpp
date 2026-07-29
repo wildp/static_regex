@@ -187,12 +187,6 @@ public:
         , fci{ ast.get_capture_info() }
         , empty_match_possible{ ast.empty_match_possible() } {}
 
-    [[nodiscard]] consteval static_match_result_info make_match_result_info() const
-    {
-        static_span regs{ std::views::iota(0u, static_cast<tdfa::reg_t>(tag_count)) };
-        return { .fci = fci, .final_registers = regs, .register_count = tag_count };
-    }
-
     std::size_t root_idx;
     std::size_t tag_count;
     static_span<type> exprs;
@@ -251,7 +245,7 @@ private:
     static constexpr std::size_t require_non_empty_match{ std::numeric_limits<std::size_t>::max() - 1 };
 
     template<typename I>
-    using result = static_match_results<I, ast.make_match_result_info()>;
+    using result = static_match_results<I, smr_layout::reg_id<ast.tag_count, ast.fci>>;
 
     template<typename I>
     struct result_helper
