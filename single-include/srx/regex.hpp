@@ -13531,8 +13531,9 @@ private:
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
-        if constexpr (not std::sized_sentinel_for<S, I>)
+        if constexpr (not std::sized_sentinel_for<S, I> or (DFA.flags.is_search and not DFA.flags.adapted_search))
         {
+            /* note: searches are very likely to exceed min_length, so prefer reduced code duplication instead */
             [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
         }
         else if constexpr (fixed_length and not DFA.flags.enable_fallback)
