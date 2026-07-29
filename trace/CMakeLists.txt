@@ -49,3 +49,8 @@ add_executable(profile-target)
 target_sources(profile-target PRIVATE profile_target.cpp)
 target_link_libraries(profile-target PUBLIC static_regex benchmark::benchmark)
 target_compile_options(profile-target PUBLIC -fno-omit-frame-pointer)
+
+add_executable(profile-exec-target)
+target_sources(profile-exec-target PRIVATE profile_exec_target.cpp)
+target_link_libraries(profile-exec-target PUBLIC static_regex benchmark::benchmark)
+target_compile_options(profile-exec-target PUBLIC -fno-omit-frame-pointer)
