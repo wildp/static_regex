@@ -656,12 +656,7 @@ private:
             set_final<Blk, Offset>(ctx, it);
 
             if constexpr (stateful::has_continue and ContinueAt != tdfa::no_continue)
-            {
-                if constexpr (X == 1)
-                    ctx.res.continue_at_ = ContinueAt; // temporary; TODO: remove
-                else
-                    ctx.get_stf().continue_at = ContinueAt;
-            }
+                ctx.get_stf().continue_at = ContinueAt;
         }
     }
 
@@ -813,8 +808,14 @@ private:
             {
                 static constexpr auto fni = DFA.final_nodes.at(pair.first);
                 if constexpr (not DFA.flags.return_bool)
+                {
                     set_fallback<pair.second.op_index, fni.offset, pair.second.continue_at>(ctx, fallback.it);
-                [[clang::musttail]] return success<fni.alternative>(ctx, it, last, fallback);
+                    [[clang::musttail]] return success<fni.alternative>(ctx, fallback.it, last, fallback);
+                }
+                else
+                {
+                    [[clang::musttail]] return success<fni.alternative>(ctx, it, last, fallback);
+                }
             }
         }
 
@@ -868,7 +869,8 @@ private:
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
             [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
-        [[clang::musttail]] return failure(ctx, it, last, fallback);
+        else
+            [[clang::musttail]] return failure(ctx, it, last, fallback);
     }
 
     template<std::size_t DFAState, std::bidirectional_iterator I, int X>
@@ -912,7 +914,8 @@ private:
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
             [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
-        [[clang::musttail]] return failure(ctx, it, last, fallback);
+        else
+            [[clang::musttail]] return failure(ctx, it, last, fallback);
     }
 
     template<std::size_t DFAState, std::size_t Count, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
