@@ -11241,8 +11241,8 @@ struct [[maybe_unused]] basic
     static constexpr bool has_match_end{ true };
 
     static consteval std::size_t tag_to_reg(std::size_t tag) { return tag; }
-    static consteval int lhs_tag(std::size_t cap) { return static_cast<int>(cap) * 2; }
-    static consteval int rhs_tag(std::size_t cap) { return (static_cast<int>(cap) * 2) + 1; }
+    static consteval int lhs_tag(std::size_t cap) { return (cap == 0) ? start_of_input_tag : static_cast<int>(cap - 1) * 2; }
+    static consteval int rhs_tag(std::size_t cap) { return (cap == 0) ? end_of_input_tag : (static_cast<int>(cap - 1) * 2) + 1; }
     static consteval int lhs_offset(std::size_t /* cap */) { return 0; }
     static consteval int rhs_offset(std::size_t /* cap */) { return 0; }
 };
