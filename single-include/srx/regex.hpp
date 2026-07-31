@@ -4,62 +4,62 @@
 
 // Mozilla Public License Version 2.0
 // ==================================
-// 
+//
 // 1. Definitions
 // --------------
-// 
+//
 // 1.1. "Contributor"
 //     means each individual or legal entity that creates, contributes to
 //     the creation of, or owns Covered Software.
-// 
+//
 // 1.2. "Contributor Version"
 //     means the combination of the Contributions of others (if any) used
 //     by a Contributor and that particular Contributor's Contribution.
-// 
+//
 // 1.3. "Contribution"
 //     means Covered Software of a particular Contributor.
-// 
+//
 // 1.4. "Covered Software"
 //     means Source Code Form to which the initial Contributor has attached
 //     the notice in Exhibit A, the Executable Form of such Source Code
 //     Form, and Modifications of such Source Code Form, in each case
 //     including portions thereof.
-// 
+//
 // 1.5. "Incompatible With Secondary Licenses"
 //     means
-// 
+//
 //     (a) that the initial Contributor has attached the notice described
 //         in Exhibit B to the Covered Software; or
-// 
+//
 //     (b) that the Covered Software was made available under the terms of
 //         version 1.1 or earlier of the License, but not also under the
 //         terms of a Secondary License.
-// 
+//
 // 1.6. "Executable Form"
 //     means any form of the work other than Source Code Form.
-// 
+//
 // 1.7. "Larger Work"
 //     means a work that combines Covered Software with other material, in
 //     a separate file or files, that is not Covered Software.
-// 
+//
 // 1.8. "License"
 //     means this document.
-// 
+//
 // 1.9. "Licensable"
 //     means having the right to grant, to the maximum extent possible,
 //     whether at the time of the initial grant or subsequently, any and
 //     all of the rights conveyed by this License.
-// 
+//
 // 1.10. "Modifications"
 //     means any of the following:
-// 
+//
 //     (a) any file in Source Code Form that results from an addition to,
 //         deletion from, or modification of the contents of Covered
 //         Software; or
-// 
+//
 //     (b) any new file in Source Code Form that contains any Covered
 //         Software.
-// 
+//
 // 1.11. "Patent Claims" of a Contributor
 //     means any patent claim(s), including without limitation, method,
 //     process, and apparatus claims, in any patent Licensable by such
@@ -67,16 +67,16 @@
 //     License, by the making, using, selling, offering for sale, having
 //     made, import, or transfer of either its Contributions or its
 //     Contributor Version.
-// 
+//
 // 1.12. "Secondary License"
 //     means either the GNU General Public License, Version 2.0, the GNU
 //     Lesser General Public License, Version 2.1, the GNU Affero General
 //     Public License, Version 3.0, or any later versions of those
 //     licenses.
-// 
+//
 // 1.13. "Source Code Form"
 //     means the form of the work preferred for making modifications.
-// 
+//
 // 1.14. "You" (or "Your")
 //     means an individual or a legal entity exercising rights under this
 //     License. For legal entities, "You" includes any entity that
@@ -86,83 +86,83 @@
 //     whether by contract or otherwise, or (b) ownership of more than
 //     fifty percent (50%) of the outstanding shares or beneficial
 //     ownership of such entity.
-// 
+//
 // 2. License Grants and Conditions
 // --------------------------------
-// 
+//
 // 2.1. Grants
-// 
+//
 // Each Contributor hereby grants You a world-wide, royalty-free,
 // non-exclusive license:
-// 
+//
 // (a) under intellectual property rights (other than patent or trademark)
 //     Licensable by such Contributor to use, reproduce, make available,
 //     modify, display, perform, distribute, and otherwise exploit its
 //     Contributions, either on an unmodified basis, with Modifications, or
 //     as part of a Larger Work; and
-// 
+//
 // (b) under Patent Claims of such Contributor to make, use, sell, offer
 //     for sale, have made, import, and otherwise transfer either its
 //     Contributions or its Contributor Version.
-// 
+//
 // 2.2. Effective Date
-// 
+//
 // The licenses granted in Section 2.1 with respect to any Contribution
 // become effective for each Contribution on the date the Contributor first
 // distributes such Contribution.
-// 
+//
 // 2.3. Limitations on Grant Scope
-// 
+//
 // The licenses granted in this Section 2 are the only rights granted under
 // this License. No additional rights or licenses will be implied from the
 // distribution or licensing of Covered Software under this License.
 // Notwithstanding Section 2.1(b) above, no patent license is granted by a
 // Contributor:
-// 
+//
 // (a) for any code that a Contributor has removed from Covered Software;
 //     or
-// 
+//
 // (b) for infringements caused by: (i) Your and any other third party's
 //     modifications of Covered Software, or (ii) the combination of its
 //     Contributions with other software (except as part of its Contributor
 //     Version); or
-// 
+//
 // (c) under Patent Claims infringed by Covered Software in the absence of
 //     its Contributions.
-// 
+//
 // This License does not grant any rights in the trademarks, service marks,
 // or logos of any Contributor (except as may be necessary to comply with
 // the notice requirements in Section 3.4).
-// 
+//
 // 2.4. Subsequent Licenses
-// 
+//
 // No Contributor makes additional grants as a result of Your choice to
 // distribute the Covered Software under a subsequent version of this
 // License (see Section 10.2) or under the terms of a Secondary License (if
 // permitted under the terms of Section 3.3).
-// 
+//
 // 2.5. Representation
-// 
+//
 // Each Contributor represents that the Contributor believes its
 // Contributions are its original creation(s) or it has sufficient rights
 // to grant the rights to its Contributions conveyed by this License.
-// 
+//
 // 2.6. Fair Use
-// 
+//
 // This License is not intended to limit any rights You have under
 // applicable copyright doctrines of fair use, fair dealing, or other
 // equivalents.
-// 
+//
 // 2.7. Conditions
-// 
+//
 // Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted
 // in Section 2.1.
-// 
+//
 // 3. Responsibilities
 // -------------------
-// 
+//
 // 3.1. Distribution of Source Form
-// 
+//
 // All distribution of Covered Software in Source Code Form, including any
 // Modifications that You create or to which You contribute, must be under
 // the terms of this License. You must inform recipients that the Source
@@ -170,24 +170,24 @@
 // License, and how they can obtain a copy of this License. You may not
 // attempt to alter or restrict the recipients' rights in the Source Code
 // Form.
-// 
+//
 // 3.2. Distribution of Executable Form
-// 
+//
 // If You distribute Covered Software in Executable Form then:
-// 
+//
 // (a) such Covered Software must also be made available in Source Code
 //     Form, as described in Section 3.1, and You must inform recipients of
 //     the Executable Form how they can obtain a copy of such Source Code
 //     Form by reasonable means in a timely manner, at a charge no more
 //     than the cost of distribution to the recipient; and
-// 
+//
 // (b) You may distribute such Executable Form under the terms of this
 //     License, or sublicense it under different terms, provided that the
 //     license for the Executable Form does not attempt to limit or alter
 //     the recipients' rights in the Source Code Form under this License.
-// 
+//
 // 3.3. Distribution of a Larger Work
-// 
+//
 // You may create and distribute a Larger Work under terms of Your choice,
 // provided that You also comply with the requirements of this License for
 // the Covered Software. If the Larger Work is a combination of Covered
@@ -198,17 +198,17 @@
 // the Larger Work may, at their option, further distribute the Covered
 // Software under the terms of either this License or such Secondary
 // License(s).
-// 
+//
 // 3.4. Notices
-// 
+//
 // You may not remove or alter the substance of any license notices
 // (including copyright notices, patent notices, disclaimers of warranty,
 // or limitations of liability) contained within the Source Code Form of
 // the Covered Software, except that You may alter any license notices to
 // the extent required to remedy known factual inaccuracies.
-// 
+//
 // 3.5. Application of Additional Terms
-// 
+//
 // You may choose to offer, and to charge a fee for, warranty, support,
 // indemnity or liability obligations to one or more recipients of Covered
 // Software. However, You may do so only on Your own behalf, and not on
@@ -219,10 +219,10 @@
 // indemnity or liability terms You offer. You may include additional
 // disclaimers of warranty and limitations of liability specific to any
 // jurisdiction.
-// 
+//
 // 4. Inability to Comply Due to Statute or Regulation
 // ---------------------------------------------------
-// 
+//
 // If it is impossible for You to comply with any of the terms of this
 // License with respect to some or all of the Covered Software due to
 // statute, judicial order, or regulation then You must: (a) comply with
@@ -232,10 +232,10 @@
 // Software under this License. Except to the extent prohibited by statute
 // or regulation, such description must be sufficiently detailed for a
 // recipient of ordinary skill to be able to understand it.
-// 
+//
 // 5. Termination
 // --------------
-// 
+//
 // 5.1. The rights granted under this License will terminate automatically
 // if You fail to comply with any of its terms. However, if You become
 // compliant, then the rights granted under this License from a particular
@@ -249,19 +249,19 @@
 // first time You have received notice of non-compliance with this License
 // from such Contributor, and You become compliant prior to 30 days after
 // Your receipt of the notice.
-// 
+//
 // 5.2. If You initiate litigation against any entity by asserting a patent
 // infringement claim (excluding declaratory judgment actions,
 // counter-claims, and cross-claims) alleging that a Contributor Version
 // directly or indirectly infringes any patent, then the rights granted to
 // You by any and all Contributors for the Covered Software under Section
 // 2.1 of this License shall terminate.
-// 
+//
 // 5.3. In the event of termination under Sections 5.1 or 5.2 above, all
 // end user license agreements (excluding distributors and resellers) which
 // have been validly granted by You or Your distributors under this License
 // prior to termination shall survive termination.
-// 
+//
 // ************************************************************************
 // *                                                                      *
 // *  6. Disclaimer of Warranty                                           *
@@ -280,7 +280,7 @@
 // *  authorized under this License except under this disclaimer.         *
 // *                                                                      *
 // ************************************************************************
-// 
+//
 // ************************************************************************
 // *                                                                      *
 // *  7. Limitation of Liability                                          *
@@ -303,76 +303,76 @@
 // *  limitation may not apply to You.                                    *
 // *                                                                      *
 // ************************************************************************
-// 
+//
 // 8. Litigation
 // -------------
-// 
+//
 // Any litigation relating to this License may be brought only in the
 // courts of a jurisdiction where the defendant maintains its principal
 // place of business and such litigation shall be governed by laws of that
 // jurisdiction, without reference to its conflict-of-law provisions.
 // Nothing in this Section shall prevent a party's ability to bring
 // cross-claims or counter-claims.
-// 
+//
 // 9. Miscellaneous
 // ----------------
-// 
+//
 // This License represents the complete agreement concerning the subject
 // matter hereof. If any provision of this License is held to be
 // unenforceable, such provision shall be reformed only to the extent
 // necessary to make it enforceable. Any law or regulation which provides
 // that the language of a contract shall be construed against the drafter
 // shall not be used to construe this License against a Contributor.
-// 
+//
 // 10. Versions of the License
 // ---------------------------
-// 
+//
 // 10.1. New Versions
-// 
+//
 // Mozilla Foundation is the license steward. Except as provided in Section
 // 10.3, no one other than the license steward has the right to modify or
 // publish new versions of this License. Each version will be given a
 // distinguishing version number.
-// 
+//
 // 10.2. Effect of New Versions
-// 
+//
 // You may distribute the Covered Software under the terms of the version
 // of the License under which You originally received the Covered Software,
 // or under the terms of any subsequent version published by the license
 // steward.
-// 
+//
 // 10.3. Modified Versions
-// 
+//
 // If you create software not governed by this License, and you want to
 // create a new license for such software, you may create and use a
 // modified version of this License if you rename the license and remove
 // any references to the name of the license steward (except to note that
 // such modified license differs from this License).
-// 
+//
 // 10.4. Distributing Source Code Form that is Incompatible With Secondary
 // Licenses
-// 
+//
 // If You choose to distribute Source Code Form that is Incompatible With
 // Secondary Licenses under the terms of this version of the License, the
 // notice described in Exhibit B of this License must be attached.
-// 
+//
 // Exhibit A - Source Code Form License Notice
 // -------------------------------------------
-// 
+//
 //   This Source Code Form is subject to the terms of the Mozilla Public
 //   License, v. 2.0. If a copy of the MPL was not distributed with this
 //   file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// 
+//
 // If it is not possible or desirable to put the notice in a particular
 // file, then You may include the notice in a location (such as a LICENSE
 // file in a relevant directory) where a recipient would be likely to look
 // for such a notice.
-// 
+//
 // You may add additional accurate notices of copyright ownership.
-// 
+//
 // Exhibit B - "Incompatible With Secondary Licenses" Notice
 // ---------------------------------------------------------
-// 
+//
 //   This Source Code Form is "Incompatible With Secondary Licenses", as
 //   defined by the Mozilla Public License, v. 2.0.
 
@@ -10988,6 +10988,13 @@ public:
         return flags.is_iterator and not (continue_nodes.size() == 1 and continue_nodes[0] == match_start);
     }
 
+    [[nodiscard]] consteval std::uint_least16_t largest_offset() const
+    {
+        if (final_nodes.empty())
+            return 0;
+        return std::ranges::max(final_nodes | std::views::transform([](const auto& x){ return x.second.offset; }));
+    }
+
     /* data members (public so that tdfa_info is structural) */
     static_span<static_span<static_transition<char_type>>> nodes;
     static_span<static_span<register_operation>> regops;
@@ -11371,6 +11378,9 @@ struct p1306lex;
 template<srx::string_literal Pattern>
 struct naive_matcher;
 
+template<std::meta::info Info>
+struct table_dfa;
+
 namespace smr_layout {
 
 template<std::size_t RegCount, final_capture_info FCI, static_span<tdfa::reg_t> FinalReg>
@@ -11546,6 +11556,9 @@ public:
 
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;
+
+    template<std::meta::info Info>
+    friend struct detail::table_dfa;
 
 private:
     /* implementation helpers */
@@ -14634,13 +14647,513 @@ using p1306_multipass = p1306dfb<(^^rf<std::meta::reflect_constant_string(Patter
 }
 
 namespace srx {
+namespace detail {
+
+template<std::meta::info Info>
+struct table_dfa
+{
+    static_assert(has_template_arguments(type_of(Info)), "Invalid reflection value");
+
+    using char_type = char;
+    using uchar_type = std::make_unsigned_t<char>;
+
+    static_assert(sizeof(char_type) == 1);
+
+private:
+    static constexpr tdfa_info<char_type> DFA = [: Info :];
+    static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
+    static constexpr bool has_regops{ not DFA.regops.empty() };
+    static constexpr bool has_fallback{ DFA.flags.enable_fallback };
+    static constexpr bool has_continue{ DFA.flags.is_iterator };
+    static constexpr bool has_alternative{ DFA.alt_mode };
+    static constexpr bool has_extra_continue{ has_continue and not never_empty };
+    static constexpr auto largest_offset{ DFA.largest_offset() };
+
+    using state_offset_t = std::uint_least8_t;
+    using regop_offset_t = std::uint_least8_t;
+
+    static_assert(DFA.nodes.size() < std::numeric_limits<state_offset_t>::max() - 1);
+    static_assert(DFA.regops.size() < std::numeric_limits<regop_offset_t>::max() - 1);
+
+public:
+    template<std::bidirectional_iterator I>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+    using result = static_match_results<I, smr_layout::reg_map<DFA.register_count, DFA.captures, DFA.final_registers>>;
+
+    template<std::bidirectional_iterator I>
+        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
+    struct iterated_result;
+
+private:
+    using maybe_regop_offset_t = maybe_type_t<has_regops, regop_offset_t>;
+    using maybe_alternative_t = maybe_type_t<has_alternative, std::uint_least32_t>;
+    using maybe_next_start_nonempty_t = maybe_type_t<has_extra_continue, state_offset_t>;
+    using maybe_next_start_t = maybe_type_t<has_continue, state_offset_t>;
+
+    template<typename I>
+    using maybe_saved_first_t = maybe_type_t<has_extra_continue, I>;
+
+    struct overspill
+    {
+        [[no_unique_address]] maybe_alternative_t alt{ 0 };
+        [[no_unique_address]] maybe_next_start_t nst{ 0 };
+
+        overspill() = default;
+    };
+
+    using overspill_ref = std::add_lvalue_reference_t<overspill>;
+
+    template<typename I>
+    using result_ref = std::add_lvalue_reference_t<result<I>>;
+
+    static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+
+    template<typename I>
+    struct fallback_info
+    {
+        I it;
+        std::size_t state{ fallback_disabled };
+
+        constexpr explicit(false) fallback_info(I it) : it{ it } {}
+    };
+
+    template<typename I>
+    using maybe_fallback_t = maybe_type_t<has_fallback, fallback_info<I>>;
+
+    template<typename I>
+    struct context
+    {
+        result_ref<I> res;
+        overspill_ref osr;
+    };
+
+    /* register operations */
+
+    template<std::size_t Blk, std::bidirectional_iterator I>
+    static constexpr void exec_regop(context<I> ctx, I it)
+    {
+        if constexpr (Blk != tdfa::no_transition_regops)
+        {
+            template for (constexpr register_operation op : DFA.regops[Blk])
+            {
+                if constexpr (op.is_copy)
+                    ctx.res.reg_[op.dst] = ctx.res.reg_[op.cpy_src];
+                else if constexpr (op.set_val)
+                    ctx.res.reg_[op.dst] = it;
+                else if constexpr (std::contiguous_iterator<I>)
+                    ctx.res.reg_[op.dst] = I{};
+
+                if constexpr (not std::contiguous_iterator<I>)
+                {
+                    if constexpr (op.is_copy)
+                        ctx.res.enabled_[op.dst] = ctx.res.enabled_[op.cpy_src];
+                    else
+                        ctx.res.enabled_[op.dst] = op.set_val;
+                }
+            }
+        }
+    }
+
+    /* table contents */
+
+    struct table_entry
+    {
+        state_offset_t state;
+        [[no_unique_address]] maybe_regop_offset_t regop;
+    };
+
+    struct table_row
+    {
+        static constexpr std::size_t row_size{ 0b1 << std::numeric_limits<uchar_type>::digits };
+
+        constexpr table_entry& operator[](std::size_t n) noexcept { return data_[n]; }
+        constexpr const table_entry& operator[](std::size_t n) const noexcept { return data_[n]; }
+
+        table_row() = default;
+
+        table_entry data_[row_size]{};
+    };
+
+    template<typename I>
+    struct accepting_state
+    {
+        struct contents_type;
+
+        using function_pointer_t = decltype(&exec_regop<tdfa::no_transition_regops, I>);
+        using alt_type = std::uint_least32_t;
+        using ofs_type = std::uint_least16_t;
+        using small_ofs_type = std::uint_least8_t;
+
+        consteval {
+            /* note: using maybe_type_t resulted in structs with unwanted padding */
+            std::vector<std::meta::info> mems;
+            if (has_regops)
+                mems.push_back(data_member_spec(^^function_pointer_t, { .name = "final_regop" }));
+            if (has_fallback and has_regops)
+                mems.push_back(data_member_spec(^^function_pointer_t, { .name = "fallback_regop" }));
+            if (has_alternative)
+                mems.push_back(data_member_spec(^^alt_type, { .name = "alternative" }));
+            if (largest_offset > std::numeric_limits<small_ofs_type>::max())
+                mems.push_back(std::meta::data_member_spec(^^ofs_type, { .name = "offset" }));
+            else if (largest_offset > 0)
+                mems.push_back(std::meta::data_member_spec(^^small_ofs_type, { .name = "offset" }));
+            if (has_continue)
+                mems.push_back(data_member_spec(^^state_offset_t, { .name = "next_start" }));
+            if (has_extra_continue)
+                mems.push_back(data_member_spec(^^state_offset_t, { .name = "nonempty_next_start" }));
+            define_aggregate(^^contents_type, mems);
+        }
+
+        contents_type data{};
+    };
+
+    static constexpr bool accepting_state_empty{ not (has_regops or (has_fallback and has_regops) or has_alternative
+                                                      or (largest_offset > 0) or has_continue or has_extra_continue) };
+
+    /* helpers for table construction */
+
+    static consteval table_row make_transition_row(std::size_t q)
+    {
+        table_row row{};
+
+        for (const static_transition<char_type>& tr : DFA.nodes[q] | std::views::reverse)
+        {
+            for (const auto& [lo, hi] : tr.cs.get_intervals())
+            {
+                for (uchar_type c{ static_cast<uchar_type>(lo) }; true; ++c)
+                {
+                    row[c] = {
+                        .state = static_cast<state_offset_t>(tr.next + 1),
+                        .regop = static_cast<regop_offset_t>(tr.op_index + 1)
+                    };
+
+                    if (c == static_cast<uchar_type>(hi))
+                        break;
+                }
+            }
+        }
+
+        return row;
+    }
+
+    template<std::size_t Index, typename I>
+    static consteval accepting_state<I> make_accepting_state()
+    {
+        static constexpr auto [state, fni] = *(DFA.final_nodes.cbegin() + Index);
+        static constexpr auto* fbni = DFA.fallback_nodes.at_if(state);
+
+        accepting_state<I> qf{};
+
+        if constexpr (has_regops)
+            qf.data.final_regop = &exec_regop<fni.op_index, I>;
+
+        if constexpr (has_alternative)
+            qf.data.alternative = fni.alternative;
+
+        if constexpr (largest_offset > std::numeric_limits<typename accepting_state<I>::small_ofs_type>::max())
+            qf.data.offset = fni.offset;
+        else if constexpr (largest_offset > 0)
+            qf.data.offset = static_cast<typename accepting_state<I>::small_ofs_type>(fni.offset);
+
+        if constexpr (fbni != nullptr)
+        {
+            if constexpr (has_regops)
+                qf.data.fallback_regop = &exec_regop<fbni->op_index, I>;
+            if constexpr (has_continue)
+                qf.data.next_start = static_cast<state_offset_t>(1 + DFA.continue_nodes[fbni->continue_at]);
+            if constexpr (has_extra_continue)
+                qf.data.nonempty_next_start = static_cast<state_offset_t>(1 + DFA.additional_continue_nodes[fbni->continue_at]);
+        }
+
+        return qf;
+    }
+
+    /* table definitions */
+
+    template<typename I>
+    static constexpr auto regop_table = [] consteval {
+        if constexpr (DFA.regops.empty())
+        {
+            return terminal_object{};
+        }
+        else
+        {
+            constexpr auto [...Blks] = std::make_index_sequence<DFA.regops.size()>();
+            return std::array{ &exec_regop<tdfa::no_transition_regops, I>,  (&exec_regop<Blks, I>)... };
+        }
+    }();
+
+    static constexpr auto transition_table = [] consteval {
+        constexpr auto [...Idxs] = std::make_index_sequence<DFA.nodes.size()>();
+        return std::array{ table_row{},  (make_transition_row(Idxs))... };
+    }();
+
+    static constexpr auto fallback_bitset = [] consteval {
+        std::bitset<DFA.nodes.size() + 1> bitset;
+        for (const auto& [q, _] : DFA.fallback_nodes)
+            bitset[q + 1] = true;
+        return bitset;
+    }();
+
+    template<typename I>
+    static constexpr auto accepting_state_table = [] consteval {
+        if constexpr (accepting_state_empty)
+        {
+            return terminal_object{};
+        }
+        else
+        {
+            constexpr auto [...Idxs] = std::make_index_sequence<DFA.final_nodes.size()>();
+            return std::array{ accepting_state<I>{}, (make_accepting_state<Idxs, I>())... };
+        }
+    }();
+
+    static constexpr auto state_table = [] consteval {
+        if constexpr (accepting_state_empty)
+        {
+            std::bitset<DFA.nodes.size() + 1> bitset;
+            for (const auto& [q, _] : DFA.final_nodes)
+                bitset[q + 1] = true;
+            return bitset;
+        }
+        else
+        {
+            std::array<state_offset_t, DFA.nodes.size() + 1> array{};
+            std::size_t i{ 0 };
+            for (const auto& [q, _] : DFA.final_nodes)
+                array[q + 1] = static_cast<state_offset_t>(++i);
+            return array;
+        }
+    }();
+
+    /* matcher implementation */
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr bool regex_state(context<I> ctx, I it, const S end, state_offset_t state)
+    {
+        const maybe_saved_first_t<I> first{ it };
+        maybe_fallback_t<I> fallback{ it };
+
+        for (; it != end; ++it)
+        {
+            if constexpr (has_fallback)
+            {
+                if (fallback_bitset[state])
+                {
+                    fallback.state = state;
+                    fallback.it = it;
+                }
+            }
+
+            const auto& [next, regop] = transition_table[state][static_cast<uchar_type>(*it)];
+
+            if (next == 0) [[unlikely]]
+                break;
+
+            /* N.B: this probably benefits from a two pass implementation
+               I expect this will be slower than the other "linear" dfa implementation
+               because we need to chase pointers here */
+            if constexpr (has_regops)
+                if (regop != 0)
+                    (regop_table<I>[regop])(ctx, it);
+
+            state = next;
+        }
+
+        if (it == end or (has_fallback and fallback_bitset[state]))
+        {
+            if constexpr (accepting_state_empty)
+            {
+                if (state_table[state])
+                {
+                    ctx.res.match_end_ = it;
+                    return true;
+                }
+            }
+            else
+            {
+                if (const auto index{ state_table[state] }; index != 0)
+                {
+                    const accepting_state<I>& qf{ accepting_state_table<I>[index] };
+
+                    /* assume qf.data.final_regop != nullptr */
+                    if constexpr (has_regops)
+                        (qf.data.final_regop)(ctx, it);
+
+                    update_ctx(ctx, it, qf, first);
+                    return true;
+                }
+            }
+        }
+
+        /* compute and exec fallback state */
+        if constexpr (has_fallback)
+        {
+            if (fallback.state != fallback_disabled)
+            {
+                if constexpr (accepting_state_empty)
+                {
+                    ctx.res.match_end_ = fallback.it;
+                    return true;
+                }
+                else
+                {
+                    /* since this is a fallback, assume index != 0 */
+                    const auto index{ state_table[fallback.state] };
+                    const accepting_state<I>& qf{ accepting_state_table<I>[index] };
+
+                    /* assume qf.data.fallback_regop != nullptr */
+                    if constexpr (has_regops)
+                        (qf.data.fallback_regop)(ctx, fallback.it);
+
+                    update_ctx(ctx, fallback.it, qf, first);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    template<std::bidirectional_iterator I>
+    [[gnu::always_inline]] static constexpr void update_ctx(context<I> ctx, const I it, const accepting_state<I>& qf, const maybe_saved_first_t<I> first)
+    {
+        if constexpr (largest_offset > 0)
+            ctx.res.match_end_ = std::ranges::prev(it, qf.data.offset);
+        else
+            ctx.res.match_end_ = it;
+
+        if constexpr (not std::contiguous_iterator<I>)
+            ctx.res.match_success_ = true;
+
+        if constexpr (has_continue)
+        {
+            if constexpr (has_extra_continue)
+            {
+                if (first == it)
+                    ctx.osr.nst = qf.data.nonempty_next_start;
+                else
+                    ctx.osr.nst = qf.data.next_start;
+            }
+            else
+            {
+                ctx.osr.nst = qf.data.next_start;
+            }
+        }
+
+        if constexpr (has_alternative)
+            ctx.osr.alt = qf.data.alternative;
+    }
+
+public:
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr result<I> operator()(const I first, const S last)
+    {
+        result<I> res{ first };
+        overspill osp{};
+        regex_state(context<I>{ res, osp }, first, last, 1 + DFA.match_start);
+        return res;
+    }
+};
+
+template<std::meta::info Info>
+template<std::bidirectional_iterator I>
+    requires std::is_nothrow_convertible_v<std::iter_value_t<I>, typename table_dfa<Info>::char_type>
+struct table_dfa<Info>::iterated_result
+{
+    static constexpr bool needs_begin{ not never_empty };
+
+    struct state_type
+    {
+        static constexpr bool has_continue{ true };
+        static constexpr bool is_stateless{ false };
+
+        using continue_type = state_offset_t;
+
+        [[no_unique_address]] continue_type continue_at{ 0 };
+    };
+
+    iterated_result() = default;
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
+        : res{ first }, stf{ .continue_at = 1 + DFA.match_start }
+    {
+        resume(first, last);
+    }
+
+    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
+        : res{ first }, stf{ .continue_at = 1 + (never_empty ? DFA.match_start : DFA.additional_continue_nodes.back()) }
+    {
+        resume(first, last);
+    }
+
+    constexpr iterated_result(const I /* first */, const I it, const std::sentinel_for<I> auto last, state_type stf, bool /* prev_empty */)
+        : res{ it }, stf{ stf }
+    {
+        resume(it, last);
+    }
+
+    constexpr I advance(const std::sentinel_for<I> auto last)
+        requires never_empty
+    {
+        const auto& match = res.template force_get<0>();
+        const I current = match.end();
+        res.reset(current);
+        resume(current, last);
+        return current;
+    }
+
+    constexpr I advance(const I first, const std::sentinel_for<I> auto last)
+    {
+        const auto& match = res.template force_get<0>();
+        const I current = match.end();
+
+        if constexpr (not never_empty)
+        {
+            if (match.empty() and current == last)
+            {
+                res.clear_match();
+                return current;
+            }
+
+            if (current == first)
+                stf.continue_at = 1 + (never_empty ? DFA.match_start : DFA.additional_continue_nodes.back());
+        }
+
+        res.reset(current);
+        resume(current, last);
+        return current;
+    }
+
+private:
+    constexpr void resume(const I first, const std::sentinel_for<I> auto last)
+    {
+        overspill osp{};
+        regex_state(context<I>{ res, osp }, first, last, stf.continue_at);
+        stf.continue_at = osp.nst;
+        return;
+    }
+
+public:
+    result<I> res;
+    state_type stf;
+};
+
+template<string_literal Pattern, fsm_flags Flags>
+using table_dfa_matcher = table_dfa<(^^re<std::meta::reflect_constant_string(Pattern.view()), pack_flags(Flags)>)>;
+
+}
+}
+
+namespace srx {
 
 enum class mode : unsigned char
 {
     standard,
     linear,
     linear_twopass,
-    backtrack
+    backtrack,
+    tabledfa,
 };
 
 namespace detail {
@@ -14649,6 +15162,8 @@ consteval auto get_matcher_refl(mode i, bool is_search = false)
 {
     if (i == mode::backtrack)
         return ^^detail::naive_matcher_adaptor;
+    else if (i == mode ::tabledfa)
+        return ^^detail::table_dfa_matcher;
     else if (i == mode::linear_twopass)
         return ^^detail::p1306_multipass;
     else if (i == mode::standard and is_search)

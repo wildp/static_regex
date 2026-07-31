@@ -23,6 +23,7 @@ target_sources(tests
         srxb_test.cpp
         srxc_test.cpp
         srxf_test.cpp
+        srxt_test.cpp
         srxn_test.cpp
         tdfa_test.cpp
         tdfb_test.cpp

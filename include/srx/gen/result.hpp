@@ -35,6 +35,9 @@ struct p1306lex;
 template<srx::string_literal Pattern>
 struct naive_matcher;
 
+template<std::meta::info Info>
+struct table_dfa;
+
 namespace smr_layout {
 
 template<std::size_t RegCount, final_capture_info FCI, static_span<tdfa::reg_t> FinalReg>
@@ -211,6 +214,9 @@ public:
 
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;
+
+    template<std::meta::info Info>
+    friend struct detail::table_dfa;
 
 private:
     /* implementation helpers */

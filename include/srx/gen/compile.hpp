@@ -207,6 +207,13 @@ public:
         return flags.is_iterator and not (continue_nodes.size() == 1 and continue_nodes[0] == match_start);
     }
 
+    [[nodiscard]] consteval std::uint_least16_t largest_offset() const
+    {
+        if (final_nodes.empty())
+            return 0;
+        return std::ranges::max(final_nodes | std::views::transform([](const auto& x){ return x.second.offset; }));
+    }
+
     /* data members (public so that tdfa_info is structural) */
     static_span<static_span<static_transition<char_type>>> nodes;
     static_span<static_span<register_operation>> regops;
