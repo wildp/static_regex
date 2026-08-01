@@ -114,7 +114,7 @@ private:
 
         /* splicing designated initializers is unsupported in C++26; if it was, we could do something like this: */
 
-        // template for (constexpr std::size_t I : std::views::iota(0uz, variant_size(original_type)))
+        // template for (constexpr std::size_t I : std::views::indices(variant_size(original_type)))
         // {
         //     if (expr.index() == I)
         //     {
@@ -796,7 +796,7 @@ private:
                 saved.back() = res.reg_[tag.number];
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         saved[i] = res.reg_[staged[i]];
             }
             else
@@ -804,7 +804,7 @@ private:
                 saved.back() = res.enabled_[tag.number];
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         saved[i] = res.enabled_[staged[i]];
             }
 
@@ -833,7 +833,7 @@ private:
                 res.reg_[tag.number] = saved.back();
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         res.reg_[staged[i]] = saved[i];
             }
             else
@@ -841,7 +841,7 @@ private:
                 res.enabled_[tag.number] = saved.back();
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         res.enabled_[staged[i]] = saved[i];
             }
 

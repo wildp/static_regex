@@ -129,7 +129,7 @@ public:
 
     [[nodiscard]] constexpr submatch_type operator[](size_type n) const noexcept
     {
-        template for (constexpr size_type N : std::views::iota(0uz, submatch_count))
+        template for (constexpr size_type N : std::views::indices(submatch_count))
             if (n == N)
                 return get<N>(*this);
         std::unreachable();

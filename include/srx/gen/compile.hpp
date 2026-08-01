@@ -111,10 +111,10 @@ private:
 
         if (not vec.empty())
         {
-            // TODO: switch to using views::enumerate when supported by clang
-            auto scored_pairs = std::views::zip(std::views::iota(0uz),
-                                                vec | std::views::transform([](const auto& t){ return t.second.score_intervals(); }))
-                                                    | std::ranges::to<std::vector>();
+            auto scored_pairs = vec
+                                | std::views::transform([](const auto& t){ return t.second.score_intervals(); })
+                                | std::views::enumerate
+                                | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
 

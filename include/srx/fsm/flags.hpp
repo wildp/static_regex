@@ -122,7 +122,7 @@ constexpr ff pack_flags(fsm_flags f)
 
     std::bitset<nsdms.size()> bitset;
 
-    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+    template for (constexpr std::size_t i : std::views::indices(nsdms.size()))
         bitset[i] = f.[: nsdms[i] :];
 
     return bitset.to_ullong();
@@ -136,7 +136,7 @@ constexpr fsm_flags unpack_flags(ff f)
     std::bitset<nsdms.size()> bitset{ f };
     fsm_flags result{};
 
-    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+    template for (constexpr std::size_t i : std::views::indices(nsdms.size()))
         result.[: nsdms[i] :] = bitset[i];
 
     return result;

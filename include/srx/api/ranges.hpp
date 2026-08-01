@@ -500,7 +500,7 @@ private:
                 ++index_;
             }
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, max_index))
+            template for (constexpr std::size_t i : std::views::indices(max_index))
             {
                 if (index_ == i)
                 {

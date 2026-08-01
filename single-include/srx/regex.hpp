@@ -702,7 +702,7 @@ constexpr ff pack_flags(fsm_flags f)
 
     std::bitset<nsdms.size()> bitset;
 
-    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+    template for (constexpr std::size_t i : std::views::indices(nsdms.size()))
         bitset[i] = f.[: nsdms[i] :];
 
     return bitset.to_ullong();
@@ -716,7 +716,7 @@ constexpr fsm_flags unpack_flags(ff f)
     std::bitset<nsdms.size()> bitset{ f };
     fsm_flags result{};
 
-    template for (constexpr std::size_t i : std::views::iota(0uz, nsdms.size()))
+    template for (constexpr std::size_t i : std::views::indices(nsdms.size()))
         result.[: nsdms[i] :] = bitset[i];
 
     return result;
@@ -8902,8 +8902,8 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
         /* switch to using maps at threshold */
         if (state_info_.size() == map_usage_threshold)
         {
-            state_hashes_values_.assign_range(std::views::iota(0uz, new_state));
-            mappable_candidate_values_.assign_range(std::views::iota(0uz, new_state));
+            state_hashes_values_.assign_range(std::views::indices(new_state));
+            mappable_candidate_values_.assign_range(std::views::indices(new_state));
 
             std::ranges::sort(std::views::zip(state_hashes_keys_, state_hashes_values_), {}, key_proj);
             std::ranges::sort(std::views::zip(mappable_candidate_keys_, mappable_candidate_values_), {}, key_proj);
@@ -10483,11 +10483,12 @@ constexpr void tagged_dfa<CharT>::minimise_transition_edges()
             continue;
 
         const auto sizes = node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) | std::ranges::to<std::vector>();
-        const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
+        const auto largest_index = std::ranges::max_element(sizes) - sizes.begin();
 
-        auto scored_pairs = std::views::zip(std::views::iota(0uz),
-                                            node.tr
-                                            | std::views::transform([](const auto& t){ return t.cs.score_intervals(); }))
+        auto scored_pairs = node.tr
+                            | std::views::transform([](const auto& t){ return t.cs.score_intervals(); })
+                            | std::views::enumerate
+                            | std::views::cache_latest
                             | std::views::filter([largest_index](const auto& x){ return get<0>(x) != largest_index; })
                             | std::ranges::to<std::vector>();
 
@@ -10585,7 +10586,7 @@ constexpr void tagged_dfa<CharT>::make_shared_transitions()
                   })
                 | std::ranges::to<std::vector>();
 
-    auto values = std::views::iota(0uz, nodes_.size())
+    auto values = std::views::indices(nodes_.size())
                   | std::ranges::to<std::vector>();
 
     static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); };
@@ -10753,9 +10754,10 @@ private:
 
         if (not vec.empty())
         {
-            auto scored_pairs = std::views::zip(std::views::iota(0uz),
-                                                vec | std::views::transform([](const auto& t){ return t.second.score_intervals(); }))
-                                                    | std::ranges::to<std::vector>();
+            auto scored_pairs = vec
+                                | std::views::transform([](const auto& t){ return t.second.score_intervals(); })
+                                | std::views::enumerate
+                                | std::ranges::to<std::vector>();
 
             std::ranges::sort(scored_pairs, {}, [](const auto& x){ return get<1>(x); });
 
@@ -11299,7 +11301,7 @@ public:
 
     [[nodiscard]] constexpr submatch_type operator[](size_type n) const noexcept
     {
-        template for (constexpr size_type N : std::views::iota(0uz, submatch_count))
+        template for (constexpr size_type N : std::views::indices(submatch_count))
             if (n == N)
                 return get<N>(*this);
         std::unreachable();
@@ -12315,7 +12317,7 @@ private:
                 saved.back() = res.reg_[tag.number];
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         saved[i] = res.reg_[staged[i]];
             }
             else
@@ -12323,7 +12325,7 @@ private:
                 saved.back() = res.enabled_[tag.number];
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         saved[i] = res.enabled_[staged[i]];
             }
 
@@ -12352,7 +12354,7 @@ private:
                 res.reg_[tag.number] = saved.back();
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         res.reg_[staged[i]] = saved[i];
             }
             else
@@ -12360,7 +12362,7 @@ private:
                 res.enabled_[tag.number] = saved.back();
 
                 if constexpr (not ast.staging.empty())
-                    template for (constexpr auto i : std::views::iota(0uz, staged.size()))
+                    template for (constexpr auto i : std::views::indices(staged.size()))
                         res.enabled_[staged[i]] = saved[i];
             }
 
@@ -13298,7 +13300,7 @@ private:
             const bool empty{ ctx.osr.res.template force_get<0>().empty() };
             ctx.osr.res.reset(it);
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
                 if (i == state_info.continue_at)
                 {
@@ -13314,7 +13316,7 @@ private:
             const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
             ctx.osr.res.reset(it);
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size))
+            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
                 if (i == state_info.continue_at)
                     [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
         }
@@ -13946,7 +13948,7 @@ public:
             return tok;
         }
 
-        template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+        template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
@@ -13997,7 +13999,7 @@ public:
             return tok;
         }
 
-        template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+        template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
@@ -14123,7 +14125,7 @@ private:
             const stateful state_info{ std::exchange(stf, {}) };
             overspill<I> osp{};
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
                 static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes[i] : DFA.continue_nodes[i] };
 
@@ -15367,7 +15369,7 @@ private:
                 ++index_;
             }
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, max_index))
+            template for (constexpr std::size_t i : std::views::indices(max_index))
             {
                 if (index_ == i)
                 {

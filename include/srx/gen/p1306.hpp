@@ -732,7 +732,7 @@ private:
             const bool empty{ ctx.osr.res.template force_get<0>().empty() };
             ctx.osr.res.reset(it);
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
                 if (i == state_info.continue_at)
                 {
@@ -748,7 +748,7 @@ private:
             const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
             ctx.osr.res.reset(it);
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size))
+            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
                 if (i == state_info.continue_at)
                     [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
         }
@@ -1390,7 +1390,7 @@ public:
             return tok;
         }
 
-        template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+        template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
@@ -1442,7 +1442,7 @@ public:
             return tok;
         }
 
-        template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+        template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
         {
             if (i == continue_at)
             {
@@ -1570,7 +1570,7 @@ private:
             const stateful state_info{ std::exchange(stf, {}) };
             overspill<I> osp{};
 
-            template for (constexpr std::size_t i : std::views::iota(0uz, DFA.continue_nodes.size()))
+            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
                 static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes[i] : DFA.continue_nodes[i] };
 

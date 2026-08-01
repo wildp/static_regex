@@ -286,8 +286,8 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
         /* switch to using maps at threshold */
         if (state_info_.size() == map_usage_threshold)
         {
-            state_hashes_values_.assign_range(std::views::iota(0uz, new_state));
-            mappable_candidate_values_.assign_range(std::views::iota(0uz, new_state));
+            state_hashes_values_.assign_range(std::views::indices(new_state));
+            mappable_candidate_values_.assign_range(std::views::indices(new_state));
 
             std::ranges::sort(std::views::zip(state_hashes_keys_, state_hashes_values_), {}, key_proj);
             std::ranges::sort(std::views::zip(mappable_candidate_keys_, mappable_candidate_values_), {}, key_proj);
@@ -1890,12 +1890,12 @@ constexpr void tagged_dfa<CharT>::minimise_transition_edges()
             continue;
 
         const auto sizes = node.tr | std::views::transform([](auto& t){ return t.cs.count(); }) | std::ranges::to<std::vector>();
-        const std::size_t largest_index{ static_cast<std::size_t>(std::ranges::max_element(sizes) - sizes.begin()) };
+        const auto largest_index = std::ranges::max_element(sizes) - sizes.begin();
 
-        // TODO: switch to using views::enumerate when supported by clang
-        auto scored_pairs = std::views::zip(std::views::iota(0uz),
-                                            node.tr
-                                            | std::views::transform([](const auto& t){ return t.cs.score_intervals(); }))
+        auto scored_pairs = node.tr
+                            | std::views::transform([](const auto& t){ return t.cs.score_intervals(); })
+                            | std::views::enumerate
+                            | std::views::cache_latest
                             | std::views::filter([largest_index](const auto& x){ return get<0>(x) != largest_index; })
                             | std::ranges::to<std::vector>();
 
@@ -1997,7 +1997,7 @@ constexpr void tagged_dfa<CharT>::make_shared_transitions()
                   })
                 | std::ranges::to<std::vector>();
 
-    auto values = std::views::iota(0uz, nodes_.size())
+    auto values = std::views::indices(nodes_.size())
                   | std::ranges::to<std::vector>();
 
     // TODO: switch to using std::flat_multimap instead when constexpr is supported
