@@ -233,9 +233,8 @@ template<static_charset Sc>
 {
 #if false
     /* simple code path */
-    // TODO: change to use structured binding when supported
-    template for (constexpr auto pair : Sc.get_intervals())
-        if (pair.first <= c and c <= pair.second)
+    template for (constexpr auto& [lo, hi] : Sc.get_intervals())
+        if (lo <= c and c <= hi)
             return true;
     return false;
 #else
@@ -251,7 +250,7 @@ template<static_charset Sc>
     {
         static constexpr bool inverted{ false /* Sc.should_invert() */ };
 
-        template for (constexpr auto ote : define_static_array(make_optimised_edges(Sc, inverted)))
+        template for (constexpr auto& ote : define_static_array(make_optimised_edges(Sc, inverted)))
         {
             uchar_type d{ c };
 
@@ -309,7 +308,7 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
         static constexpr bool inverted{ Sc.should_invert() };
         mask_type result{ inverted };
 
-        template for (constexpr auto ote : define_static_array(make_optimised_edges(Sc, inverted)))
+        template for (constexpr auto& ote : define_static_array(make_optimised_edges(Sc, inverted)))
         {
             auto d_vec{ c_vec };
 
@@ -599,7 +598,7 @@ private:
     {
         if constexpr (Blk != tdfa::no_transition_regops and X != 0)
         {
-            template for (constexpr register_operation op : DFA.regops[Blk])
+            template for (constexpr auto& op : DFA.regops[Blk])
             {
                 if constexpr (op.is_copy)
                     ctx.get_res().reg_[op.dst] = ctx.get_res().reg_[op.cpy_src];
@@ -619,7 +618,7 @@ private:
 
             if constexpr (generation::enabled)
             {
-                template for (constexpr register_operation op : DFA.regops[Blk])
+                template for (constexpr auto& op : DFA.regops[Blk])
                 {
                     if constexpr (op.is_copy)
                         ctx.osr.gen.reg[op.dst] = ctx.osr.gen.reg[op.cpy_src];
@@ -802,14 +801,14 @@ private:
             [[clang::musttail]] return failure(ctx, it, last, fallback);
 
         // TODO: change to use structured binding when supported
-        template for (constexpr auto pair : DFA.fallback_nodes)
+        template for (constexpr auto& [state, fbni] : DFA.fallback_nodes)
         {
-            if (fallback.state == pair.first)
+            if (fallback.state == state)
             {
-                static constexpr auto fni = DFA.final_nodes.at(pair.first);
+                static constexpr auto fni = DFA.final_nodes.at(state);
                 if constexpr (not DFA.flags.return_bool)
                 {
-                    set_fallback<pair.second.op_index, fni.offset, pair.second.continue_at>(ctx, fallback.it);
+                    set_fallback<fbni.op_index, fni.offset, fbni.continue_at>(ctx, fallback.it);
                     [[clang::musttail]] return success<fni.alternative>(ctx, fallback.it, last, fallback);
                 }
                 else
@@ -840,7 +839,7 @@ private:
 
         if (it != last)
         {
-            template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
+            template for (constexpr auto& tr : DFA.nodes[DFAState])
             {
                 if (tr_possible<tr.cs>(*it))
                 {
@@ -886,7 +885,7 @@ private:
                 fallback.it = it;
         }
 
-        template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
+        template for (constexpr auto& tr : DFA.nodes[DFAState])
         {
             if (tr_possible_exclude_null<tr.cs>(*it))
             {
@@ -927,7 +926,7 @@ private:
         }
         else
         {
-            template for (constexpr static_transition<char_type> tr : DFA.nodes[DFAState])
+            template for (constexpr auto& tr : DFA.nodes[DFAState])
             {
                 if (tr_possible<tr.cs>(*it))
                 {
@@ -1022,11 +1021,9 @@ private:
             return false;
         }
 
-        template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
-        {
+        template for (constexpr auto& tr : DFA.outer_transitions)
             if (tr_possible<tr.cs>(*it))
                 [[clang::musttail]] return scalar_outer_state<tr.next>(ctx, ++it, last);
-        }
 
         return false;
     }
@@ -1060,11 +1057,9 @@ private:
             return false;
         }
 
-        template for (constexpr static_transition<char_type> tr : DFA.outer_transitions)
-        {
+        template for (constexpr auto& tr : DFA.outer_transitions)
             if (tr_possible<tr.cs>(*it))
                 [[clang::musttail]] return scalar_outer_state<tr.next>(ctx, ++it, last);
-        }
 
         return false;
     }
@@ -1251,7 +1246,7 @@ private:
         // TODO: possibly select a second position to check?
         static constexpr static_charset combined_cs = []{
             charset<char_type> result;
-            template for (constexpr auto tr : DFA.nodes[position])
+            for (const auto& tr : DFA.nodes[position])
                 result |= tr.cs;
             return static_charset{ result };
         }();
