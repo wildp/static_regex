@@ -13027,6 +13027,18 @@ private:
     static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
     static constexpr std::size_t avoid_simd_threshold{ (1uz << std::numeric_limits<std::make_unsigned_t<char_type>>::digits) / 2 };
 
+    template<typename I>
+    struct saved_fallback
+    {
+        [[no_unique_address]] maybe_type_t<(not DFA.flags.return_bool), I> it;
+        std::size_t state{ fallback_disabled };
+
+        constexpr explicit(false) saved_fallback(I it) : it{ it } {}
+    };
+
+    template<typename I>
+    using maybe_fallback_t = maybe_type_t<DFA.flags.enable_fallback, saved_fallback<I>>;
+
     struct generation
     {
         static constexpr bool enabled{ DFA.flags.adapted_search and DFA.register_count > 0 };
@@ -13035,25 +13047,28 @@ private:
         std::size_t current{ 0 };
     };
 
-    using gen_info = maybe_type_t<generation::enabled, generation>;
+    using maybe_generation_t = maybe_type_t<generation::enabled, generation>;
 
     template<typename I, bool B = false>
     struct overspill
     {
-        [[no_unique_address]] gen_info gen;
+        [[no_unique_address]] maybe_generation_t generations;
+        [[no_unique_address]] maybe_fallback_t<I> fallback;
 
         overspill() = default;
+        constexpr overspill(const I& first) : fallback{ first } {}
     };
 
     template<typename I>
     struct overspill<I, true>
     {
-        result<I> res;
-        [[no_unique_address]] gen_info gen;
-        [[no_unique_address]] stateful stf;
+        result<I> match_result;
+        [[no_unique_address]] maybe_generation_t generations;
+        [[no_unique_address]] maybe_fallback_t<I> fallback;
+        [[no_unique_address]] stateful state;
 
         overspill() = default;
-        constexpr overspill(I first) noexcept(noexcept(result<I>{ first })) : res{ first } {}
+        constexpr overspill(const I& first) : match_result{ first }, fallback{ first } {}
     };
 
     template<typename I>
@@ -13071,7 +13086,8 @@ private:
     template<typename I, int X = 0>
     struct context
     {
-        /* empty context */
+        /* result is a bool; only store fallback state */
+        [[no_unique_address]] overspill_ref<I> osr;
     };
 
     template<typename I>
@@ -13102,9 +13118,12 @@ private:
         token_ref<I> tok;
         overspill_ref<I, true> osr;
 
-        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return osr.res; }
-        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return osr.stf; }
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return osr.match_result; }
+        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return osr.fallback; }
     };
+
+    template<typename I>
+    context(overspill<I>&) -> context<I, 0>;
 
     template<typename I>
     context(result<I>&, overspill<I>&) -> context<I, 1>;
@@ -13115,18 +13134,6 @@ private:
     template<typename I>
     context(token<I>&, overspill<I, true>&) -> context<I, 3>;
 
-    template<typename I>
-    struct fallback_info
-    {
-        [[no_unique_address]] maybe_type_t<(not DFA.flags.return_bool), I> it;
-        std::size_t state{ fallback_disabled };
-
-        constexpr explicit(false) fallback_info(I it) : it{ it } {}
-    };
-
-    template<typename I>
-    using maybe_fallback_t = maybe_type_t<DFA.flags.enable_fallback, fallback_info<I>>;
-
     /* post-match register cleaning */
 
     template<std::bidirectional_iterator I>
@@ -13136,12 +13143,12 @@ private:
         if constexpr (std::contiguous_iterator<I>)
         {
             for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                res.reg_[i] = (osp.gen.reg[i] == osp.gen.current) ? res.reg_[i] : I{};
+                res.reg_[i] = (osp.generations.reg[i] == osp.generations.current) ? res.reg_[i] : I{};
         }
         else
         {
             for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                res.enabled_[i] = (osp.gen.reg[i] == osp.gen.current);
+                res.enabled_[i] = (osp.generations.reg[i] == osp.generations.current);
         }
     }
 
@@ -13152,12 +13159,12 @@ private:
         if constexpr (std::contiguous_iterator<I>)
         {
             for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                osp.res.reg_[i] = (osp.gen.reg[i] == osp.gen.current) ? osp.res.reg_[i] : I{};
+                osp.res.reg_[i] = (osp.generations.reg[i] == osp.generations.current) ? osp.res.reg_[i] : I{};
         }
         else
         {
             for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                osp.res.enabled_[i] = (osp.gen.reg[i] == osp.gen.current);
+                osp.res.enabled_[i] = (osp.generations.reg[i] == osp.generations.current);
         }
     }
 
@@ -13191,11 +13198,11 @@ private:
                 template for (constexpr auto& op : DFA.regops[Blk])
                 {
                     if constexpr (op.is_copy)
-                        ctx.osr.gen.reg[op.dst] = ctx.osr.gen.reg[op.cpy_src];
+                        ctx.osr.generations.reg[op.dst] = ctx.osr.generations.reg[op.cpy_src];
                     else if constexpr (op.set_val)
-                        ctx.osr.gen.reg[op.dst] = ctx.osr.gen.current;
+                        ctx.osr.generations.reg[op.dst] = ctx.osr.generations.current;
                     else
-                        ctx.osr.gen.reg[op.dst] = 0;
+                        ctx.osr.generations.reg[op.dst] = 0;
                 }
             }
         }
@@ -13231,20 +13238,20 @@ private:
     /* lexer actions */
 
     template<std::meta::info Action, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool lexer_action(context<I, 3> ctx, I it, const S end, maybe_fallback_t<I> fallback)
+    static constexpr bool lexer_action(context<I, 3> ctx, I it, const S end)
     {
         static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(Action), ^^result<I> }) };
 
         if constexpr (return_type_of(func) == ^^void)
         {
             /* void should be returned to continue */
-            [: func :](ctx.osr.res);
-            [[clang::musttail]] return skip_current(ctx, it, end, fallback);
+            [: func :](ctx.osr.match_result);
+            [[clang::musttail]] return skip_current(ctx, it, end);
         }
         else
         {
             ctx.tok = token<I>([: func
-                :](ctx.osr.res));
+                :](ctx.osr.match_result));
             return true;
         }
     }
@@ -13259,14 +13266,14 @@ private:
         set_final<tdfa::no_transition_regops, 0>(ctx, it);
 
         if constexpr (return_type_of(func) == ^^void)
-            [: func :](ctx.osr.res);
+            [: func :](ctx.osr.match_result);
         else
             ctx.tok = token<I>([: func
-                :](ctx.osr.res));
+                :](ctx.osr.match_result));
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool skip_current(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
+    static constexpr bool skip_current(context<I, 3> ctx, I it, const S last)
     {
         if (it == last) [[unlikely]]
         {
@@ -13275,30 +13282,34 @@ private:
         }
 
         if constexpr (generation::enabled)
-            ++ctx.osr.gen.current;
+            ++ctx.osr.generations.current;
 
         if constexpr (not stateful::has_continue)
         {
             if constexpr (DFA.flags.maybe_no_empty and not never_empty
                           and DFA.match_start != DFA.additional_continue_nodes.back())
             {
-                const bool empty{ ctx.osr.res.template force_get<0>().empty() };
-                ctx.osr.res.reset(it);
+                const bool empty{ ctx.osr.match_result.template force_get<0>().empty() };
+                ctx.osr.match_result.reset(it);
+                ctx.osr.fallback = saved_fallback{ it };
+
                 if (empty)
-                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(ctx, it, last, it);
+                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(ctx, it, last);
             }
             else
             {
-                ctx.osr.res.reset(it);
+                ctx.osr.match_result.reset(it);
+                ctx.osr.fallback = saved_fallback{ it };
             }
 
-            [[clang::musttail]] return initial_state<DFA.match_start>(ctx, it, last, it);
+            [[clang::musttail]] return initial_state<DFA.match_start>(ctx, it, last);
         }
         else if constexpr (DFA.flags.maybe_no_empty and not never_empty)
         {
             const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
-            const bool empty{ ctx.osr.res.template force_get<0>().empty() };
-            ctx.osr.res.reset(it);
+            const bool empty{ ctx.osr.match_result.template force_get<0>().empty() };
+            ctx.osr.match_result.reset(it);
+            ctx.osr.fallback = saved_fallback{ it };
 
             template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
@@ -13306,19 +13317,20 @@ private:
                 {
                     if constexpr (DFA.continue_nodes[i] != DFA.additional_continue_nodes[i])
                         if (empty)
-                            [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
-                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[i]>(ctx, it, last, it);
+                            [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last);
+                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[i]>(ctx, it, last);
                 }
             }
         }
         else
         {
             const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
-            ctx.osr.res.reset(it);
+            ctx.osr.match_result.reset(it);
+            ctx.osr.fallback = saved_fallback{ it };
 
             template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
                 if (i == state_info.continue_at)
-                    [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
+                    [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last);
         }
 
         return false;
@@ -13327,78 +13339,78 @@ private:
     /* end of input actions */
 
     template<std::size_t Alt, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    [[gnu::always_inline]] static constexpr bool success(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
+    [[gnu::always_inline]] static constexpr bool success(context<I, X> /* ctx */, I /* it */, const S /* last */)
         requires is_regex
     {
         return true;
     }
 
     template<std::size_t Alt, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool success(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool success(context<I, 3> ctx, I it, const S last)
         requires is_lexer
     {
         if constexpr (generation::enabled)
             clean_generations(ctx.osr);
-        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt]>(ctx, it, last, fallback);
+        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt]>(ctx, it, last);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    [[gnu::always_inline]] static constexpr bool failure(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
+    [[gnu::always_inline]] static constexpr bool failure(context<I, X> /* ctx */, I /* it */, const S /* last */)
         requires is_regex
     {
         return false;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool failure(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool failure(context<I, 3> ctx, I it, const S last)
         requires is_lexer
     {
         set_final<tdfa::no_transition_regops, 0>(ctx, it);
-        [[clang::musttail]] return lexer_action<[: Info :].error_action>(ctx, it, last, fallback);
+        [[clang::musttail]] return lexer_action<[: Info :].error_action>(ctx, it, last);
     }
 
     /* state fallback */
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
         requires (DFA.flags.enable_fallback)
-    static constexpr bool fallback_state(context<I, X> ctx, I it, const S last, fallback_info<I> fallback)
+    static constexpr bool fallback_state(context<I, X> ctx, I it, const S last)
     {
-        if (fallback.state == fallback_disabled)
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+        if (ctx.osr.fallback.state == fallback_disabled)
+            [[clang::musttail]] return failure(ctx, it, last);
 
         template for (constexpr auto& [state, fbni] : DFA.fallback_nodes)
         {
-            if (fallback.state == state)
+            if (ctx.osr.fallback.state == state)
             {
                 static constexpr auto fni = DFA.final_nodes.at(state);
                 if constexpr (not DFA.flags.return_bool)
                 {
-                    set_fallback<fbni.op_index, fni.offset, fbni.continue_at>(ctx, fallback.it);
-                    [[clang::musttail]] return success<fni.alternative>(ctx, fallback.it, last, fallback);
+                    set_fallback<fbni.op_index, fni.offset, fbni.continue_at>(ctx, ctx.osr.fallback.it);
+                    [[clang::musttail]] return success<fni.alternative>(ctx, ctx.osr.fallback.it, last);
                 }
                 else
                 {
-                    [[clang::musttail]] return success<fni.alternative>(ctx, it, last, fallback);
+                    [[clang::musttail]] return success<fni.alternative>(ctx, it, last);
                 }
             }
         }
 
-        [[clang::musttail]] return failure(ctx, it, last, fallback);
+        [[clang::musttail]] return failure(ctx, it, last);
     }
 
     /* next state functions */
 
     template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    static constexpr bool state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool state(context<I, X> ctx, I it, const S last)
     {
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
 
         if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
         {
-            fallback.state = DFAState;
+            ctx.osr.fallback.state = DFAState;
             if constexpr (not DFA.flags.return_bool)
-                fallback.it = it;
+                ctx.osr.fallback.it = it;
         }
 
         if (it != last)
@@ -13408,14 +13420,14 @@ private:
                 if (tr_possible<tr.cs>(*it))
                 {
                     register_operations<tr.op_index>(ctx, it);
-                    [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
+                    [[clang::musttail]] return state<tr.next>(ctx, ++it, last);
                 }
             }
 
             if constexpr (final_node != nullptr and DFA.flags.enable_fallback and fallback_node != nullptr)
             {
                 set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last);
             }
         }
         else
@@ -13426,27 +13438,27 @@ private:
                     set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
                 else
                     set_final<final_node->op_index, final_node->offset>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last);
             }
         }
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
-            [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
+            [[clang::musttail]] return fallback_state(ctx, it, last);
         else
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last);
     }
 
     template<std::size_t DFAState, std::bidirectional_iterator I, int X>
-    static constexpr bool state(context<I, X> ctx, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
+    static constexpr bool state(context<I, X> ctx, I it, const cstr_sentinel_t last)
     {
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
         static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
 
         if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
         {
-            fallback.state = DFAState;
+            ctx.osr.fallback.state = DFAState;
             if constexpr (not DFA.flags.return_bool)
-                fallback.it = it;
+                ctx.osr.fallback.it = it;
         }
 
         template for (constexpr auto& tr : DFA.nodes[DFAState])
@@ -13454,7 +13466,7 @@ private:
             if (tr_possible_exclude_null<tr.cs>(*it))
             {
                 register_operations<tr.op_index>(ctx, it);
-                [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
+                [[clang::musttail]] return state<tr.next>(ctx, ++it, last);
             }
         }
 
@@ -13463,30 +13475,30 @@ private:
             if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
                 set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last);
             }
             else
             {
                 if (it == last) [[likely]]
                 {
                     set_final<final_node->op_index, final_node->offset>(ctx, it);
-                    [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                    [[clang::musttail]] return success<final_node->alternative>(ctx, it, last);
                 }
             }
         }
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
-            [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
+            [[clang::musttail]] return fallback_state(ctx, it, last);
         else
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last);
     }
 
     template<std::size_t DFAState, std::size_t Count, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
-    static constexpr bool unchecked_state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool unchecked_state(context<I, X> ctx, I it, const S last)
     {
         if constexpr (Count == 0)
         {
-            [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
+            [[clang::musttail]] return state<DFAState>(ctx, it, last);
         }
         else
         {
@@ -13495,26 +13507,26 @@ private:
                 if (tr_possible<tr.cs>(*it))
                 {
                     register_operations<tr.op_index>(ctx, it);
-                    [[clang::musttail]] return unchecked_state<tr.next, Count - 1>(ctx, ++it, last, fallback);
+                    [[clang::musttail]] return unchecked_state<tr.next, Count - 1>(ctx, ++it, last);
                 }
             }
 
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last);
         }
     }
 
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
-    static constexpr bool unchecked_state_skip(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool unchecked_state_skip(context<I, X> ctx, I it, const S last)
     {
         if constexpr (sequence_helper<Skip>::empty or Count == 0 or DFA.nodes[DFAState].size() != 1)
         {
-            [[clang::musttail]] return unchecked_state<DFAState, Count>(ctx, it, last, fallback);
+            [[clang::musttail]] return unchecked_state<DFAState, Count>(ctx, it, last);
         }
         else if constexpr (Count == sequence_helper<Skip>::head)
         {
             static constexpr auto tr = DFA.nodes[DFAState].front();
             register_operations<tr.op_index>(ctx, it);
-            [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(ctx, ++it, last, fallback);
+            [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(ctx, ++it, last);
         }
         else
         {
@@ -13522,37 +13534,37 @@ private:
             if (tr_possible<tr.cs>(*it))
             {
                 register_operations<tr.op_index>(ctx, it);
-                [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, Skip>(ctx, ++it, last, fallback);
+                [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, Skip>(ctx, ++it, last);
             }
 
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            [[clang::musttail]] return failure(ctx, it, last);
         }
     }
 
     /* next state function entry point */
 
     template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    static constexpr bool initial_state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    static constexpr bool initial_state(context<I, X> ctx, I it, const S last)
     {
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
         if constexpr (not std::sized_sentinel_for<S, I> or (DFA.flags.is_search and not DFA.flags.adapted_search))
         {
             /* note: searches are very likely to exceed min_length, so prefer reduced code duplication instead */
-            [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
+            [[clang::musttail]] return state<DFAState>(ctx, it, last);
         }
         else if constexpr (fixed_length and not DFA.flags.enable_fallback)
         {
             if (std::ranges::distance(it, last) == min_length)
-                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
+                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last);
         }
         else
         {
             if (std::ranges::distance(it, last) >= min_length)
-                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
+                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last);
         }
 
-        [[clang::musttail]] return failure(ctx, it, last, it);
+        [[clang::musttail]] return failure(ctx, it, last);
     }
 
     /* outer dfa next state functions  */
@@ -13561,11 +13573,12 @@ private:
     static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
     {
         if constexpr (generation::enabled)
-            ++ctx.osr.gen.current;
+            ++ctx.osr.generations.current;
 
         if (it != last)
         {
-            if (state<DFAState>(ctx, it, last, it))
+            ctx.osr.fallback = saved_fallback{ it };
+            if (state<DFAState>(ctx, it, last))
             {
                 if constexpr (X != 0 and result<I>::has_match_start)
                     ctx.get_res().match_start_ = it;
@@ -13595,13 +13608,14 @@ private:
     static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
     {
         if constexpr (generation::enabled)
-            ++ctx.osr.gen.current;
+            ++ctx.osr.generations.current;
 
         static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
 
         if (std::ranges::distance(it, last) >= min_length)
         {
-            if (unchecked_state<DFAState, min_length>(ctx, it, last, it))
+            ctx.osr.fallback = saved_fallback{ it };
+            if (unchecked_state<DFAState, min_length>(ctx, it, last))
             {
                 if constexpr (X != 0 and result<I>::has_match_start)
                     ctx.get_res().match_start_ = it;
@@ -13637,9 +13651,10 @@ private:
         while (std::ranges::distance(it, last) >= min_length)
         {
             if constexpr (generation::enabled)
-                ++ctx.osr.gen.current;
+                ++ctx.osr.generations.current;
 
-            if (unchecked_state<DFAState, min_length>(ctx, it, last, it))
+            ctx.osr.fallback = saved_fallback{ it };
+            if (unchecked_state<DFAState, min_length>(ctx, it, last))
             {
                 if constexpr (X != 0 and result<I>::has_match_start)
                     ctx.get_res().match_start_ = it;
@@ -13666,7 +13681,8 @@ private:
         {
             std::ranges::advance(it, input_size - length);
 
-            if (unchecked_state<DFAState, length>(ctx, it, last, it))
+            ctx.osr.fallback = saved_fallback{ it };
+            if (unchecked_state<DFAState, length>(ctx, it, last))
             {
                 if constexpr (X != 0 and result<I>::has_match_start)
                     ctx.get_res().match_start_ = it;
@@ -13692,7 +13708,8 @@ private:
             const auto offset = std::countr_zero(mask);
             mask &= (mask - 1);
 
-            if (unchecked_state_skip<DFAState, Count, Skip>(ctx, it + offset, last, it + offset))
+            ctx.osr.fallback = saved_fallback{ it + offset };
+            if (unchecked_state_skip<DFAState, Count, Skip>(ctx, it + offset, last))
             {
                 if constexpr (X != 0 and result<I>::has_match_start)
                     ctx.get_res().match_start_ = it + offset;
@@ -13701,7 +13718,7 @@ private:
             else
             {
                 if constexpr (generation::enabled)
-                    ++ctx.osr.gen.current;
+                    ++ctx.osr.generations.current;
             }
         }
 
@@ -13875,10 +13892,12 @@ public:
         requires regex_return_bool and stateful::is_stateless
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
+        overspill<I> osp{ first };
+
         if constexpr (DFA.flags.adapted_search)
-            return outer_state<DFA.match_start>(context<I, 0>{}, first, last);
+            return outer_state<DFA.match_start>(context{ osp }, first, last);
         else
-            return initial_state<DFA.match_start>(context<I, 0>{}, first, last, first);
+            return initial_state<DFA.match_start>(context{ osp }, first, last);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -13886,12 +13905,12 @@ public:
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last)
     {
         result<I> res{ first };
-        overspill<I> osp{};
+        overspill<I> osp{ first };
 
         if constexpr (DFA.flags.adapted_search)
             outer_state<DFA.match_start>(context{ res, osp }, first, last);
         else
-            initial_state<DFA.match_start>(context{ res, osp }, first, last, first);
+            initial_state<DFA.match_start>(context{ res, osp }, first, last);
 
         if constexpr (generation::enabled)
             clean_generations(res, osp);
@@ -13903,7 +13922,7 @@ public:
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, match_non_empty_t)
     {
         result<I> res{ first };
-        overspill<I> osp{};
+        overspill<I> osp{ first };
 
         static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
 
@@ -13930,8 +13949,8 @@ public:
             return tok;
         }
 
-        initial_state<DFA.match_start>(context{ tok, osp }, first, last, first);
-        first = osp.res.match_end_;
+        initial_state<DFA.match_start>(context{ tok, osp }, first, last);
+        first = osp.match_result.match_end_;
         return tok;
     }
 
@@ -13952,17 +13971,17 @@ public:
         {
             if (i == continue_at)
             {
-                initial_state<DFA.continue_nodes[i]>(context{ tok, osp }, first, last, first);
+                initial_state<DFA.continue_nodes[i]>(context{ tok, osp }, first, last);
 #ifndef __GNUC_MINOR__
                 break;
 #else
-                first = osp.res.match_end_;
+                first = osp.match_result.match_end_;
                 return tok;
 #endif
             }
         }
 
-        first = osp.res.match_end_;
+        first = osp.match_result.match_end_;
         return tok;
     }
 
@@ -13982,7 +14001,7 @@ public:
         }
 
         initial_state<start_state>(context{ tok, osp }, first, last, first);
-        first = osp.res.match_end_;
+        first = osp.match_result.match_end_;
         return tok;
     }
 
@@ -14008,13 +14027,13 @@ public:
 #ifndef __GNUC_MINOR__
                 break;
 #else
-                first = osp.res.match_end_;
+                first = osp.match_result.match_end_;
                 return tok;
 #endif
             }
         }
 
-        first = osp.res.match_end_;
+        first = osp.match_result.match_end_;
         return tok;
     }
 };
@@ -14101,12 +14120,12 @@ private:
         static constexpr bool use_alt{ NonEmptyMatch and not never_empty };
         static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes.back() : DFA.match_start };
 
-        overspill<I> osp{};
+        overspill<I> osp{ first };
 
         if constexpr (DFA.flags.adapted_search)
             outer_state<start_state>(context{ *this, osp }, first, last);
         else
-            initial_state<start_state>(context{ *this, osp }, first, last, first);
+            initial_state<start_state>(context{ *this, osp }, first, last);
 
         if constexpr (generation::enabled)
             clean_generations(res, osp);
@@ -14123,7 +14142,7 @@ private:
         {
             static constexpr bool use_alt{ NonEmptyMatch and not never_empty };
             const stateful state_info{ std::exchange(stf, {}) };
-            overspill<I> osp{};
+            overspill<I> osp{ first };
 
             template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
@@ -14134,7 +14153,7 @@ private:
                     if constexpr (DFA.flags.adapted_search)
                         outer_state<start_state>(context{ *this, osp }, first, last);
                     else
-                        initial_state<start_state>(context{ *this, osp }, first, last, first);
+                        initial_state<start_state>(context{ *this, osp }, first, last);
 #ifndef __GNUC_MINOR__
                     break;
 #else
