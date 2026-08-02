@@ -12771,7 +12771,7 @@ consteval auto get_edge_scores(const tdfa_info<CharT>& dfa, const std::span<cons
                              else
                              {
                                  charset<CharT> cs;
-                                 for (const auto tr : dfa.nodes[q])
+                                 for (const auto& tr : dfa.nodes[q])
                                      cs |= tr.cs;
                                  const bool should_invert{ cs.should_invert() };
                                  return std::pair{ make_optimised_edges(cs, should_invert), should_invert };
@@ -13129,35 +13129,19 @@ private:
 
     /* post-match register cleaning */
 
-    template<std::bidirectional_iterator I>
-    static constexpr void clean_generations(result<I>& res, const overspill<I, false>& osp)
-        requires generation::enabled
+    template<std::bidirectional_iterator I, int X>
+    static constexpr void clean_generations(context<I, X> ctx)
+        requires generation::enabled and (X != 0)
     {
         if constexpr (std::contiguous_iterator<I>)
         {
             for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                res.reg_[i] = (osp.generations.reg[i] == osp.generations.current) ? res.reg_[i] : I{};
+                ctx.get_res().reg_[i] = (ctx.osr.generations.reg[i] == ctx.osr.generations.current) ? ctx.get_res().reg_[i] : I{};
         }
         else
         {
             for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                res.enabled_[i] = (osp.generations.reg[i] == osp.generations.current);
-        }
-    }
-
-    template<std::bidirectional_iterator I>
-    static constexpr void clean_generations(overspill<I, true>& osp)
-        requires generation::enabled
-    {
-        if constexpr (std::contiguous_iterator<I>)
-        {
-            for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                osp.match_result.reg_[i] = (osp.generations.reg[i] == osp.generations.current) ? osp.match_result.reg_[i] : I{};
-        }
-        else
-        {
-            for (std::size_t i{ 0 }; i < DFA.register_count; ++i)
-                osp.match_result.enabled_[i] = (osp.generations.reg[i] == osp.generations.current);
+                ctx.get_res().enabled_[i] = (ctx.osr.generations.reg[i] == ctx.osr.generations.current);
         }
     }
 
@@ -13230,116 +13214,135 @@ private:
 
     /* lexer actions */
 
-    template<std::meta::info Action, std::bidirectional_iterator I, std::sentinel_for<I> S>
+    template<std::meta::info Action, tdfa::continue_at_t Cont, bool Success, std::bidirectional_iterator I, std::sentinel_for<I> S>
     static constexpr bool lexer_action(context<I, 3> ctx, I it, const S end, maybe_fallback_t<I> fallback)
     {
-        static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(Action), ^^result<I> }) };
+        static constexpr auto func = substitute(^^exec_lexer_action, { reflect_constant(Action), ^^result<I> });
+        static constexpr auto ret = return_type_of(func);
 
-        if constexpr (return_type_of(func) == ^^void)
+        if constexpr (not is_same_type(ret, ^^void))
         {
-            /* void should be returned to continue */
-            [: func :](ctx.osr.match_result);
-            [[clang::musttail]] return skip_current(ctx, it, end, fallback);
-        }
-        else
-        {
-            ctx.tok = token<I>([: func
-                :](ctx.osr.match_result));
+            if constexpr (is_convertible_type(ret, ^^token<I>))
+                ctx.tok = [: func :](ctx.osr.match_result);
+            else if constexpr (is_constructible_type(^^token<I>, { ret }))
+                ctx.tok = token<I>([: func
+                    :](ctx.osr.match_result));
+            else
+                static_assert("Invalid lexer action: cannot assign result of lexer action to token");
+
             return true;
         }
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr void token_end_of_input(context<I, 3> ctx, I it, const S /* last */)
-    {
-        /* note: similar to lexer_action but always returns */
-        static constexpr auto action = [: Info :].eof_action;
-        static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(action), ^^result<I> }) };
-
-        set_final<tdfa::no_transition_regops, 0>(ctx, it);
-
-        if constexpr (return_type_of(func) == ^^void)
-            [: func :](ctx.osr.match_result);
         else
-            ctx.tok = token<I>([: func
-                :](ctx.osr.match_result));
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool skip_current(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
-    {
-        if (it == last) [[unlikely]]
         {
-            token_end_of_input(ctx, it, last);
-            return false;
-        }
+            [: func :](ctx.osr.match_result);
 
-        if constexpr (generation::enabled)
-            ++ctx.osr.generations.current;
-
-        if constexpr (not stateful::has_continue)
-        {
-            if constexpr (DFA.flags.maybe_no_empty and not never_empty
-                          and DFA.match_start != DFA.additional_continue_nodes.back())
+            if constexpr (Cont != tdfa::no_continue)
             {
-                const bool empty{ ctx.osr.match_result.template force_get<0>().empty() };
-                ctx.osr.match_result.reset(it);
-                if (empty)
-                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(ctx, it, last, it);
+                [[clang::musttail]] return lexer_continue<Cont>(ctx, it, end, fallback);
+            }
+            else if constexpr (not Success)
+            {
+                [[clang::musttail]] return lexer_restart(ctx, it, end, fallback);
             }
             else
             {
+                /* succeeded with no continue: eof reached */
+                ctx.osr.state = stateful{};
                 ctx.osr.match_result.reset(it);
-            }
-
-            [[clang::musttail]] return initial_state<DFA.match_start>(ctx, it, last, it);
-        }
-        else if constexpr (DFA.flags.maybe_no_empty and not never_empty)
-        {
-            const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
-            const bool empty{ ctx.osr.match_result.template force_get<0>().empty() };
-            ctx.osr.match_result.reset(it);
-
-            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
-            {
-                if (i == state_info.continue_at)
-                {
-                    if constexpr (DFA.continue_nodes[i] != DFA.additional_continue_nodes[i])
-                        if (empty)
-                            [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
-                    [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[i]>(ctx, it, last, it);
-                }
+                lexer_eof(ctx, it, end);
+                return true;
             }
         }
-        else
-        {
-            const stateful state_info{ std::exchange(ctx.osr.stf, {}) };
-            ctx.osr.match_result.reset(it);
-
-            template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
-                if (i == state_info.continue_at)
-                    [[clang::musttail]] return initial_state<DFA.continue_nodes[i]>(ctx, it, last, it);
-        }
-
-        return false;
     }
 
-    /* end of input actions */
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr void lexer_eof(context<I, 3> ctx, I it, const S /* last */)
+        requires is_lexer
+    {
+        /* note: similar to lexer_action but never restarts matching */
+        static constexpr auto action = [: Info :].eof_action;
+        static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(action), ^^result<I> }) };
+        static constexpr auto ret = return_type_of(func);
 
-    template<std::size_t Alt, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+        set_final<tdfa::no_transition_regops, 0>(ctx, it);
+
+        if constexpr (is_same_type(ret, ^^void))
+            [: func :](ctx.osr.match_result);
+        else if constexpr (is_convertible_type(ret, ^^token<I>))
+            ctx.tok = [: func :](ctx.osr.match_result);
+        else if constexpr (is_constructible_type(^^token<I>, ret))
+            ctx.tok = token<I>([: func
+                :](ctx.osr.match_result));
+        else
+            static_assert("Invalid lexer action: cannot assign result of lexer action to token");
+    }
+
+    template<tdfa::continue_at_t Cont, std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr bool lexer_continue(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
+        requires is_lexer
+    {
+        static constexpr bool use_alt{ not never_empty and (DFA.continue_nodes[Cont] != DFA.additional_continue_nodes[Cont]) };
+        maybe_type_t<use_alt, bool> empty{};
+
+        if constexpr (use_alt)
+            empty = ctx.osr.match_result.template force_get<0>().empty();
+
+        ctx.osr.state = stateful{};
+        ctx.osr.match_result.reset(it);
+
+        if (it == last) [[unlikely]]
+        {
+            lexer_eof(ctx, it, last);
+            return false;
+        }
+
+        if constexpr (use_alt)
+            if (empty)
+                [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[Cont]>(ctx, it, last, it);
+        [[clang::musttail]] return initial_state<DFA.continue_nodes[Cont]>(ctx, it, last, it);
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr bool lexer_restart(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
+        requires is_lexer
+    {
+        static constexpr bool use_alt{ not never_empty and (DFA.match_start != DFA.additional_continue_nodes.back()) };
+        maybe_type_t<use_alt, bool> empty{};
+
+        if constexpr (use_alt)
+            empty = ctx.osr.match_result.template force_get<0>().empty();
+
+        ctx.osr.state = stateful{};
+        ctx.osr.match_result.reset(it);
+
+        if (it == last) [[unlikely]]
+        {
+            lexer_eof(ctx, it, last);
+            return false;
+        }
+
+        if constexpr (use_alt)
+            if (empty)
+                [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(ctx, it, last, it);
+        [[clang::musttail]] return initial_state<DFA.match_start>(ctx, it, last, it);
+    }
+
+    /* success / failure actions */
+
+    template<std::size_t Alt, tdfa::continue_at_t Cont, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
     [[gnu::always_inline]] static constexpr bool success(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
         requires is_regex
     {
         return true;
     }
 
-    template<std::size_t Alt, std::bidirectional_iterator I, std::sentinel_for<I> S>
+    template<std::size_t Alt, tdfa::continue_at_t Cont, std::bidirectional_iterator I, std::sentinel_for<I> S>
     static constexpr bool success(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
         if constexpr (generation::enabled)
-            clean_generations(ctx.osr);
-        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt]>(ctx, it, last, fallback);
+            clean_generations(ctx);
+        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt], Cont, true>(ctx, it, last, fallback);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
@@ -13353,8 +13356,14 @@ private:
     static constexpr bool failure(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
         requires is_lexer
     {
+        if constexpr (generation::enabled)
+        {
+            ++ctx.osr.generations.current; /* clear submatches */
+            clean_generations(ctx);
+        }
+
         set_final<tdfa::no_transition_regops, 0>(ctx, it);
-        [[clang::musttail]] return lexer_action<[: Info :].error_action>(ctx, it, last, fallback);
+        [[clang::musttail]] return lexer_action<[: Info :].error_action, tdfa::no_continue, false>(ctx, it, last, fallback);
     }
 
     /* state fallback */
@@ -13374,11 +13383,11 @@ private:
                 if constexpr (not DFA.flags.return_bool)
                 {
                     set_fallback<fbni.op_index, fni.offset, fbni.continue_at>(ctx, fallback.it);
-                    [[clang::musttail]] return success<fni.alternative>(ctx, fallback.it, last, fallback);
+                    [[clang::musttail]] return success<fni.alternative, fbni.continue_at>(ctx, fallback.it, last, fallback);
                 }
                 else
                 {
-                    [[clang::musttail]] return success<fni.alternative>(ctx, it, last, fallback);
+                    [[clang::musttail]] return success<fni.alternative, fbni.continue_at>(ctx, it, last, fallback);
                 }
             }
         }
@@ -13411,23 +13420,20 @@ private:
                     [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
                 }
             }
-
-            if constexpr (final_node != nullptr and DFA.flags.enable_fallback and fallback_node != nullptr)
-            {
-                set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
-            }
         }
         else
         {
-            if constexpr (final_node != nullptr)
+            if constexpr (final_node != nullptr and not (DFA.flags.enable_fallback and fallback_node != nullptr))
             {
-                if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
-                    set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                else
-                    set_final<final_node->op_index, final_node->offset>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                set_final<final_node->op_index, final_node->offset>(ctx, it);
+                [[clang::musttail]] return success<final_node->alternative, tdfa::no_continue>(ctx, it, last, fallback);
             }
+        }
+
+        if constexpr (final_node != nullptr and (DFA.flags.enable_fallback and fallback_node != nullptr))
+        {
+            set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
+            [[clang::musttail]] return success<final_node->alternative, fallback_node->continue_at>(ctx, it, last, fallback);
         }
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
@@ -13463,14 +13469,14 @@ private:
             if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
                 set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                [[clang::musttail]] return success<final_node->alternative, fallback_node->continue_at>(ctx, it, last, fallback);
             }
             else
             {
                 if (it == last) [[likely]]
                 {
                     set_final<final_node->op_index, final_node->offset>(ctx, it);
-                    [[clang::musttail]] return success<final_node->alternative>(ctx, it, last, fallback);
+                    [[clang::musttail]] return success<final_node->alternative, tdfa::no_continue>(ctx, it, last, fallback);
                 }
             }
         }
@@ -13512,13 +13518,13 @@ private:
         }
         else if constexpr (Count == sequence_helper<Skip>::head)
         {
-            static constexpr auto tr = DFA.nodes[DFAState].front();
+            static constexpr auto& tr = DFA.nodes[DFAState].front();
             register_operations<tr.op_index>(ctx, it);
             [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, typename sequence_helper<Skip>::tail>(ctx, ++it, last, fallback);
         }
         else
         {
-            static constexpr auto tr = DFA.nodes[DFAState].front();
+            static constexpr auto& tr = DFA.nodes[DFAState].front();
             if (tr_possible<tr.cs>(*it))
             {
                 register_operations<tr.op_index>(ctx, it);
@@ -13864,15 +13870,9 @@ private:
             return scalar_outer_state<DFAState>(ctx, it, last);
     }
 
-    static constexpr bool regex_return_bool{ is_regex and DFA.flags.return_bool };
-    static constexpr bool regex_normal{ is_regex and not DFA.flags.return_bool };
-    static constexpr bool regex_nonempty{ regex_normal and DFA.flags.maybe_no_empty };
-    static constexpr bool lexer_normal{ is_lexer };
-    static constexpr bool lexer_nonempty{ lexer_normal and DFA.flags.maybe_no_empty };
-
 public:
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_return_bool and stateful::is_stateless
+        requires is_regex and (DFA.flags.return_bool) and stateful::is_stateless
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         if constexpr (DFA.flags.adapted_search)
@@ -13882,7 +13882,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_normal and stateful::is_stateless
+        requires is_regex and (not DFA.flags.return_bool) and stateful::is_stateless
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last)
     {
         result<I> res{ first };
@@ -13894,31 +13894,12 @@ public:
             initial_state<DFA.match_start>(context{ res, osp }, first, last, first);
 
         if constexpr (generation::enabled)
-            clean_generations(res, osp);
+            clean_generations(context{ res, osp });
         return res;
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires regex_nonempty and stateful::is_stateless
-    [[nodiscard]] static constexpr result<I> operator()(const I first, const S last, match_non_empty_t)
-    {
-        result<I> res{ first };
-        overspill<I> osp{};
-
-        static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
-
-        if constexpr (DFA.flags.adapted_search)
-            outer_state<start_state>(context{ res, osp }, first, last);
-        else
-            initial_state<start_state>(context{ res, osp }, first, last, first);
-
-        if constexpr (generation::enabled)
-            clean_generations(res, osp);
-        return res;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires lexer_normal and stateful::is_stateless
+        requires is_lexer and stateful::is_stateless
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last)
     {
         token<I> tok;
@@ -13926,94 +13907,11 @@ public:
 
         if (first == last) [[unlikely]]
         {
-            token_end_of_input(context{ tok, osp }, first, last);
+            lexer_eof(context{ tok, osp }, first, last);
             return tok;
         }
 
         initial_state<DFA.match_start>(context{ tok, osp }, first, last, first);
-        first = osp.match_result.match_end_;
-        return tok;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires lexer_normal and result<I>::has_continue
-    [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, const tdfa::continue_at_t continue_at)
-    {
-        token<I> tok;
-        overspill<I, true> osp{ first };
-
-        if (first == last) [[unlikely]]
-        {
-            token_end_of_input(context{ tok, osp }, first, last);
-            return tok;
-        }
-
-        template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
-        {
-            if (i == continue_at)
-            {
-                initial_state<DFA.continue_nodes[i]>(context{ tok, osp }, first, last, first);
-#ifndef __GNUC_MINOR__
-                break;
-#else
-                first = osp.match_result.match_end_;
-                return tok;
-#endif
-            }
-        }
-
-        first = osp.match_result.match_end_;
-        return tok;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires lexer_nonempty and stateful::is_stateless
-    [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, match_non_empty_t)
-    {
-        static constexpr auto start_state{ never_empty ? DFA.match_start : DFA.additional_continue_nodes.back() };
-
-        token<I> tok;
-        overspill<I, true> osp{ first };
-
-        if (first == last) [[unlikely]]
-        {
-            token_end_of_input(context{ tok, osp }, first, last);
-            return tok;
-        }
-
-        initial_state<start_state>(context{ tok, osp }, first, last, first);
-        first = osp.match_result.match_end_;
-        return tok;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires lexer_nonempty and result<I>::has_continue
-    [[nodiscard]] static constexpr token<I> operator()(I& first, const S last, const tdfa::continue_at_t continue_at, match_non_empty_t)
-    {
-        token<I> tok;
-        overspill<I, true> osp{ first };
-
-        if (first == last) [[unlikely]]
-        {
-            token_end_of_input(context{ tok, osp }, first, last);
-            return tok;
-        }
-
-        template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
-        {
-            if (i == continue_at)
-            {
-                static constexpr auto start_state{ never_empty ? DFA.continue_nodes[i] : DFA.additional_continue_nodes[i] };
-                initial_state<start_state>(context{ tok, osp }, first, last, first);
-#ifndef __GNUC_MINOR__
-                break;
-#else
-                first = osp.match_result.match_end_;
-                return tok;
-#endif
-            }
-        }
-
         first = osp.match_result.match_end_;
         return tok;
     }
@@ -14109,7 +14007,7 @@ private:
             initial_state<start_state>(context{ *this, osp }, first, last, first);
 
         if constexpr (generation::enabled)
-            clean_generations(res, osp);
+            clean_generations(context{ *this, osp });
     }
 
     template<bool NonEmptyMatch = false>
@@ -14139,14 +14037,14 @@ private:
                     break;
 #else
                     if constexpr (generation::enabled)
-                        clean_generations(res, osp);
+                        clean_generations(context{ *this, osp });
                     return;
 #endif
                 }
             }
 
             if constexpr (generation::enabled)
-                clean_generations(res, osp);
+                clean_generations(context{ *this, osp });
             return;
         }
     }
