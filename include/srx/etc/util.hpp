@@ -24,13 +24,10 @@ struct overloads : Ts... { using Ts::operator()...; };
 template<typename T, typename... Ts>
 concept one_of = (std::same_as<T, Ts> or ...);
 
-template<typename T, typename U>
-concept not_same_as = (not std::same_as<T, U>);
-
 template<typename CharT>
 concept character = one_of<CharT, char, wchar_t, char8_t, char16_t, char32_t>;
 
-consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta::info templ)
+consteval bool is_template_instantiation_of_type(std::meta::info type, std::meta::info templ)
 {
     if (not is_type(type) or not is_class_template(templ))
         return false;
@@ -42,22 +39,22 @@ consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta
 }
 
 template<typename T, template<typename...> typename Template>
-concept template_instantiation_of = is_template_instantiation_of_impl(^^T, ^^Template);
+concept template_instantiation_of = is_template_instantiation_of_type(^^T, ^^Template);
 
-consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
+consteval bool in_variant_type(std::meta::info type, std::meta::info variant)
 {
-    if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+    if (not is_template_instantiation_of_type(dealias(variant), ^^std::variant))
         throw std::invalid_argument("in_variant_impl: variant is not an instantiation of std::variant");
 
     return std::ranges::contains(template_arguments_of(dealias(variant)), dealias(type), std::meta::dealias);
 }
 
 template<typename T, typename Variant>
-concept in_variant = in_variant_impl(^^T, ^^Variant);
+concept in_variant = in_variant_type(^^T, ^^Variant);
 
 consteval std::size_t index_in_variant(std::meta::info type, std::meta::info variant)
 {
-    if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+    if (not is_template_instantiation_of_type(dealias(variant), ^^std::variant))
         throw std::invalid_argument("index_in_variant: variant is not an instantiation of std::variant");
 
     const auto vartypes = template_arguments_of(dealias(variant));
@@ -100,7 +97,7 @@ struct sequence_helper<std::integer_sequence<T, Head, Tail...>>
 };
 
 template<typename T>
-concept integer_sequence_like = is_template_instantiation_of_impl(^^T, ^^std::integer_sequence);
+concept integer_sequence_like = is_template_instantiation_of_type(^^T, ^^std::integer_sequence);
 
 
 namespace hash {
@@ -168,10 +165,10 @@ inline constexpr cstr_sentinel_t cstr_sentinel;
 struct terminal_object
 {
     template<typename... Ts>
-    constexpr explicit(false) terminal_object(Ts&&...) {}
+    [[gnu::always_inline]] constexpr explicit(false) terminal_object(Ts&&...) noexcept {}
 
-    template<not_same_as<terminal_object> T>
-    constexpr terminal_object& operator=(T&&) { return *this; }
+    template<typename T>
+    [[gnu::always_inline]] constexpr terminal_object& operator=(T&&) noexcept { return *this; }
 };
 
 template<bool Enabled, typename T>
@@ -179,6 +176,39 @@ using maybe_type_t = std::conditional_t<Enabled, T, terminal_object>;
 
 template<bool Const, typename T>
 using maybe_const_t = std::conditional_t<Const, const T, T>;
+
+
+consteval bool nontrivial_abi_type(std::meta::info type)
+{
+    /* Itanium ABI: non-trivial for the purposes of calls */
+    return ((is_copy_constructible_type(type) and not is_trivially_copy_constructible_type(type))
+             or (is_move_constructible_type(type) and not is_trivially_move_constructible_type(type))
+             or (is_destructible_type(type) and not is_trivially_destructible_type(type)))
+            or (not is_copy_constructible_type(type) and not is_move_constructible_type(type));
+}
+
+template<typename T>
+concept nontrivial_abi = nontrivial_abi_type(^^T);
+
+consteval auto can_tailcall_with_type(std::meta::info type)
+{
+    if (not is_object_type(type))
+        return true;
+
+    if (is_scalar_type(type))
+        return true;
+
+    if (is_array_type(type))
+        return false;
+
+    if (is_class_type(type) or is_union_type(type))
+        return not nontrivial_abi_type(type);
+
+    return true;
+}
+
+template<typename T>
+concept can_tailcall_with = can_tailcall_with_type(^^T);
 
 } // namespace detail
 } // namespace srx

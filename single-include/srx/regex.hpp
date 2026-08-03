@@ -442,13 +442,10 @@ struct overloads : Ts... { using Ts::operator()...; };
 template<typename T, typename... Ts>
 concept one_of = (std::same_as<T, Ts> or ...);
 
-template<typename T, typename U>
-concept not_same_as = (not std::same_as<T, U>);
-
 template<typename CharT>
 concept character = one_of<CharT, char, wchar_t, char8_t, char16_t, char32_t>;
 
-consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta::info templ)
+consteval bool is_template_instantiation_of_type(std::meta::info type, std::meta::info templ)
 {
     if (not is_type(type) or not is_class_template(templ))
         return false;
@@ -460,22 +457,22 @@ consteval bool is_template_instantiation_of_impl(std::meta::info type, std::meta
 }
 
 template<typename T, template<typename...> typename Template>
-concept template_instantiation_of = is_template_instantiation_of_impl(^^T, ^^Template);
+concept template_instantiation_of = is_template_instantiation_of_type(^^T, ^^Template);
 
-consteval bool in_variant_impl(std::meta::info type, std::meta::info variant)
+consteval bool in_variant_type(std::meta::info type, std::meta::info variant)
 {
-    if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+    if (not is_template_instantiation_of_type(dealias(variant), ^^std::variant))
         throw std::invalid_argument("in_variant_impl: variant is not an instantiation of std::variant");
 
     return std::ranges::contains(template_arguments_of(dealias(variant)), dealias(type), std::meta::dealias);
 }
 
 template<typename T, typename Variant>
-concept in_variant = in_variant_impl(^^T, ^^Variant);
+concept in_variant = in_variant_type(^^T, ^^Variant);
 
 consteval std::size_t index_in_variant(std::meta::info type, std::meta::info variant)
 {
-    if (not is_template_instantiation_of_impl(dealias(variant), ^^std::variant))
+    if (not is_template_instantiation_of_type(dealias(variant), ^^std::variant))
         throw std::invalid_argument("index_in_variant: variant is not an instantiation of std::variant");
 
     const auto vartypes = template_arguments_of(dealias(variant));
@@ -516,7 +513,7 @@ struct sequence_helper<std::integer_sequence<T, Head, Tail...>>
 };
 
 template<typename T>
-concept integer_sequence_like = is_template_instantiation_of_impl(^^T, ^^std::integer_sequence);
+concept integer_sequence_like = is_template_instantiation_of_type(^^T, ^^std::integer_sequence);
 
 namespace hash {
 
@@ -580,10 +577,10 @@ inline constexpr cstr_sentinel_t cstr_sentinel;
 struct terminal_object
 {
     template<typename... Ts>
-    constexpr explicit(false) terminal_object(Ts&&...) {}
+    [[gnu::always_inline]] constexpr explicit(false) terminal_object(Ts&&...) noexcept {}
 
-    template<not_same_as<terminal_object> T>
-    constexpr terminal_object& operator=(T&&) { return *this; }
+    template<typename T>
+    [[gnu::always_inline]] constexpr terminal_object& operator=(T&&) noexcept { return *this; }
 };
 
 template<bool Enabled, typename T>
@@ -591,6 +588,38 @@ using maybe_type_t = std::conditional_t<Enabled, T, terminal_object>;
 
 template<bool Const, typename T>
 using maybe_const_t = std::conditional_t<Const, const T, T>;
+
+consteval bool nontrivial_abi_type(std::meta::info type)
+{
+    /* Itanium ABI: non-trivial for the purposes of calls */
+    return ((is_copy_constructible_type(type) and not is_trivially_copy_constructible_type(type))
+             or (is_move_constructible_type(type) and not is_trivially_move_constructible_type(type))
+             or (is_destructible_type(type) and not is_trivially_destructible_type(type)))
+            or (not is_copy_constructible_type(type) and not is_move_constructible_type(type));
+}
+
+template<typename T>
+concept nontrivial_abi = nontrivial_abi_type(^^T);
+
+consteval auto can_tailcall_with_type(std::meta::info type)
+{
+    if (not is_object_type(type))
+        return true;
+
+    if (is_scalar_type(type))
+        return true;
+
+    if (is_array_type(type))
+        return false;
+
+    if (is_class_type(type) or is_union_type(type))
+        return not nontrivial_abi_type(type);
+
+    return true;
+}
+
+template<typename T>
+concept can_tailcall_with = can_tailcall_with_type(^^T);
 
 }
 }
@@ -12995,6 +13024,34 @@ private:
                                         and DFA.min_max_lengths.first == DFA.min_max_lengths.second };
     static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
 
+    static consteval bool has_different_alt(tdfa::continue_at_t continue_at = tdfa::no_continue)
+    {
+        if (never_empty)
+            return false;
+        else if (continue_at == tdfa::no_continue)
+            return DFA.match_start != DFA.additional_continue_nodes.back();
+        else
+            return DFA.continue_nodes[continue_at] != DFA.additional_continue_nodes[continue_at];
+    }
+
+    static consteval std::size_t get_start(tdfa::continue_at_t continue_at = tdfa::no_continue, bool use_alt = false)
+    {
+        if (continue_at == tdfa::no_continue)
+        {
+            if (use_alt and not never_empty)
+                return DFA.additional_continue_nodes.back();
+            else
+                return DFA.match_start;
+        }
+        else
+        {
+            if (use_alt and not never_empty)
+                return DFA.additional_continue_nodes[continue_at];
+            else
+                return DFA.continue_nodes[continue_at];
+        }
+    }
+
 public:
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
@@ -13236,13 +13293,9 @@ private:
         {
             [: func :](ctx.osr.match_result);
 
-            if constexpr (Cont != tdfa::no_continue)
+            if constexpr (Cont != tdfa::no_continue or not Success)
             {
                 [[clang::musttail]] return lexer_continue<Cont>(ctx, it, end, fallback);
-            }
-            else if constexpr (not Success)
-            {
-                [[clang::musttail]] return lexer_restart(ctx, it, end, fallback);
             }
             else
             {
@@ -13281,10 +13334,10 @@ private:
     static constexpr bool lexer_continue(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
         requires is_lexer
     {
-        static constexpr bool use_alt{ not never_empty and (DFA.continue_nodes[Cont] != DFA.additional_continue_nodes[Cont]) };
-        maybe_type_t<use_alt, bool> empty{};
+        static constexpr bool track_empty{ has_different_alt(Cont) };
+        maybe_type_t<track_empty, bool> empty{};
 
-        if constexpr (use_alt)
+        if constexpr (track_empty)
             empty = ctx.osr.match_result.template force_get<0>().empty();
 
         ctx.osr.state = stateful{};
@@ -13296,35 +13349,10 @@ private:
             return false;
         }
 
-        if constexpr (use_alt)
+        if constexpr (track_empty)
             if (empty)
-                [[clang::musttail]] return initial_state<DFA.additional_continue_nodes[Cont]>(ctx, it, last, it);
-        [[clang::musttail]] return initial_state<DFA.continue_nodes[Cont]>(ctx, it, last, it);
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool lexer_restart(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
-        requires is_lexer
-    {
-        static constexpr bool use_alt{ not never_empty and (DFA.match_start != DFA.additional_continue_nodes.back()) };
-        maybe_type_t<use_alt, bool> empty{};
-
-        if constexpr (use_alt)
-            empty = ctx.osr.match_result.template force_get<0>().empty();
-
-        ctx.osr.state = stateful{};
-        ctx.osr.match_result.reset(it);
-
-        if (it == last) [[unlikely]]
-        {
-            lexer_eof(ctx, it, last);
-            return false;
-        }
-
-        if constexpr (use_alt)
-            if (empty)
-                [[clang::musttail]] return initial_state<DFA.additional_continue_nodes.back()>(ctx, it, last, it);
-        [[clang::musttail]] return initial_state<DFA.match_start>(ctx, it, last, it);
+                [[clang::musttail]] return initial_state<get_start(Cont, true)>(ctx, it, last, it);
+        [[clang::musttail]] return initial_state<get_start(Cont)>(ctx, it, last, it);
     }
 
     /* success / failure actions */
@@ -13661,31 +13689,6 @@ private:
         return false;
     }
 
-    template<std::size_t DFAState, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
-        requires (never_empty and DFA.continue_nodes.size() == 1 and DFA.continue_nodes[0] == DFAState
-                  and (/* degenerate case */ fixed_length and not DFA.flags.enable_fallback))
-    static constexpr bool scalar_outer_state(context<I, X> ctx, I it, const S last)
-    {
-        static constexpr auto length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
-
-        if (const auto input_size = std::ranges::distance(it, last); input_size >= length)
-        {
-            std::ranges::advance(it, input_size - length);
-
-            if (unchecked_state<DFAState, length>(ctx, it, last, it))
-            {
-                if constexpr (X != 0 and result<I>::has_match_start)
-                    ctx.get_res().match_start_ = it;
-                return true;
-            }
-        }
-
-        /* since the DFA is never empty, we can skip assigning final node information */
-        static_assert(DFA.final_nodes.at_if(DFAState) == nullptr);
-
-        return false;
-    }
-
     /* simd outer dfa next state functions */
 
     template<std::size_t DFAState, std::size_t Count, integer_sequence_like Skip,
@@ -13875,6 +13878,8 @@ public:
         requires is_regex and (DFA.flags.return_bool) and stateful::is_stateless
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         if constexpr (DFA.flags.adapted_search)
             return outer_state<DFA.match_start>(context<I, 0>{}, first, last);
         else
@@ -13885,6 +13890,8 @@ public:
         requires is_regex and (not DFA.flags.return_bool) and stateful::is_stateless
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last)
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         result<I> res{ first };
         overspill<I> osp{};
 
@@ -13902,6 +13909,8 @@ public:
         requires is_lexer and stateful::is_stateless
     [[nodiscard]] static constexpr token<I> operator()(I& first, const S last)
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         token<I> tok;
         overspill<I, true> osp{ first };
 
@@ -13927,21 +13936,30 @@ struct p1306dfa<Info>::iterated_result
 
     iterated_result() = default;
 
-    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
+    template<std::sentinel_for<I> S>
+    constexpr iterated_result(const I first, const S last)
         : res{ first }
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         start(first, last);
     }
 
-    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
+    template<std::sentinel_for<I> S>
+    constexpr iterated_result(const I first, const S last, match_non_empty_t)
         : res{ first }
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         start<true>(first, last);
     }
 
-    constexpr iterated_result(const I /* first */, const I it, const std::sentinel_for<I> auto last, stateful stf, bool prev_empty)
+    template<std::sentinel_for<I> S>
+    constexpr iterated_result(const I /* first */, const I it, const S last, stateful stf, bool prev_empty)
         : res{ it }, stf{ stf }
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         if constexpr (not never_empty)
         {
             if (prev_empty)
@@ -13953,9 +13971,12 @@ struct p1306dfa<Info>::iterated_result
         resume(it, last);
     }
 
-    constexpr I advance(const std::sentinel_for<I> auto last)
+    template<std::sentinel_for<I> S>
+    constexpr I advance(const S last)
         requires never_empty
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         const auto& match = res.template force_get<0>();
         const I current = match.end();
         res.reset(current);
@@ -13963,8 +13984,11 @@ struct p1306dfa<Info>::iterated_result
         return current;
     }
 
-    constexpr I advance(const I first, const std::sentinel_for<I> auto last)
+    template<std::sentinel_for<I> S>
+    constexpr I advance(const I first, const S last)
     {
+        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
+
         const auto& match = res.template force_get<0>();
         const I current = match.end();
 
@@ -13996,15 +14020,12 @@ private:
     template<bool NonEmptyMatch = false>
     constexpr void start(const I first, const std::sentinel_for<I> auto last)
     {
-        static constexpr bool use_alt{ NonEmptyMatch and not never_empty };
-        static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes.back() : DFA.match_start };
-
         overspill<I> osp{};
 
         if constexpr (DFA.flags.adapted_search)
-            outer_state<start_state>(context{ *this, osp }, first, last);
+            outer_state<get_start(tdfa::no_continue, NonEmptyMatch)>(context{ *this, osp }, first, last);
         else
-            initial_state<start_state>(context{ *this, osp }, first, last, first);
+            initial_state<get_start(tdfa::no_continue, NonEmptyMatch)>(context{ *this, osp }, first, last, first);
 
         if constexpr (generation::enabled)
             clean_generations(context{ *this, osp });
@@ -14019,20 +14040,17 @@ private:
         }
         else
         {
-            static constexpr bool use_alt{ NonEmptyMatch and not never_empty };
             const stateful state_info{ std::exchange(stf, {}) };
             overspill<I> osp{};
 
             template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
-                static constexpr auto start_state{ use_alt ? DFA.additional_continue_nodes[i] : DFA.continue_nodes[i] };
-
                 if (state_info.continue_at == i)
                 {
                     if constexpr (DFA.flags.adapted_search)
-                        outer_state<start_state>(context{ *this, osp }, first, last);
+                        outer_state<get_start(i, NonEmptyMatch)>(context{ *this, osp }, first, last);
                     else
-                        initial_state<start_state>(context{ *this, osp }, first, last, first);
+                        initial_state<get_start(i, NonEmptyMatch)>(context{ *this, osp }, first, last, first);
 #ifndef __GNUC_MINOR__
                     break;
 #else
@@ -14273,10 +14291,10 @@ inline constexpr static_regex<Pattern, Mode> srx;
 namespace detail {
 
 template<typename R>
-concept static_regex_match_view_like = is_template_instantiation_of_impl(^^std::ranges::range_value_t<R>, ^^static_match_results);
+concept static_regex_match_view_like = is_template_instantiation_of_type(^^std::ranges::range_value_t<R>, ^^static_match_results);
 
 template<typename Regex>
-concept static_regex_like = is_template_instantiation_of_impl(^^Regex, ^^static_regex);
+concept static_regex_like = is_template_instantiation_of_type(^^Regex, ^^static_regex);
 
 template<typename Regex>
 concept regex_like = static_regex_like<Regex>;
