@@ -54,25 +54,25 @@ static void BM_string_view(benchmark::State& state, auto m)
 
 using namespace srx::literals;
 
-#define TEST(PATTERN)                                \
-BENCHMARK_CAPTURE(BM_cstring_opt, PATTERN, PATTERN); \
-BENCHMARK_CAPTURE(BM_cstring_std, PATTERN, PATTERN); \
-BENCHMARK_CAPTURE(BM_string_view, PATTERN, PATTERN);
+#define TEST(PATTERN)                                        \
+BENCHMARK_CAPTURE(BM_cstring_opt, PATTERN, PATTERN ## _srx); \
+BENCHMARK_CAPTURE(BM_cstring_std, PATTERN, PATTERN ## _srx); \
+BENCHMARK_CAPTURE(BM_string_view, PATTERN, PATTERN ## _srx);
 
-TEST(R"(Twain)"_srx);
-TEST(R"((?i)Twain)"_srx);
-TEST(R"([a-z]shing)"_srx);
-TEST(R"(Huck[a-zA-Z]+|Saw[a-zA-Z]+)"_srx);
-TEST(R"(\b\w+nn\b)"_srx);
-TEST(R"([a-q][^u-z]{13}x)"_srx);
-TEST(R"(Tom|Sawyer|Huckleberry|Finn)"_srx);
-TEST(R"((?i)(?:Tom|Sawyer|Huckleberry|Finn))"_srx);
-TEST(R"(.{0,2}(?:Tom|Sawyer|Huckleberry|Finn))"_srx);
-TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))"_srx);
-TEST(R"(Tom.{10,25}river|river.{10,25}Tom)"_srx);
-TEST(R"([a-zA-Z]+ing)"_srx);
-TEST(R"(\s[a-zA-Z]{0,12}ing\s)"_srx);
+TEST(R"(Twain)");
+TEST(R"((?i)Twain)");
+TEST(R"([a-z]shing)");
+TEST(R"(Huck[a-zA-Z]+|Saw[a-zA-Z]+)");
+TEST(R"(\b\w+nn\b)");
+TEST(R"([a-q][^u-z]{13}x)");
+TEST(R"(Tom|Sawyer|Huckleberry|Finn)");
+TEST(R"((?i)(?:Tom|Sawyer|Huckleberry|Finn))");
+TEST(R"(.{0,2}(?:Tom|Sawyer|Huckleberry|Finn))");
+TEST(R"(.{2,4}(?:Tom|Sawyer|Huckleberry|Finn))");
+TEST(R"(Tom.{10,25}river|river.{10,25}Tom)");
+TEST(R"([a-zA-Z]+ing)");
+TEST(R"(\s[a-zA-Z]{0,12}ing\s)");
 TEST(R"((?:[A-Za-z]awyer|[A-Za-z]inn)\s)");
-TEST(R"(["'][^"']{0,30}[?!\.][\"'])"_srx);
+TEST(R"(["'][^"']{0,30}[?!\.][\"'])");
 
 BENCHMARK_MAIN();
