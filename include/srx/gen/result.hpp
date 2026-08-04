@@ -26,6 +26,9 @@ namespace detail {
 template<std::meta::info Info>
 struct p1306dfa;
 
+template<std::meta::info Info>
+struct p1306lex;
+
 template<srx::string_literal Pattern>
 struct naive_matcher;
 
@@ -196,6 +199,9 @@ public:
 
     template<std::meta::info Info>
     friend struct detail::p1306dfa;
+
+    template<std::meta::info Info>
+    friend struct detail::p1306lex;
 
     template<srx::string_literal Pattern>
     friend struct detail::naive_matcher;

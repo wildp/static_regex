@@ -25,7 +25,7 @@
 #include "srx/ast/tree.hpp"
 #include "srx/fsm/flags.hpp"
 #include "srx/gen/compile.hpp"
-#include "srx/gen/p1306.hpp"
+#include "srx/gen/p1306lex.hpp"
 
 
 namespace srx {
@@ -873,7 +873,7 @@ constexpr cc_parser<CharT>::char_class cc_parser<CharT>::parse(it_type& it, cons
 {
     using namespace cctok;
 
-    using lex_cc_impl = p1306dfa<(^^acclex<CharT>)>;
+    using lex_cc_impl = p1306lex<(^^acclex<CharT>)>;
     constexpr lex_cc_impl charclass_lexer;
 
     char_class result;
@@ -1008,8 +1008,8 @@ constexpr generated<CharT>::token_t generated<CharT>::nexttok()
 {
     using namespace tok;
 
-    using lex_impl    = p1306dfa<(^^amlex<CharT>)>;
-    using lex_ls_impl = p1306dfa<(^^alslex<CharT>)>;
+    using lex_impl    = p1306lex<(^^amlex<CharT>)>;
+    using lex_ls_impl = p1306lex<(^^alslex<CharT>)>;
 
     constexpr lex_impl main_lexer;
     constexpr lex_ls_impl literal_string_lexer;

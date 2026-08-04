@@ -345,71 +345,17 @@ template<static_charset Sc, std::unsigned_integral UCharT, typename Abi>
 }
 
 
-template<std::meta::info Action, typename ResultType>
-static constexpr auto exec_lexer_action(const ResultType& res)
-{
-    static_assert(Action != std::meta::info{});
-
-    if constexpr (is_enumerator(Action))
-    {
-        return [: Action :];
-    }
-    if constexpr (is_value(Action) or is_object(Action) or is_variable(Action))
-    {
-        // TODO: require non-automatic storage duration for is_variable?
-
-        if constexpr (is_invocable_type(type_of(Action), {}))
-            return [: Action :]();
-        else if constexpr (is_invocable_type(type_of(Action), { type_of(^^res) }))
-            return [: Action :](res);
-        else
-            return [: Action :];
-    }
-    else if constexpr (is_type(Action))
-    {
-        using action_type = [: Action :];
-
-        if constexpr (dealias(Action) == ^^void)
-            return; /* skip lexer action */
-        else if constexpr (not is_default_constructible_type(Action))
-            static_assert(false, "Invalid lexer action: type is not default-constructible");
-        else if constexpr (is_invocable_type(Action, {}))
-            return action_type{}();
-        else if constexpr (is_invocable_type(Action, { type_of(^^res) }))
-            return action_type{}(res);
-        else
-            return action_type{};
-    }
-    else if constexpr (is_function(Action) or is_function_template(Action))
-    {
-        static_assert(false, "Unimplemented!");
-    }
-    else
-    {
-        static_assert(false, "Invalid lexer action");
-    }
-}
-
 
 template<std::meta::info Info>
 struct p1306dfa
 {
     static_assert(has_template_arguments(type_of(Info)), "Invalid reflection value");
+    static_assert(template_of(type_of(Info)) == ^^tdfa_info);
+
     using char_type = typename [: template_arguments_of(type_of(Info))[0] :];
 
-    static constexpr bool is_regex{ template_of(type_of(Info)) == ^^tdfa_info };
-    static constexpr bool is_lexer{ template_of(type_of(Info)) == ^^lexer_info };
-    static_assert(is_regex != is_lexer);
-
 private:
-    static constexpr tdfa_info<char_type> DFA = [] consteval {
-        if constexpr (is_regex)
-            return [: Info :];
-        else if constexpr (is_lexer)
-            return [: Info :].dfa;
-        else
-            static_assert(false, "Invalid reflection value");
-    }();
+    static constexpr const tdfa_info<char_type>& DFA =  [: Info :];
 
     static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
     static constexpr bool fixed_length{ DFA.min_max_lengths.first != std::numeric_limits<std::size_t>::max()
@@ -451,15 +397,6 @@ public:
 
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
-    using token = typename [: [] consteval {
-        if constexpr (not is_lexer)
-            return ^^terminal_object;
-        else
-            return [: Info :].return_type;
-    }() :];
-
-    template<std::bidirectional_iterator I>
-        requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     struct iterated_result;
 
     struct stateful
@@ -475,7 +412,7 @@ public:
     };
 
 private:
-    static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+    static constexpr std::size_t fallback_disabled{ 0 };
     static constexpr std::size_t avoid_simd_threshold{ (1uz << std::numeric_limits<std::make_unsigned_t<char_type>>::digits) / 2 };
 
     struct generation
@@ -510,9 +447,6 @@ private:
         constexpr overspill(const I& first) noexcept(noexcept(result<I>{ first })) : match_result{ first } {}
     };
 
-
-    template<typename I>
-    using token_ref = maybe_type_t<is_lexer, std::add_lvalue_reference_t<token<I>>>;
 
     template<typename I>
     using result_ref = std::add_lvalue_reference_t<result<I>>;
@@ -551,16 +485,6 @@ private:
         [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return itr.stf; }
     };
 
-    template<typename I>
-    struct context<I, 3>
-    {
-        /* store token, with result in overspill only */
-        token_ref<I> tok;
-        overspill_ref<I, true> osr;
-
-        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return osr.match_result; }
-        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return osr.fallback; }
-    };
 
     template<typename I>
     context(result<I>&, overspill<I>&) -> context<I, 1>;
@@ -568,15 +492,12 @@ private:
     template<typename I>
     context(iterated_result<I>&, overspill<I>&) -> context<I, 2>;
 
-    template<typename I>
-    context(token<I>&, overspill<I, true>&) -> context<I, 3>;
-
 
     template<typename I>
     struct fallback_info
     {
         [[no_unique_address]] maybe_type_t<(not DFA.flags.return_bool), I> it;
-        std::size_t state{ fallback_disabled };
+        std::ptrdiff_t idx{ fallback_disabled };
 
         constexpr explicit(false) fallback_info(I it) : it{ it } {}
     };
@@ -589,7 +510,7 @@ private:
 
     template<std::bidirectional_iterator I, int X>
     static constexpr void clean_generations(context<I, X> ctx)
-        requires generation::enabled and (X != 0)
+        requires (generation::enabled and X != 0)
     {
         if constexpr (std::contiguous_iterator<I>)
         {
@@ -673,160 +594,34 @@ private:
     }
 
 
-    /* lexer actions */
-
-    template<std::meta::info Action, tdfa::continue_at_t Cont, bool Success, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool lexer_action(context<I, 3> ctx, I it, const S end, maybe_fallback_t<I> fallback)
-    {
-        static constexpr auto func = substitute(^^exec_lexer_action, { reflect_constant(Action), ^^result<I> });
-        static constexpr auto ret = return_type_of(func);
-
-        if constexpr (not is_same_type(ret, ^^void))
-        {
-            if constexpr (is_convertible_type(ret, ^^token<I>))
-                ctx.tok = [: func :](ctx.osr.match_result);
-            else if constexpr (is_constructible_type(^^token<I>, { ret }))
-                ctx.tok = token<I>([: func
-                    :](ctx.osr.match_result));
-            else
-                static_assert("Invalid lexer action: cannot assign result of lexer action to token");
-
-            return true;
-        }
-        else
-        {
-            [: func :](ctx.osr.match_result);
-
-            if constexpr (Cont != tdfa::no_continue or not Success)
-            {
-                [[clang::musttail]] return lexer_continue<Cont>(ctx, it, end, fallback);
-            }
-            else
-            {
-                /* succeeded with no continue: eof reached */
-                ctx.osr.state = stateful{};
-                ctx.osr.match_result.reset(it);
-                lexer_eof(ctx, it, end);
-                return true;
-            }
-        }
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr void lexer_eof(context<I, 3> ctx, I it, const S /* last */)
-        requires is_lexer
-    {
-        /* note: similar to lexer_action but never restarts matching */
-        static constexpr auto action = [: Info :].eof_action;
-        static constexpr auto func{ substitute(^^exec_lexer_action, { reflect_constant(action), ^^result<I> }) };
-        static constexpr auto ret = return_type_of(func);
-
-        set_final<tdfa::no_transition_regops, 0>(ctx, it);
-
-        if constexpr (is_same_type(ret, ^^void))
-            [: func :](ctx.osr.match_result);
-        else if constexpr (is_convertible_type(ret, ^^token<I>))
-            ctx.tok = [: func :](ctx.osr.match_result);
-        else if constexpr (is_constructible_type(^^token<I>, ret))
-            ctx.tok = token<I>([: func
-                :](ctx.osr.match_result));
-        else
-            static_assert("Invalid lexer action: cannot assign result of lexer action to token");
-    }
-
-    template<tdfa::continue_at_t Cont, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool lexer_continue(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> /* fallback */)
-        requires is_lexer
-    {
-        static constexpr bool track_empty{ has_different_alt(Cont) };
-        maybe_type_t<track_empty, bool> empty{};
-
-        if constexpr (track_empty)
-            empty = ctx.osr.match_result.template force_get<0>().empty();
-
-        ctx.osr.state = stateful{};
-        ctx.osr.match_result.reset(it);
-
-        if (it == last) [[unlikely]]
-        {
-            lexer_eof(ctx, it, last);
-            return false;
-        }
-
-        if constexpr (track_empty)
-            if (empty)
-                [[clang::musttail]] return initial_state<get_start(Cont, true)>(ctx, it, last, it);
-        [[clang::musttail]] return initial_state<get_start(Cont)>(ctx, it, last, it);
-    }
-
-
-    /* success / failure actions */
-
-    template<std::size_t Alt, tdfa::continue_at_t Cont, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    [[gnu::always_inline]] static constexpr bool success(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
-        requires is_regex
-    {
-        return true;
-    }
-
-    template<std::size_t Alt, tdfa::continue_at_t Cont, std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool success(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
-        requires is_lexer
-    {
-        if constexpr (generation::enabled)
-            clean_generations(ctx);
-        [[clang::musttail]] return lexer_action<[: Info :].actions[Alt], Cont, true>(ctx, it, last, fallback);
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    [[gnu::always_inline]] static constexpr bool failure(context<I, X> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
-        requires is_regex
-    {
-        return false;
-    }
-
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool failure(context<I, 3> ctx, I it, const S last, maybe_fallback_t<I> fallback)
-        requires is_lexer
-    {
-        if constexpr (generation::enabled)
-        {
-            ++ctx.osr.generations.current; /* clear submatches */
-            clean_generations(ctx);
-        }
-
-        set_final<tdfa::no_transition_regops, 0>(ctx, it);
-        [[clang::musttail]] return lexer_action<[: Info :].error_action, tdfa::no_continue, false>(ctx, it, last, fallback);
-    }
-
-
     /* state fallback */
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
         requires (DFA.flags.enable_fallback)
-    static constexpr bool fallback_state(context<I, X> ctx, I it, const S last, fallback_info<I> fallback)
+    static constexpr bool fallback_state(context<I, X> ctx, I /* it */, const S /* last */, fallback_info<I> fallback)
     {
-        if (fallback.state == fallback_disabled)
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+        static_assert(fallback_disabled == 0);
+        [[assume(fallback.idx <= static_cast<std::ptrdiff_t>(DFA.fallback_nodes.size()))]];
+        [[assume(fallback.idx >= 0)]];
 
-        template for (constexpr auto& [state, fbni] : DFA.fallback_nodes)
+        if (fallback.idx == fallback_disabled)
+            return false;
+
+        template for (constexpr auto i : std::views::indices(DFA.fallback_nodes.size()))
         {
-            if (fallback.state == state)
+            static constexpr auto& [state, fbni] = DFA.fallback_nodes.begin()[i];
+            static constexpr std::ptrdiff_t idx{ 1 + static_cast<std::ptrdiff_t>(i) };
+
+            if (fallback.idx == idx)
             {
                 static constexpr auto fni = DFA.final_nodes.at(state);
                 if constexpr (not DFA.flags.return_bool)
-                {
                     set_fallback<fbni.op_index, fni.offset, fbni.continue_at>(ctx, fallback.it);
-                    [[clang::musttail]] return success<fni.alternative, fbni.continue_at>(ctx, fallback.it, last, fallback);
-                }
-                else
-                {
-                    [[clang::musttail]] return success<fni.alternative, fbni.continue_at>(ctx, it, last, fallback);
-                }
+                return true;
             }
         }
 
-        [[clang::musttail]] return failure(ctx, it, last, fallback);
+        std::unreachable();
     }
 
 
@@ -835,12 +630,15 @@ private:
     template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
     static constexpr bool state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
     {
+        static constexpr auto fb_it = DFA.fallback_nodes.find(DFAState);
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
-        static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
+        static constexpr auto* fallback_node = (fb_it != DFA.fallback_nodes.end()) ? &(fb_it->second) : nullptr;
 
         if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
         {
-            fallback.state = DFAState;
+            static constexpr std::ptrdiff_t index{ 1 + std::ranges::distance(DFA.fallback_nodes.begin(), fb_it) };
+
+            fallback.idx = index;
             if constexpr (not DFA.flags.return_bool)
                 fallback.it = it;
         }
@@ -861,31 +659,34 @@ private:
             if constexpr (final_node != nullptr and not (DFA.flags.enable_fallback and fallback_node != nullptr))
             {
                 set_final<final_node->op_index, final_node->offset>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative, tdfa::no_continue>(ctx, it, last, fallback);
+                return true;
             }
         }
 
         if constexpr (final_node != nullptr and (DFA.flags.enable_fallback and fallback_node != nullptr))
         {
             set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-            [[clang::musttail]] return success<final_node->alternative, fallback_node->continue_at>(ctx, it, last, fallback);
+            return true;
         }
 
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
             [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
         else
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            return false;
     }
 
     template<std::size_t DFAState, std::bidirectional_iterator I, int X>
     static constexpr bool state(context<I, X> ctx, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
     {
+        static constexpr auto fb_it = DFA.fallback_nodes.find(DFAState);
         static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
-        static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
+        static constexpr auto* fallback_node = (fb_it != DFA.fallback_nodes.end()) ? &(fb_it->second) : nullptr;
 
         if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
         {
-            fallback.state = DFAState;
+            static constexpr std::ptrdiff_t index{ 1 + std::ranges::distance(DFA.fallback_nodes.begin(), fb_it) };
+
+            fallback.idx = index;
             if constexpr (not DFA.flags.return_bool)
                 fallback.it = it;
         }
@@ -904,14 +705,14 @@ private:
             if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
             {
                 set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                [[clang::musttail]] return success<final_node->alternative, fallback_node->continue_at>(ctx, it, last, fallback);
+                return true;
             }
             else
             {
                 if (it == last) [[likely]]
                 {
                     set_final<final_node->op_index, final_node->offset>(ctx, it);
-                    [[clang::musttail]] return success<final_node->alternative, tdfa::no_continue>(ctx, it, last, fallback);
+                    return true;
                 }
             }
         }
@@ -919,7 +720,7 @@ private:
         if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
             [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
         else
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            return false;
     }
 
     template<std::size_t DFAState, std::size_t Count, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
@@ -940,7 +741,7 @@ private:
                 }
             }
 
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            return false;
         }
     }
 
@@ -966,7 +767,7 @@ private:
                 [[clang::musttail]] return unchecked_state_skip<tr.next, Count - 1, Skip>(ctx, ++it, last, fallback);
             }
 
-            [[clang::musttail]] return failure(ctx, it, last, fallback);
+            return false;
         }
     }
 
@@ -993,7 +794,7 @@ private:
                 [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
         }
 
-        [[clang::musttail]] return failure(ctx, it, last, it);
+        return false;
     }
 
 
@@ -1287,7 +1088,7 @@ private:
 
 public:
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires is_regex and (DFA.flags.return_bool) and stateful::is_stateless
+        requires (DFA.flags.return_bool and stateful::is_stateless)
     [[nodiscard]] static constexpr bool operator()(const I first, const S last)
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
@@ -1299,7 +1100,7 @@ public:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires is_regex and (not DFA.flags.return_bool) and stateful::is_stateless
+        requires (not DFA.flags.return_bool and stateful::is_stateless)
     [[nodiscard]] static constexpr result<I> operator()(const I first, const S last)
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
@@ -1315,27 +1116,6 @@ public:
         if constexpr (generation::enabled)
             clean_generations(context{ res, osp });
         return res;
-    }
-
-    // TODO: implement iterated_token
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-        requires is_lexer and stateful::is_stateless
-    [[nodiscard]] static constexpr token<I> operator()(I& first, const S last)
-    {
-        static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
-
-        token<I> tok;
-        overspill<I, true> osp{ first };
-
-        if (first == last) [[unlikely]]
-        {
-            lexer_eof(context{ tok, osp }, first, last);
-            return tok;
-        }
-
-        initial_state<DFA.match_start>(context{ tok, osp }, first, last, first);
-        first = osp.match_result.match_end_;
-        return tok;
     }
 };
 
