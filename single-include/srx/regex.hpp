@@ -389,6 +389,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <flat_map>
+#include <flat_set>
 #include <format>
 #include <functional>
 #include <iosfwd>
@@ -8517,7 +8518,9 @@ template<typename CharT> class factory;
 template<typename CharT> class opt;
 template<typename CharT> class min;
 
-using reg_t = std::uint_least32_t;
+using state_t       = std::size_t;
+using blkidx_t      = std::size_t;
+using reg_t         = std::uint_least32_t;
 using continue_at_t = tnfa::continue_at_t;
 
 struct regop
@@ -8555,7 +8558,7 @@ inline constexpr regops_t empty_regops{};
 
 struct final_node_info
 {
-    std::size_t         op_index;
+    blkidx_t            op_index;
     std::uint_least16_t offset;
     std::uint_least32_t alternative;
 
@@ -8565,27 +8568,27 @@ struct final_node_info
 
 struct fallback_node_info
 {
-    std::size_t   op_index;
+    blkidx_t      op_index;
     continue_at_t continue_at;
 
     friend constexpr bool operator==(const fallback_node_info&, const fallback_node_info&) noexcept = default;
     friend constexpr auto operator<=>(const fallback_node_info&, const fallback_node_info&) noexcept = default;
 };
 
-using continue_nodes_t = std::vector<std::size_t>;
-using final_nodes_t    = std::flat_map<std::size_t, final_node_info>;
-using fallback_nodes_t = std::flat_map<std::size_t, fallback_node_info>;
+using continue_nodes_t = std::vector<state_t>;
+using final_nodes_t    = std::flat_map<state_t, final_node_info>;
+using fallback_nodes_t = std::flat_map<state_t, fallback_node_info>;
 using final_regs_t     = std::vector<reg_t>;
 
 inline constexpr continue_at_t no_continue{ std::numeric_limits<continue_at_t>::max() };
-inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
-inline constexpr std::size_t   default_transition_is_not_state{ std::numeric_limits<std::size_t>::max() - 1 };
+inline constexpr blkidx_t      no_transition_regops{ std::numeric_limits<blkidx_t>::max() };
+inline constexpr blkidx_t      default_transition_is_not_state{ std::numeric_limits<blkidx_t>::max() - 1 };
 
 template<typename CharT>
 struct transition
 {
-    std::size_t next;
-    std::size_t op_index; /* use no_transition_regops for no ops */
+    state_t          next;
+    blkidx_t         op_index; /* use no_transition_regops for no ops */
     charset_t<CharT> cs;
 
     friend constexpr bool operator==(const transition&, const transition&) = default;
@@ -8593,8 +8596,8 @@ struct transition
 
 struct default_transition
 {
-    std::size_t next;
-    std::size_t op_index; /* use no_transition_regops for no ops, and default_transition_is_not_state for jumps */
+    state_t    next;
+    blkidx_t   op_index; /* use no_transition_regops for no ops, and default_transition_is_not_state for jumps */
 
     friend constexpr bool operator==(const default_transition&, const default_transition&) = default;
 };
@@ -8633,15 +8636,15 @@ public:
 
     static constexpr std::size_t match_start{ 0 };
 
-    [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-    [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
+    [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(tdfa::state_t i) const { return nodes_.at(i); }
+    [[nodiscard]] constexpr const tdfa::regops_t& get_regops(tdfa::blkidx_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
     [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const { return continue_nodes_; }
     [[nodiscard]] constexpr const tdfa::continue_nodes_t& additional_continue_nodes() const { return additional_continue_nodes_; }
     [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
     [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
     [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
-    [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
-    [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
+    [[nodiscard]] constexpr tdfa::state_t node_count() const { return nodes_.size(); }
+    [[nodiscard]] constexpr tdfa::reg_t reg_count() const { return register_count_; }
     [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
     [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
@@ -8683,7 +8686,7 @@ using reg_vec = std::vector<reg_t>;
 
 struct configuration
 {
-    std::size_t    tnfa_state{ 0 };
+    tnfa::state_t  tnfa_state{ 0 };
     reg_vec        registers;
     tag_sequence_t tag_seq;
 
@@ -8697,15 +8700,16 @@ struct configuration
 
 struct closure_entry
 {
-    std::size_t    tnfa_state{ 0 };
+    tnfa::state_t  tnfa_state{ 0 };
+    tnfa::state_t  tnfa_origin{ 0 };
     reg_vec        registers;
     tag_sequence_t tag_seq;
     tag_sequence_t new_tag_seq;
 
     [[maybe_unused]] friend constexpr bool operator==(const closure_entry&, const closure_entry&) = default;
 
-    constexpr closure_entry(std::size_t state, reg_vec reg, tag_sequence_t seq = {}, tag_sequence_t newseq = {})
-        : tnfa_state{ state }, registers{ std::move(reg) }, tag_seq{ std::move(seq) }, new_tag_seq{ std::move(newseq) } {}
+    constexpr closure_entry(tnfa::state_t state, tnfa::state_t origin, reg_vec reg, tag_sequence_t seq = {}, tag_sequence_t newseq = {})
+        : tnfa_state{ state }, tnfa_origin{ origin }, registers{ std::move(reg) }, tag_seq{ std::move(seq) }, new_tag_seq{ std::move(newseq) } {}
 
     constexpr closure_entry() = default;
 
@@ -8780,19 +8784,19 @@ private:
     using normal_tr_info_t  = std::vector<std::vector<normal_tr_t>>;
 
     [[nodiscard]] constexpr closure_t e_closure(closure_t&& c) const;
-    [[nodiscard]] constexpr std::size_t add_state(tdfa_t& result, const closure_t& c, regops_t& o);
-    [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(std::size_t state) const;
+    [[nodiscard]] constexpr state_t add_state(tdfa_t& result, const closure_t& c, regops_t& o);
+    [[nodiscard]] constexpr multistep_closures_t<char_type> multistep(state_t state) const;
     [[nodiscard]] constexpr regops_t transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const;
     [[nodiscard]] constexpr regops_t final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const;
     [[nodiscard]] constexpr regop::op_t regop_rhs(const std::vector<bool>& hist) const;
     [[nodiscard]] constexpr std::vector<bool> history(const tag_sequence_t& hist, tag_t tag) const;
     [[nodiscard]] constexpr bool has_history(const tag_sequence_t& hist, tag_t tag) const;
-    [[nodiscard]] constexpr bool mappable(const node_info& state, std::size_t mapped_state, regops_t& o, reg_t regcount) const;
+    [[nodiscard]] constexpr bool mappable(const node_info& state, state_t mapped_state, regops_t& o, reg_t regcount) const;
 
     constexpr void fallback_regops(tdfa_t& result);
-    constexpr void backup_regops(tdfa_t& result, std::size_t state, reg_t reg_dst, reg_t reg_src);
+    constexpr void backup_regops(tdfa_t& result, state_t state, reg_t reg_dst, reg_t reg_src);
 
-    constexpr std::size_t make_initial_state(tdfa_t& result, tnfa::state_t tnfa_state);
+    constexpr state_t make_initial_state(tdfa_t& result, tnfa::state_t tnfa_state);
 
     constexpr void factory_init();
 
@@ -8862,7 +8866,7 @@ constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
             auto newer_tag_seq = ce.new_tag_seq;
             if (e.tag != 0)
                 newer_tag_seq.push_back(e.tag);
-            stack.emplace_back(next, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
+            stack.emplace_back(next, ce.tnfa_origin, ce.registers, ce.tag_seq, std::move(newer_tag_seq));
         }
     }
 
@@ -8897,13 +8901,13 @@ constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> std::size_t
+constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> state_t
 {
     static constexpr std::size_t map_usage_threshold{ 128 };
     static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); };
 
     node_info current_info{ .config{ c | std::views::transform(closure_entry::next_config) | std::ranges::to<std::vector>() } };
-    std::size_t new_state{ state_info_.size() };
+    state_t new_state{ state_info_.size() };
 
     if (new_state < map_usage_threshold) [[likely]]
     {
@@ -8973,7 +8977,7 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
 
     /* make final regops if state is an accepting state */
     const auto& current_cfg = state_info_.back().config;
-    const auto is_final = [this](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
+    const auto is_final = [this](tnfa::state_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
     const auto it = std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state);
     std::optional<continue_at_t> continue_at;
     if (it != current_cfg.end())
@@ -9001,7 +9005,7 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
     if (flags_.enable_fallback)
     {
         /* set fallback state status for fallback_regops */
-        const auto is_fallback = [&](std::size_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; };
+        const auto is_fallback = [&](tnfa::state_t arg){ return tnfa_ptr_->get_node(arg).is_fallback; };
         const auto it2 = std::ranges::find_if(current_cfg, is_fallback, &configuration::tnfa_state);
         if (it2 != current_cfg.end())
         {
@@ -9015,7 +9019,7 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::multistep(std::size_t state) const -> multistep_closures_t<char_type>
+constexpr auto factory<CharT>::multistep(state_t state) const -> multistep_closures_t<char_type>
 {
     using elem_t = tnfa::charset_t<char_type>::template ref_pair<closure_entry>;
 
@@ -9023,13 +9027,13 @@ constexpr auto factory<CharT>::multistep(std::size_t state) const -> multistep_c
 
     for (const auto& cfg : state_info_.at(state).config)
         for (const auto& [dst, cs] : normal_transitions_.at(cfg.tnfa_state))
-            transitions.emplace_back(cs, closure_entry{ dst, cfg.registers, cfg.tag_seq });
+            transitions.emplace_back(cs, closure_entry{ dst, dst, cfg.registers, cfg.tag_seq });
 
     return charset_t<char_type>::partition_ext(transitions);
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const -> regops_t
+constexpr regops_t factory<CharT>::transition_regops(closure_t& c, reg_t& regcount, tag_op_map& map) const
 {
     regops_t regops;
 
@@ -9065,7 +9069,7 @@ constexpr auto factory<CharT>::transition_regops(closure_t& c, reg_t& regcount, 
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const -> regops_t
+constexpr regops_t factory<CharT>::final_regops(const final_regs_t& final_registers, const reg_vec& r, const tag_sequence_t& tag_seq) const
 {
     regops_t regops;
 
@@ -9083,13 +9087,13 @@ constexpr auto factory<CharT>::final_regops(const final_regs_t& final_registers,
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::regop_rhs(const std::vector<bool>& hist) const -> regop::op_t
+constexpr regop::op_t factory<CharT>::regop_rhs(const std::vector<bool>& hist) const
 {
     return regop::set{ .val = hist.back() };
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::history(const tag_sequence_t& h, tag_t tag) const -> std::vector<bool>
+constexpr std::vector<bool> factory<CharT>::history(const tag_sequence_t& h, tag_t tag) const
 {
     std::vector<bool> result;
     for (const tag_t x : h)
@@ -9105,7 +9109,7 @@ constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, tag_t tag) c
 }
 
 template<typename CharT>
-constexpr bool factory<CharT>::mappable(const node_info& state, std::size_t mapped_state, regops_t& o, const reg_t regcount) const
+constexpr bool factory<CharT>::mappable(const node_info& state, state_t mapped_state, regops_t& o, const reg_t regcount) const
 {
     const auto& mapped_state_info = state_info_.at(mapped_state);
 
@@ -9211,7 +9215,7 @@ constexpr void factory<CharT>::fallback_regops(tdfa_t& result)
         bitset_t added(result.nodes_.size(), false);
         bitset_t clobbered(result.register_count_, false);
 
-        std::vector<std::pair<std::size_t, std::size_t>> stack;
+        std::vector<std::pair<state_t, std::size_t>> stack;
         stack.emplace_back(state, 0);
         added.at(state) = true;
 
@@ -9271,7 +9275,7 @@ constexpr void factory<CharT>::fallback_regops(tdfa_t& result)
 }
 
 template<typename CharT>
-constexpr void factory<CharT>::backup_regops(tdfa_t& result, std::size_t state, reg_t reg_dst, reg_t reg_src)
+constexpr void factory<CharT>::backup_regops(tdfa_t& result, state_t state, reg_t reg_dst, reg_t reg_src)
 {
     for (auto& tr : result.nodes_.at(state).tr)
     {
@@ -9290,13 +9294,13 @@ constexpr void factory<CharT>::backup_regops(tdfa_t& result, std::size_t state, 
 }
 
 template<typename CharT>
-constexpr std::size_t factory<CharT>::make_initial_state(tdfa_t& result, const tnfa::state_t tnfa_state)
+constexpr state_t factory<CharT>::make_initial_state(tdfa_t& result, const tnfa::state_t tnfa_state)
 {
     reg_vec initial_reg(tag_count_);
     std::ranges::iota(initial_reg, 0);
 
     closure_t initial_cfg;
-    initial_cfg.emplace_back(tnfa_state, initial_reg);
+    initial_cfg.emplace_back(tnfa_state, tnfa_state, initial_reg);
     initial_cfg = e_closure(std::move(initial_cfg));
     regops_t regs;
     return add_state(result, initial_cfg, regs);
@@ -9315,7 +9319,7 @@ constexpr void factory<CharT>::factory_init()
     epsilon_transitions_.resize(node_count);
     normal_transitions_.resize(node_count);
 
-    for (std::size_t q{ 0 }; q < node_count; ++q)
+    for (state_t q{ 0 }; q < node_count; ++q)
     {
         auto& current_etr = epsilon_transitions_.at(q);
         auto& current_tr = normal_transitions_.at(q);
@@ -9352,7 +9356,7 @@ constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std
     result.final_registers_.resize(tag_count_);
     std::ranges::iota(result.final_registers_, tag_count_);
 
-    const std::size_t initial{ make_initial_state(result, tnfa_ptr_->start_node()) };
+    const state_t initial{ make_initial_state(result, tnfa_ptr_->start_node()) };
 
     for (const auto& cont : tnfa_ptr_->get_cont_info())
     {
@@ -9366,7 +9370,7 @@ constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std
     {
         const auto& ci = tnfa_ptr_->get_cont_info();
 
-        for (std::size_t i{ 0 }, i_max{ ci.size() }; i < i_max; ++i)
+        for (state_t i{ 0 }, i_max{ ci.size() }; i < i_max; ++i)
         {
             if (ac.at(i) == ci.at(i).value)
                 result.additional_continue_nodes_.emplace_back(result.continue_nodes_.at(i));
@@ -9380,7 +9384,7 @@ constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std
             result.additional_continue_nodes_.emplace_back(make_initial_state(result, ac.back()));
     }
 
-    for (std::size_t state{ initial }; state < result.nodes_.size(); ++state)
+    for (state_t state{ initial }; state < result.nodes_.size(); ++state)
     {
         tag_op_map map;
 
@@ -9584,13 +9588,13 @@ class liveness_matrix
 {
 public:
     constexpr explicit liveness_matrix(std::size_t block_count, reg_t reg_count) : data_(block_count, bitset_t(reg_count, false)) {}
-    [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) { return data_[block_idx][reg]; }
-    [[nodiscard]] constexpr auto operator[](std::size_t block_idx, reg_t reg) const { return data_[block_idx][reg]; }
-    [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) { return data_.at(block_idx).at(reg); }
-    [[nodiscard]] constexpr auto at(std::size_t block_idx, reg_t reg) const { return data_.at(block_idx).at(reg); }
-    [[nodiscard]] constexpr auto& row(std::size_t block_idx) { return data_.at(block_idx); }
-    [[nodiscard]] constexpr const auto& row(std::size_t block_idx) const { return data_.at(block_idx); }
-    [[nodiscard]] constexpr bool block_valid(std::size_t block_idx) const { return block_idx < data_.size(); }
+    [[nodiscard]] constexpr auto operator[](blkidx_t block_idx, reg_t reg) { return data_[block_idx][reg]; }
+    [[nodiscard]] constexpr auto operator[](blkidx_t block_idx, reg_t reg) const { return data_[block_idx][reg]; }
+    [[nodiscard]] constexpr auto at(blkidx_t block_idx, reg_t reg) { return data_.at(block_idx).at(reg); }
+    [[nodiscard]] constexpr auto at(blkidx_t block_idx, reg_t reg) const { return data_.at(block_idx).at(reg); }
+    [[nodiscard]] constexpr auto& row(blkidx_t block_idx) { return data_.at(block_idx); }
+    [[nodiscard]] constexpr const auto& row(blkidx_t block_idx) const { return data_.at(block_idx); }
+    [[nodiscard]] constexpr bool block_valid(blkidx_t block_idx) const { return block_idx < data_.size(); }
 
 private:
     std::vector<bitset_t> data_;
@@ -9640,8 +9644,8 @@ private:
 
     constexpr void make_cfg(const tdfa_t& dfa);
 
-    std::vector<std::vector<std::size_t>> block_graph_;
-    std::vector<std::size_t> block_graph_start_;
+    std::vector<std::vector<blkidx_t>> block_graph_;
+    std::vector<blkidx_t> block_graph_start_;
     std::size_t iterations_;
 };
 
@@ -9652,29 +9656,31 @@ constexpr void opt<CharT>::make_cfg(const tdfa_t& dfa)
     block_graph_.clear();
     block_graph_.resize(dfa.regops_.size());
 
-    std::vector<std::vector<std::size_t>> successor_blocks(dfa.nodes_.size());
-    square_matrix reachable(dfa.nodes_.size());
+    const state_t q_max{ dfa.nodes_.size() };
+    std::vector<std::vector<blkidx_t>> successor_blocks(q_max);
+    square_matrix reachable(q_max);
 
-    for (std::size_t node_idx{ 0 }, node_count{ dfa.nodes_.size() }; node_idx < node_count; ++node_idx)
+    for (state_t q{ 0 }; q < q_max; ++q)
     {
-        for (const auto& tr : dfa.nodes_[node_idx].tr)
+        for (const auto& tr : dfa.nodes_[q].tr)
         {
             if (tr.op_index == no_transition_regops)
-                reachable.at(node_idx, tr.next) = true;
+                reachable.at(q, tr.next) = true;
             else
-                successor_blocks.at(node_idx).emplace_back(tr.op_index);
+                successor_blocks[q].emplace_back(tr.op_index);
         }
 
         /* add final transitions too */
 
-        if (dfa.final_nodes_.contains(node_idx))
-            if (const auto fni = dfa.final_nodes_.at(node_idx); fni.op_index != no_transition_regops)
-                successor_blocks.at(node_idx).emplace_back(fni.op_index);
+        if (dfa.final_nodes_.contains(q))
+            if (const auto& fni = dfa.final_nodes_.at(q); fni.op_index != no_transition_regops)
+                successor_blocks[q].emplace_back(fni.op_index);
     }
 
     /* calculate reachability matrix (initial reachability is added above) */
 
     const auto side_length = reachable.side_length();
+
     for (std::size_t i{ 0 }; i < side_length; ++i)
         reachable[i, i] = true;
 
@@ -9686,28 +9692,28 @@ constexpr void opt<CharT>::make_cfg(const tdfa_t& dfa)
 
     /* construct graph */
 
-    std::vector<std::vector<std::size_t>> nodes_to_edges(dfa.nodes_.size());
+    std::vector<std::vector<blkidx_t>> nodes_to_edges(q_max);
 
-    for (std::size_t node_idx{ 0 }, node_count{ dfa.nodes_.size() }; node_idx < node_count; ++node_idx)
+    for (state_t q{ 0 }; q < q_max; ++q)
     {
-        std::vector<std::size_t> tmp;
+        std::vector<blkidx_t> tmp;
 
-        for (std::size_t i{ 0 }; i < reachable.side_length(); ++i)
-            if (reachable.at(node_idx, i))
-                tmp.insert_range(tmp.end(), successor_blocks.at(i));
+        for (std::size_t i{ 0 }; i < side_length; ++i)
+            if (reachable[q, i])
+                tmp.append_range(successor_blocks[i]);
 
         std::ranges::sort(tmp);
         auto [beg, end] = std::ranges::unique(tmp);
         tmp.erase(beg, end);
         tmp.shrink_to_fit();
 
-        nodes_to_edges.at(node_idx) = std::move(tmp);
+        nodes_to_edges[q] = std::move(tmp);
     }
 
-    for (std::size_t node_idx{ 0 }; node_idx < dfa.nodes_.size(); ++node_idx)
-        for (const auto& tr : dfa.nodes_.at(node_idx).tr)
+    for (state_t q{ 0 }; q < q_max; ++q)
+        for (const auto& tr : dfa.nodes_[q].tr)
             if (tr.op_index != no_transition_regops)
-                block_graph_.at(tr.op_index) = nodes_to_edges.at(tr.next);
+                block_graph_[tr.op_index] = nodes_to_edges.at(tr.next);
 
     block_graph_start_ = std::move(nodes_to_edges.at(dfa.match_start));
 
@@ -9740,9 +9746,9 @@ constexpr auto opt<CharT>::compact_registers(const tdfa_t& dfa) -> remap_t
     }
 
     reg_t new_reg{ 0 };
-    for (std::size_t i{ 0 }; i < dfa.register_count_; ++i)
-        if (visited.at(i))
-            remap_result.at(i) = new_reg++;
+    for (reg_t i{ 0 }; i < dfa.register_count_; ++i)
+        if (visited[i])
+            remap_result[i] = new_reg++;
 
     return remap_result;
 }
@@ -9785,7 +9791,7 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
     class postorder_visitor
     {
     public:
-        constexpr explicit postorder_visitor(const std::vector<std::size_t>& block_graph_start, std::size_t block_count)
+        constexpr explicit postorder_visitor(const std::vector<blkidx_t>& block_graph_start, blkidx_t block_count)
             : block_added(block_count, false)
         {
             for (const auto i : block_graph_start | std::views::reverse)
@@ -9795,9 +9801,9 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
             }
         }
 
-        constexpr std::optional<std::size_t> operator()(const std::vector<std::vector<std::size_t>>& block_graph)
+        constexpr std::optional<blkidx_t> operator()(const std::vector<std::vector<blkidx_t>>& block_graph)
         {
-            std::optional<std::size_t> result;
+            std::optional<blkidx_t> result;
 
             while (not stack.empty() and not result.has_value())
             {
@@ -9824,14 +9830,14 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
         }
 
     private:
-        std::vector<std::pair<std::size_t, std::size_t>> stack;
+        std::vector<std::pair<blkidx_t, std::size_t>> stack;
         bitset_t block_added;
     };
 
     /* resume liveness implementation */
 
-    const std::size_t block_count{ dfa.regops_.size() };
-    const std::size_t reg_count{ dfa.register_count_ };
+    const blkidx_t block_count{ dfa.regops_.size() };
+    const reg_t reg_count{ dfa.register_count_ };
     liveness_matrix liveness(block_count, reg_count);
 
     /* make registers assigned to in final transitions live */
@@ -9854,11 +9860,11 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
             if (not opt.has_value())
                 break;
 
-            const auto block_idx = opt.value();
+            const blkidx_t block_idx = opt.value();
 
             current_row_copy = liveness.row(block_idx);
 
-            for (const std::size_t sblock_idx : block_graph_.at(block_idx))
+            for (const blkidx_t sblock_idx : block_graph_.at(block_idx))
             {
                 successor_row_copy = liveness.row(sblock_idx);
 
@@ -9961,7 +9967,7 @@ constexpr liveness_matrix opt<CharT>::liveness(const tdfa_t& dfa) const
 template<typename CharT>
 constexpr void opt<CharT>::deadcode_elim(tdfa_t& dfa, const liveness_matrix& liveness)
 {
-    for (std::size_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
+    for (blkidx_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
     {
         auto& block = dfa.regops_.at(block_idx);
         bitset_t current_row_copy{ liveness.row(block_idx) };
@@ -9994,7 +10000,7 @@ constexpr square_matrix opt<CharT>::interference(const tdfa_t& dfa, const livene
     square_matrix overlapping_lifetimes(dfa.register_count_);
     std::vector<std::optional<regop::op_t>> histories(dfa.register_count_);
 
-    for (std::size_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
+    for (blkidx_t block_idx{ 0 }, block_count{ dfa.regops_.size() }; block_idx < block_count; ++block_idx)
     {
         const auto& block = dfa.regops_.at(block_idx);
 
@@ -10043,7 +10049,7 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
 
     remap_t remap_result(dfa.register_count_, no_register);
     remap_t representative_map(dfa.register_count_, no_register);
-    std::vector<std::vector<reg_t>> equivalence_classes(dfa.register_count_);
+    std::vector<std::flat_set<reg_t>> equivalence_classes(dfa.register_count_);
 
     for (const auto& block : dfa.regops_)
     {
@@ -10062,12 +10068,9 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
                         representative_map.at(cpy->src) = op.dst;
 
                         auto& set = equivalence_classes.at(op.dst);
-                        if (op.dst < cpy->src)
-                            set.assign({ op.dst, cpy->src });
-                        else if (op.dst > cpy->src)
-                            set.assign({ cpy->src, op.dst });
-                        else
-                            set.assign({ op.dst });
+                        set.clear();
+                        set.insert(op.dst);
+                        set.insert(cpy->src);
                     }
                 }
                 else if (x != no_register and y == no_register)
@@ -10075,11 +10078,7 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
                     if (std::ranges::all_of(equivalence_classes.at(x), [&](reg_t t){ return not overlapping_lifetimes.at(t, cpy->src); }))
                     {
                         representative_map.at(cpy->src) = x;
-
-                        auto& set = equivalence_classes.at(x);
-                        auto it = std::ranges::lower_bound(set, cpy->src);
-                        if (it == set.end() or *it != cpy->src)
-                            set.insert(it, cpy->src);
+                        equivalence_classes.at(x).insert(cpy->src);
                     }
                 }
                 else if (x == no_register and y != no_register)
@@ -10087,11 +10086,7 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
                     if (std::ranges::all_of(equivalence_classes.at(y), [&](reg_t t){ return not overlapping_lifetimes.at(t, op.dst); }))
                     {
                         representative_map.at(op.dst) = y;
-
-                        auto& set = equivalence_classes.at(y);
-                        auto it = std::ranges::lower_bound(set, op.dst);
-                        if (it == set.end() or *it != op.dst)
-                            set.insert(it, op.dst);
+                        equivalence_classes.at(y).insert(op.dst);
                     }
                 }
             }
@@ -10100,66 +10095,48 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
 
     /* merge non-interfering equivalence classes */
 
-    for (reg_t x{ 0 }; x < representative_map.size(); ++x)
+    for (reg_t x{ 0 }; x < dfa.register_count_; ++x)
     {
-        if (representative_map.at(x) != x)
+        if (representative_map[x] != x)
             continue;
 
-        for (reg_t y{ 0 }; y < representative_map.size(); ++y)
+        for (reg_t y{ 0 }; y < dfa.register_count_; ++y)
         {
-            if (representative_map.at(y) != y or y <= x)
+            if (representative_map[y] != y or y <= x)
                 continue;
 
-            bool fail{ false };
-            for (const reg_t i : equivalence_classes.at(x))
+            /* ensure non-overlapping lifetimes */
+            if (std::ranges::all_of(std::views::cartesian_product(equivalence_classes[x], equivalence_classes[y]),
+                                    [&](const std::tuple<reg_t, reg_t>& pair){ return not overlapping_lifetimes.at(get<0>(pair), get<1>(pair)); }))
             {
-                for (const reg_t j : equivalence_classes.at(y))
-                {
-                    if (overlapping_lifetimes.at(i, j))
-                    {
-                        fail = true;
-                        break;
-                    }
-                }
-
-                if (fail)
-                    break;
-            }
-
-            if (not fail)
-            {
-                representative_map.at(y) = x;
+                representative_map[y] = x;
                 std::vector<reg_t> set_union_result;
-                std::ranges::set_union(equivalence_classes.at(x), equivalence_classes.at(y), std::back_inserter(set_union_result));
-                equivalence_classes.at(x) = std::move(set_union_result);
-                equivalence_classes.at(y) = {};
+                std::ranges::set_union(equivalence_classes[x], equivalence_classes[y],
+                                       std::back_inserter(set_union_result), equivalence_classes.at(x).key_comp());
+                equivalence_classes[x].replace(std::move(set_union_result));
+                equivalence_classes[y].clear();
             }
         }
     }
 
     /* assign remaining registers to an equivalence class (either new or existing) */
 
-    for (reg_t i{ 0 }; i < representative_map.size(); ++i)
+    for (reg_t i{ 0 }; i < dfa.register_count_; ++i)
     {
-        if (representative_map.at(i) != no_register)
+        if (representative_map[i] != no_register)
             continue;
 
         bool success{ false };
 
-        for (reg_t j{ 0 }; j < representative_map.size(); ++j)
+        for (reg_t j{ 0 }; j < dfa.register_count_; ++j)
         {
-            if (representative_map.at(j) != j)
+            if (representative_map[j] != j)
                 continue;
 
-            if (std::ranges::all_of(equivalence_classes.at(j), [&](reg_t t){ return not overlapping_lifetimes.at(i, t); }))
+            if (std::ranges::all_of(equivalence_classes[j], [&](reg_t t){ return not overlapping_lifetimes.at(i, t); }))
             {
-                representative_map.at(i) = j;
-
-                auto& set = equivalence_classes.at(j);
-                auto it = std::ranges::lower_bound(set, i);
-                if (it == set.end() or *it != i)
-                    set.insert(it, i);
-
+                representative_map[i] = j;
+                equivalence_classes[j].insert(i);
                 success = true;
                 break;
             }
@@ -10167,8 +10144,9 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
 
         if (not success)
         {
-            representative_map.at(i) = i;
-            equivalence_classes.at(i).assign({ i });
+            representative_map[i] = i;
+            equivalence_classes[i].clear();
+            equivalence_classes[i].insert(i);
         }
     }
 
@@ -10176,13 +10154,13 @@ constexpr auto opt<CharT>::allocate_registers(const tdfa_t& dfa, const square_ma
 
     reg_t new_register_number{ 0 };
 
-    for (reg_t i{ 0 }; i < representative_map.size(); ++i)
+    for (reg_t i{ 0 }; i < dfa.register_count_; ++i)
     {
-        if (representative_map.at(i) != i)
+        if (representative_map[i] != i)
             continue;
 
-        for (const reg_t j : equivalence_classes.at(i))
-            remap_result.at(j) = new_register_number;
+        for (const reg_t j : equivalence_classes[i])
+            remap_result[j] = new_register_number;
 
         ++new_register_number;
     }
@@ -10247,7 +10225,7 @@ constexpr auto min<CharT>::init_hopcroft_partition(const tdfa_t& dfa) -> partiti
     /* add single partition for all non-final states */
 
     partitions.emplace_back(bitset_size, false);
-    for (const std::size_t state : dfa.final_nodes().keys())
+    for (const state_t state : dfa.final_nodes().keys())
         partitions.back().at(state) = true;
 
     partitions.back().flip();
@@ -10307,7 +10285,7 @@ constexpr auto min<CharT>::hopcroft(const tdfa_t& dfa) -> partition_t
             {
                 bitset_t transitions_from(bitset_size, false);
 
-                for (const std::size_t s : states)
+                for (const state_t s : states)
                     transitions_from[s] = true;
 
                 for (std::size_t p{ 0 }; p < partitions.size(); ++p)
@@ -10618,8 +10596,7 @@ constexpr void tagged_dfa<CharT>::make_shared_transitions()
     auto values = std::views::indices(nodes_.size())
                   | std::ranges::to<std::vector>();
 
-    static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); };
-    std::ranges::sort(std::views::zip(keys, values), {}, key_proj);
+    const std::flat_multimap map{ std::move(keys), std::move(values) };
 
     data_t new_nodes{};
     new_nodes.reserve(nodes_.size());
@@ -10633,13 +10610,11 @@ constexpr void tagged_dfa<CharT>::make_shared_transitions()
 
         bool inserted{ false };
 
-        const auto zv = std::views::zip(keys, values);
-
         for (auto it = beg; it != end; ++it)
         {
             const std::size_t hash{ tdfa::hash_node(it, end, current.default_tr) };
 
-            for (auto [fst, snd] = std::ranges::equal_range(zv, hash, {}, key_proj); fst != snd; ++fst)
+            for (auto [fst, snd] = map.equal_range(keys); fst != snd; ++fst)
             {
                 auto [_, index] = *fst;
 

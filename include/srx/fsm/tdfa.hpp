@@ -29,7 +29,9 @@ template<typename CharT> class factory;
 template<typename CharT> class opt;
 template<typename CharT> class min;
 
-using reg_t = std::uint_least32_t;
+using state_t       = std::size_t;
+using blkidx_t      = std::size_t;
+using reg_t         = std::uint_least32_t;
 using continue_at_t = tnfa::continue_at_t;
 
 struct regop
@@ -69,7 +71,7 @@ inline constexpr regops_t empty_regops{};
 
 struct final_node_info
 {
-    std::size_t         op_index;
+    blkidx_t            op_index;
     std::uint_least16_t offset;
     std::uint_least32_t alternative;
 
@@ -79,27 +81,27 @@ struct final_node_info
 
 struct fallback_node_info
 {
-    std::size_t   op_index;
+    blkidx_t      op_index;
     continue_at_t continue_at;
 
     friend constexpr bool operator==(const fallback_node_info&, const fallback_node_info&) noexcept = default;
     friend constexpr auto operator<=>(const fallback_node_info&, const fallback_node_info&) noexcept = default;
 };
 
-using continue_nodes_t = std::vector<std::size_t>;
-using final_nodes_t    = std::flat_map<std::size_t, final_node_info>;
-using fallback_nodes_t = std::flat_map<std::size_t, fallback_node_info>;
+using continue_nodes_t = std::vector<state_t>;
+using final_nodes_t    = std::flat_map<state_t, final_node_info>;
+using fallback_nodes_t = std::flat_map<state_t, fallback_node_info>;
 using final_regs_t     = std::vector<reg_t>;
 
 inline constexpr continue_at_t no_continue{ std::numeric_limits<continue_at_t>::max() };
-inline constexpr std::size_t   no_transition_regops{ std::numeric_limits<std::size_t>::max() };
-inline constexpr std::size_t   default_transition_is_not_state{ std::numeric_limits<std::size_t>::max() - 1 };
+inline constexpr blkidx_t      no_transition_regops{ std::numeric_limits<blkidx_t>::max() };
+inline constexpr blkidx_t      default_transition_is_not_state{ std::numeric_limits<blkidx_t>::max() - 1 };
 
 template<typename CharT>
 struct transition
 {
-    std::size_t next;
-    std::size_t op_index; /* use no_transition_regops for no ops */
+    state_t          next;
+    blkidx_t         op_index; /* use no_transition_regops for no ops */
     charset_t<CharT> cs;
 
     friend constexpr bool operator==(const transition&, const transition&) = default;
@@ -107,8 +109,8 @@ struct transition
 
 struct default_transition
 {
-    std::size_t next;
-    std::size_t op_index; /* use no_transition_regops for no ops, and default_transition_is_not_state for jumps */
+    state_t    next;
+    blkidx_t   op_index; /* use no_transition_regops for no ops, and default_transition_is_not_state for jumps */
 
     friend constexpr bool operator==(const default_transition&, const default_transition&) = default;
 };
@@ -148,15 +150,15 @@ public:
 
     static constexpr std::size_t match_start{ 0 };
 
-    [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(std::size_t i) const { return nodes_.at(i); }
-    [[nodiscard]] constexpr const tdfa::regops_t& get_regops(std::size_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
+    [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(tdfa::state_t i) const { return nodes_.at(i); }
+    [[nodiscard]] constexpr const tdfa::regops_t& get_regops(tdfa::blkidx_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
     [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const { return continue_nodes_; }
     [[nodiscard]] constexpr const tdfa::continue_nodes_t& additional_continue_nodes() const { return additional_continue_nodes_; }
     [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
     [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
     [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
-    [[nodiscard]] constexpr std::size_t node_count() const { return nodes_.size(); }
-    [[nodiscard]] constexpr std::size_t reg_count() const { return register_count_; }
+    [[nodiscard]] constexpr tdfa::state_t node_count() const { return nodes_.size(); }
+    [[nodiscard]] constexpr tdfa::reg_t reg_count() const { return register_count_; }
     [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
     [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
 
