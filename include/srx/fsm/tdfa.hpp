@@ -93,6 +93,20 @@ using final_nodes_t    = std::flat_map<state_t, final_node_info>;
 using fallback_nodes_t = std::flat_map<state_t, fallback_node_info>;
 using final_regs_t     = std::vector<reg_t>;
 
+using tag_t            = int;
+using tag_sequence_t   = std::vector<tag_t>;
+using backlink_index_t = std::size_t;
+
+inline constexpr backlink_index_t unset_backlink{ std::numeric_limits<backlink_index_t>::max() };
+
+struct backlink
+{
+    backlink_index_t prev_index{ unset_backlink };
+    tag_sequence_t   tags_seq;
+};
+
+using backlinks_t = std::vector<backlink>;
+
 inline constexpr continue_at_t no_continue{ std::numeric_limits<continue_at_t>::max() };
 inline constexpr blkidx_t      no_transition_regops{ std::numeric_limits<blkidx_t>::max() };
 inline constexpr blkidx_t      default_transition_is_not_state{ std::numeric_limits<blkidx_t>::max() - 1 };
@@ -133,7 +147,7 @@ class tagged_dfa
 public:
     using char_type = CharT;
 
-    constexpr explicit tagged_dfa(const tagged_nfa<char_type>& tnfa);
+    constexpr explicit tagged_dfa(const tagged_nfa<char_type>& tnfa, bool onepass = true);
     constexpr void optimise_registers();
     constexpr void compact_regop_blocks();
     constexpr void minimise_states();
@@ -148,19 +162,21 @@ public:
 
     /* observers */
 
-    static constexpr std::size_t match_start{ 0 };
+    static constexpr tdfa::state_t match_start{ 0 };
 
     [[nodiscard]] constexpr const tdfa::node<CharT>& get_node(tdfa::state_t i) const { return nodes_.at(i); }
     [[nodiscard]] constexpr const tdfa::regops_t& get_regops(tdfa::blkidx_t i) const { return (i == tdfa::no_transition_regops) ? tdfa::empty_regops : regops_.at(i); }
-    [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const { return continue_nodes_; }
-    [[nodiscard]] constexpr const tdfa::continue_nodes_t& additional_continue_nodes() const { return additional_continue_nodes_; }
-    [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const { return final_nodes_; }
-    [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const { return fallback_nodes_; }
-    [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const { return final_registers_; }
-    [[nodiscard]] constexpr tdfa::state_t node_count() const { return nodes_.size(); }
-    [[nodiscard]] constexpr tdfa::reg_t reg_count() const { return register_count_; }
-    [[nodiscard]] constexpr std::size_t tag_count() const { return tag_count_; }
+    [[nodiscard]] constexpr const tdfa::backlinks_t& get_backlinks(tdfa::blkidx_t i) const { return backlink_arrays_.at(i); }
+    [[nodiscard]] constexpr const tdfa::continue_nodes_t& continue_nodes() const noexcept { return continue_nodes_; }
+    [[nodiscard]] constexpr const tdfa::continue_nodes_t& additional_continue_nodes() const noexcept { return additional_continue_nodes_; }
+    [[nodiscard]] constexpr const tdfa::final_nodes_t& final_nodes() const noexcept { return final_nodes_; }
+    [[nodiscard]] constexpr const tdfa::fallback_nodes_t& fallback_nodes() const noexcept { return fallback_nodes_; }
+    [[nodiscard]] constexpr const tdfa::final_regs_t& final_registers() const noexcept { return final_registers_; }
+    [[nodiscard]] constexpr tdfa::state_t node_count() const noexcept { return nodes_.size(); }
+    [[nodiscard]] constexpr tdfa::reg_t reg_count() const noexcept { return register_count_; }
+    [[nodiscard]] constexpr std::size_t tag_count() const noexcept { return tag_count_; }
     [[nodiscard]] constexpr const capture_info& get_capture_info() const { return capture_info_; }
+    [[nodiscard]] constexpr bool is_onepass() const noexcept { return onepass_; }
 
     template<typename>
     friend struct tdfa_info;
@@ -168,6 +184,7 @@ public:
 private:
     using data_t = std::vector<tdfa::node<char_type>>;
     using regop_data_t = std::vector<tdfa::regops_t>;
+    using backlink_data_t = std::vector<tdfa::backlinks_t>;
 
     data_t                  nodes_;
     tdfa::continue_nodes_t  continue_nodes_;
@@ -176,10 +193,12 @@ private:
     tdfa::fallback_nodes_t  fallback_nodes_;
     tdfa::final_regs_t      final_registers_;
     regop_data_t            regops_;
+    backlink_data_t         backlink_arrays_;
     capture_info            capture_info_;
     std::size_t             tag_count_;
     tdfa::reg_t             register_count_{ 0 };
     fsm_flags               flags_;
+    bool                    onepass_{ true };
 };
 
 } // namespace detail

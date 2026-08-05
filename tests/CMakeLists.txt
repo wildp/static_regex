@@ -24,6 +24,7 @@ target_sources(tests
         srxf_test.cpp
         srxn_test.cpp
         tdfa_test.cpp
+        tdfb_test.cpp
         tnfa_test.cpp
 )
 

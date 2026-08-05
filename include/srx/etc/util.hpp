@@ -132,7 +132,7 @@ constexpr void append(std::size_t& hash, const T& value)
 template<std::ranges::range T>
 constexpr void append(std::size_t& hash, T&& value)
 {
-    for (auto&& elem : value)
+    for (auto&& elem : std::forward<T>(value))
         append(hash, elem);
 }
 

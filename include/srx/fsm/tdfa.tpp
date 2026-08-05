@@ -30,9 +30,6 @@ constexpr bool toposort_regops(regops_t::iterator beg, regops_t::iterator end, r
 
 /* tnfa -> tdfa conversion */
 
-using tag_t = int;
-using tag_sequence_t = std::vector<tag_t>;
-
 using reg_vec = std::vector<reg_t>;
 
 struct configuration
@@ -64,7 +61,7 @@ struct closure_entry
 
     constexpr closure_entry() = default;
 
-    static constexpr configuration next_config(const closure_entry& ce)
+    static constexpr configuration to_config(const closure_entry& ce)
     {
         return { ce.tnfa_state, ce.registers, ce.new_tag_seq };
     }
@@ -73,6 +70,7 @@ struct closure_entry
 using config_set_t = std::vector<configuration>;
 using closure_t = std::vector<closure_entry>;
 using register_map_t = std::flat_map<reg_t, reg_t>;
+using origin_map_t = std::flat_map<tnfa::state_t, std::size_t>;
 
 template<typename CharT>
 using multistep_closures_t = charset_t<CharT>::template partition_pair_result<closure_entry>;
@@ -148,7 +146,14 @@ private:
     constexpr void fallback_regops(tdfa_t& result);
     constexpr void backup_regops(tdfa_t& result, state_t state, reg_t reg_dst, reg_t reg_src);
 
-    constexpr state_t make_initial_state(tdfa_t& result, tnfa::state_t tnfa_state);
+    constexpr void make_origin_map(const closure_t& c);
+    [[nodiscard]] constexpr backlinks_t transition_backlinks(const closure_t& c, state_t prev_state, state_t state) const;
+    [[nodiscard]] constexpr backlinks_t final_backlinks(state_t state, const configuration& final_config) const;
+
+    constexpr void fallback_backlinks(tdfa_t& result) const;
+
+    constexpr void make_final_state_info(tdfa_t& result, state_t new_state);
+    [[nodiscard]] constexpr state_t make_initial_state(tdfa_t& result, tnfa::state_t tnfa_state);
 
     constexpr void factory_init();
 
@@ -162,6 +167,9 @@ private:
     normal_tr_info_t normal_transitions_;
     reg_t tag_count_;
     fsm_flags flags_;
+    bool onepass_;
+
+    std::vector<std::flat_map<tnfa::state_t, backlink_index_t>> origin_maps_;
 
     // TODO: eventually replace these with (flat|unordered)_multimap when supported?
     std::vector<std::size_t> state_hashes_keys_;
@@ -254,12 +262,12 @@ constexpr auto factory<CharT>::e_closure(closure_t&& c) const -> closure_t
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o) -> state_t
+constexpr state_t factory<CharT>::add_state(tdfa_t& result, const closure_t& c, regops_t& o)
 {
-    static constexpr std::size_t map_usage_threshold{ 128 };
+    static constexpr state_t map_usage_threshold{ 128 };
     static constexpr auto key_proj = [](const auto& v) -> decltype(auto) { return get<0>(v); }; // TODO: remove later
 
-    node_info current_info{ .config{ c | std::views::transform(closure_entry::next_config) | std::ranges::to<std::vector>() } };
+    node_info current_info{ .config{ c | std::views::transform(closure_entry::to_config) | std::ranges::to<std::vector>() } };
     state_t new_state{ state_info_.size() };
 
     if (new_state < map_usage_threshold) [[likely]]
@@ -268,7 +276,8 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
         const std::size_t sh_key{ hash_state(current_info) };
         for (std::size_t existing_state{ 0 }, size{ state_hashes_keys_.size() }; existing_state < size; ++existing_state)
             if (sh_key == state_hashes_keys_[existing_state]) [[unlikely]]
-                if (mappable(current_info, existing_state, o, result.register_count_))
+                // if (mappable(current_info, existing_state, o, result.register_count_)) // Is this line incorrect?
+                if (current_info == state_info_.at(existing_state))
                     return existing_state;
 
         /* check if state can be mapped to an existing state */
@@ -328,31 +337,50 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
         mappable_candidate_values_.emplace(mappable_candidate_values_.cbegin() + mc_offset, new_state);
     }
 
-    /* make final regops if state is an accepting state */
+    /* assign backlinks if necessary */
+    if (not onepass_)
+        make_origin_map(c);
+
+    make_final_state_info(result, new_state);
+    return new_state;
+}
+
+template<typename CharT>
+constexpr void factory<CharT>::make_final_state_info(tdfa_t& result, const state_t new_state)
+{
     const auto& current_cfg = state_info_.back().config;
+    std::optional<continue_at_t> continue_at;
+
+    /* make final regops if state is an accepting state */
     const auto is_final = [this](tnfa::state_t arg){ return tnfa_ptr_->get_node(arg).is_final; };
     const auto it = std::ranges::find_if(current_cfg, is_final, &configuration::tnfa_state);
-    std::optional<continue_at_t> continue_at;
+
     if (it != current_cfg.end())
     {
-        auto final_ops = final_regops(result.final_registers_, it->registers, it->tag_seq);
         const auto& node = tnfa_ptr_->get_node(it->tnfa_state);
-        const auto offset = node.final_offset;
-        const auto alt = node.final_alt;
 
         if (node.continue_at < tnfa_ptr_->get_cont_info().size())
             continue_at = node.continue_at;
 
-        if (final_ops.empty())
+        blkidx_t idx{ no_transition_regops };
+
+        if (onepass_)
         {
-            /* avoid creating empty regop blocks */
-            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = no_transition_regops, .offset = offset, .alternative = alt });
+            auto final_ops = final_regops(result.final_registers_, it->registers, it->tag_seq);
+
+            if (not final_ops.empty())
+            {
+                idx = result.regops_.size();
+                result.regops_.emplace_back(std::move(final_ops));
+            }
         }
         else
         {
-            result.final_nodes_.emplace(new_state, final_node_info{ .op_index = result.regops_.size(), .offset = offset, .alternative = alt });
-            result.regops_.emplace_back(std::move(final_ops));
+            idx = result.backlink_arrays_.size();
+            result.backlink_arrays_.emplace_back(final_backlinks(new_state, *it));
         }
+
+        result.final_nodes_.emplace(new_state, final_node_info{ .op_index = idx, .offset = node.final_offset, .alternative = node.final_alt });
     }
 
     if (flags_.enable_fallback)
@@ -367,12 +395,10 @@ constexpr auto factory<CharT>::add_state(tdfa_t& result, const closure_t& c, reg
                 cont_info_.emplace_hint(cont_info_.end(), new_state, *continue_at);
         }
     }
-
-    return new_state;
 }
 
 template<typename CharT>
-constexpr auto factory<CharT>::multistep(state_t state) const -> multistep_closures_t<char_type>
+constexpr auto factory<CharT>::multistep(const state_t state) const -> multistep_closures_t<char_type>
 {
     using elem_t = tnfa::charset_t<char_type>::template ref_pair<closure_entry>;
 
@@ -380,7 +406,7 @@ constexpr auto factory<CharT>::multistep(state_t state) const -> multistep_closu
 
     for (const auto& cfg : state_info_.at(state).config)
         for (const auto& [dst, cs] : normal_transitions_.at(cfg.tnfa_state))
-            transitions.emplace_back(cs, closure_entry{ dst, dst, cfg.registers, cfg.tag_seq });
+            transitions.emplace_back(cs, closure_entry{ dst, cfg.tnfa_state, cfg.registers, cfg.tag_seq });
 
     return charset_t<char_type>::partition_ext(transitions);
 }
@@ -446,7 +472,7 @@ constexpr regop::op_t factory<CharT>::regop_rhs(const std::vector<bool>& hist) c
 }
 
 template<typename CharT>
-constexpr std::vector<bool> factory<CharT>::history(const tag_sequence_t& h, tag_t tag) const
+constexpr std::vector<bool> factory<CharT>::history(const tag_sequence_t& h, const tag_t tag) const
 {
     std::vector<bool> result;
     for (const tag_t x : h)
@@ -456,13 +482,13 @@ constexpr std::vector<bool> factory<CharT>::history(const tag_sequence_t& h, tag
 }
 
 template<typename CharT>
-constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, tag_t tag) const
+constexpr bool factory<CharT>::has_history(const tag_sequence_t& h, const tag_t tag) const
 {
     return std::ranges::contains(h, tag, [](auto x){ return x < 0 ? -x : x; });
 }
 
 template<typename CharT>
-constexpr bool factory<CharT>::mappable(const node_info& state, state_t mapped_state, regops_t& o, const reg_t regcount) const
+constexpr bool factory<CharT>::mappable(const node_info& state, const state_t mapped_state, regops_t& o, const reg_t regcount) const
 {
     const auto& mapped_state_info = state_info_.at(mapped_state);
 
@@ -555,7 +581,7 @@ constexpr bool factory<CharT>::mappable(const node_info& state, state_t mapped_s
 template<typename CharT>
 constexpr void factory<CharT>::fallback_regops(tdfa_t& result)
 {
-    for (const auto [state, fni] : result.final_nodes_)
+    for (const auto& [state, fni] : result.final_nodes_)
     {
         /* check if current state is a fallback state */
 
@@ -616,21 +642,21 @@ constexpr void factory<CharT>::fallback_regops(tdfa_t& result)
                 o.emplace_back(f);
         }
 
-        if (o.empty())
+        blkidx_t idx{ no_transition_regops };
+
+        if (not o.empty())
         {
             /* avoid creating empty regop blocks */
-            result.fallback_nodes_.emplace(state, fallback_node_info{ .op_index = no_transition_regops, .continue_at = continuation_index });
-        }
-        else
-        {
-            result.fallback_nodes_.emplace(state, fallback_node_info{ .op_index = result.regops_.size(), .continue_at = continuation_index });
+            idx = result.regops_.size();
             result.regops_.emplace_back(std::move(o));
         }
+
+        result.fallback_nodes_.emplace(state, fallback_node_info{ .op_index = idx, .continue_at = continuation_index });
     }
 }
 
 template<typename CharT>
-constexpr void factory<CharT>::backup_regops(tdfa_t& result, state_t state, reg_t reg_dst, reg_t reg_src)
+constexpr void factory<CharT>::backup_regops(tdfa_t& result, const state_t state, const reg_t reg_dst, const reg_t reg_src)
 {
     for (auto& tr : result.nodes_.at(state).tr)
     {
@@ -660,6 +686,76 @@ constexpr state_t factory<CharT>::make_initial_state(tdfa_t& result, const tnfa:
     regops_t regs;
     return add_state(result, initial_cfg, regs);
 }
+
+template<typename CharT>
+constexpr void factory<CharT>::make_origin_map(const closure_t& c)
+{
+    /* sort at end instead of using insertion sort */
+    std::vector<tnfa::state_t> map_keys;
+    std::vector<backlink_index_t> map_values;
+
+    if (not c.empty())
+    {
+        closure_t closure_copy{ c };
+        std::ranges::sort(closure_copy, {}, &closure_entry::tnfa_origin);
+
+        backlink_index_t idx{ 0 };
+        tnfa::state_t prev_o{ closure_copy.front().tnfa_origin };
+
+        for (const auto& ce : closure_copy)
+        {
+            if (ce.tnfa_origin != prev_o)
+                ++idx;
+
+            /* N.B. each tnfa state should occur at most once in each */
+            map_keys.emplace_back(ce.tnfa_state);
+            map_values.emplace_back(idx);
+        }
+    }
+
+    origin_maps_.emplace_back(std::move(map_keys), std::move(map_values));
+}
+
+template<typename CharT>
+constexpr backlinks_t factory<CharT>::transition_backlinks(const closure_t& c, state_t prev_state, state_t state) const
+{
+    const auto& from_map = origin_maps_.at(prev_state);
+    const auto& to_map = origin_maps_.at(state);
+
+    backlinks_t links(to_map.size());
+
+    for (const auto& ce : c)
+        if (const backlink_index_t idx{ to_map.at(ce.tnfa_state) }; links.at(idx).prev_index == unset_backlink)
+            links.at(idx) = backlink{ .prev_index = from_map.at(ce.tnfa_origin), .tags_seq = ce.tag_seq };
+
+    return links;
+}
+
+template<typename CharT>
+constexpr backlinks_t factory<CharT>::final_backlinks(state_t state, const configuration& final_config) const
+{
+    const auto& from_map = origin_maps_.at(state);
+    return backlinks_t{ backlink{ .prev_index = from_map.at(final_config.tnfa_state), .tags_seq = final_config.tag_seq } };
+}
+
+template<typename CharT>
+constexpr void factory<CharT>::fallback_backlinks(tdfa_t& result) const
+{
+    for (const auto& [state, fni] : result.final_nodes_)
+    {
+        /* check if current state is a fallback state */
+
+        if (not state_info_.at(state).is_fallback)
+            continue;
+
+        auto continuation_index = tdfa::no_continue;
+        if (auto it = cont_info_.find(state); it != cont_info_.end())
+            continuation_index = it->second;
+
+        result.fallback_nodes_.emplace(state, fallback_node_info{ .op_index = fni.op_index, .continue_at = continuation_index });
+    }
+}
+
 
 template<typename CharT>
 constexpr void factory<CharT>::factory_init()
@@ -703,13 +799,17 @@ constexpr void factory<CharT>::factory_init()
 
 template<typename CharT>
 constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std::size_t tag_count)
-    : tnfa_ptr_{ &input }, tag_count_{ std::saturating_cast<reg_t>(tag_count) }, flags_{ result.flags_ }
+    : tnfa_ptr_{ &input }, tag_count_{ std::saturating_cast<reg_t>(tag_count) }, flags_{ result.flags_ }, onepass_{ result.onepass_ }
 {
     factory_init();
 
     result.register_count_ = tag_count_ * 2;
-    result.final_registers_.resize(tag_count_);
-    std::ranges::iota(result.final_registers_, tag_count_);
+
+    if (onepass_)
+    {
+        result.final_registers_.resize(tag_count_);
+        std::ranges::iota(result.final_registers_, tag_count_);
+    }
 
     const state_t initial{ make_initial_state(result, tnfa_ptr_->start_node()) };
 
@@ -746,25 +846,39 @@ constexpr factory<CharT>::factory(const tnfa_t& input, tdfa_t& result, const std
         for (auto& [cs, cfg] : multistep(state))
         {
             cfg = e_closure(std::move(cfg));
-            auto o = transition_regops(cfg, result.register_count_, map);
+
+            regops_t o;
+            if (onepass_)
+                o = transition_regops(cfg, result.register_count_, map);
+
             const auto s = add_state(result, cfg, o);
 
             /* Add transition to tdfa */
-            if (o.empty())
+            blkidx_t idx{ no_transition_regops };
+
+            if (not onepass_)
+            {
+                idx = result.backlink_arrays_.size();
+                result.backlink_arrays_.emplace_back(transition_backlinks(cfg, state, s));
+            }
+            else if (not o.empty())
             {
                 /* avoid creating empty regop blocks */
-                result.nodes_.at(state).tr.emplace_back(s, no_transition_regops, std::move(cs));
-            }
-            else
-            {
-                result.nodes_.at(state).tr.emplace_back(s, result.regops_.size(), std::move(cs));
+                idx = result.regops_.size();
                 result.regops_.emplace_back(std::move(o));
             }
+
+            result.nodes_.at(state).tr.emplace_back(s, idx, std::move(cs));
         }
     }
 
     if (flags_.enable_fallback)
-        fallback_regops(result);
+    {
+        if (onepass_)
+            fallback_regops(result);
+        else
+            fallback_backlinks(result);
+    }
 }
 
 // TODO: improve implementation of tdfa optimisation to reduce number of steps taken by constant evaluator!!!
@@ -1791,8 +1905,8 @@ constexpr std::size_t hash_node(I first, const S last, const std::optional<T>& o
 /* tdfa constructor and member functions */
 
 template<typename CharT>
-constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
-    : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }
+constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa, bool onepass)
+    : capture_info_{ tnfa.get_capture_info() }, tag_count_{ tnfa.tag_count() }, flags_{ tnfa.get_flags() }, onepass_{ onepass }
 {
     tdfa::factory<char_type>{ tnfa, *this, tag_count_ };
 }
@@ -1800,6 +1914,9 @@ constexpr tagged_dfa<CharT>::tagged_dfa(const tagged_nfa<char_type>& tnfa)
 template<typename CharT>
 constexpr void tagged_dfa<CharT>::optimise_registers()
 {
+    if (not onepass_)
+        return;
+
     tdfa::opt<char_type> regoptimise;
     regoptimise(*this);
     compact_regop_blocks();

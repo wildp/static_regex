@@ -32,7 +32,10 @@ public:
         requires std::convertible_to<std::iter_value_t<I>, CharT>
     [[nodiscard]] constexpr std::optional<tag_result> match(I first, I last) const
     {
-        return match_implementation(first, last, false, this->match_start).first;
+        if (this->is_onepass())
+            return match_implementation(first, last, false, this->match_start).first;
+        else
+            return multipass_implementation(first, last, false, this->match_start).first;
     }
 
     template<std::ranges::random_access_range R>
@@ -51,7 +54,10 @@ public:
         requires std::convertible_to<std::iter_value_t<I>, CharT>
     [[nodiscard]] constexpr std::optional<tag_result> partial_match(I first, I last) const
     {
-        return match_implementation(first, last, true, this->match_start).first;
+        if (this->is_onepass())
+            return match_implementation(first, last, true, this->match_start).first;
+        else
+            return multipass_implementation(first, last, true, this->match_start).first;
     }
 
     template<std::ranges::random_access_range R>
@@ -73,7 +79,10 @@ public:
         std::vector<tag_result> result;
         auto it = first;
         auto prev_it = first;
-        auto ret = match_implementation(it, last, true, this->match_start);
+
+        auto ret = (this->is_onepass())
+                    ? match_implementation(it, last, true, this->match_start)
+                    : multipass_implementation(it, last, true, this->match_start);
 
         while (ret.first.has_value())
         {
@@ -87,14 +96,21 @@ public:
             if (ret.second == detail::tdfa::no_continue)
                 break;
 
+            detail::tdfa::state_t next_start{};
+
             if (mfirst != mlast)
-                ret = match_implementation(it, last, true, this->continue_nodes().at(ret.second));
+                next_start = this->continue_nodes().at(ret.second);
             else if (this->additional_continue_nodes().empty())
                 throw std::logic_error("additional_continue_nodes is empty");
             else if (mlast == 0)
-                ret = match_implementation(it, last, true, this->additional_continue_nodes().back());
+                next_start = this->additional_continue_nodes().back();
             else
-                ret = match_implementation(it, last, true, this->additional_continue_nodes().at(ret.second));
+                next_start = this->additional_continue_nodes().at(ret.second);
+
+            if (this->is_onepass())
+                ret = match_implementation(it, last, true, next_start);
+            else
+                ret = multipass_implementation(it, last, true, next_start);
 
             prev_it = it;
         }
@@ -126,6 +142,10 @@ private:
     template<std::random_access_iterator I>
         requires std::convertible_to<std::iter_value_t<I>, CharT>
     constexpr void regops_implementation(I it, std::size_t op_index, std::vector<I>& registers, std::vector<bool>& registers_enabled) const;
+
+    template<std::random_access_iterator I>
+        requires std::convertible_to<std::iter_value_t<I>, CharT>
+    [[nodiscard]] constexpr impl_ret_type multipass_implementation(I first, I last, bool enable_fallback, std::size_t start) const;
 };
 
 template<typename CharT>
@@ -219,8 +239,6 @@ constexpr auto tdfa_matcher<CharT>::match_implementation(const I first, const I 
     const capture_info& ci{ this->get_capture_info() };
     const auto& final_reg = this->final_registers();
 
-    using namespace srx::detail;
-
     auto f = [&](const capture_info::tag_pair_t& p) -> bool {
         return not ((p.first.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.first.tag_number)))
                     or (p.second.tag_number >= 0 and not registers_enabled.at(final_reg.at(p.second.tag_number))));
@@ -282,6 +300,168 @@ constexpr void tdfa_matcher<CharT>::regops_implementation(I it, std::size_t op_i
             throw std::runtime_error("Unknown error");
         }
     }
+}
+
+template<typename CharT>
+template<std::random_access_iterator I>
+    requires std::convertible_to<std::iter_value_t<I>, CharT>
+constexpr auto tdfa_matcher<CharT>::multipass_implementation(const I first, const I last, const bool enable_fallback, const std::size_t start) const -> impl_ret_type
+{
+    using namespace srx::detail;
+
+    std::vector<tdfa::blkidx_t> backlink_indices;
+
+    std::size_t next_state{ start };
+    std::size_t fallback_state{ fallback_disabled };
+
+    std::ptrdiff_t fallback_offset{ 0 };
+
+    I it{ first };
+    I final_it{ first };
+    std::optional<const tdfa::backlink&> backlink;
+
+    auto continue_at = tdfa::no_continue;
+
+    while (true)
+    {
+        if (enable_fallback)
+        {
+            if (this->fallback_nodes().contains(next_state))
+            {
+                fallback_state = next_state;
+                fallback_offset = 0;
+            }
+            else
+            {
+                ++fallback_offset;
+            }
+        }
+
+        if (it == last)
+        {
+            if (this->final_nodes().contains(next_state))
+            {
+                const auto& fni = this->final_nodes().at(next_state);
+                backlink = this->get_backlinks(fni.op_index).front();
+                final_it = std::ranges::prev(it, fni.offset);
+                if (this->fallback_nodes().contains(next_state))
+                    continue_at = this->fallback_nodes().at(next_state).continue_at;
+                break; /* outer */
+            }
+        }
+        else
+        {
+            bool success{ false };
+
+            for (const auto& t : this->get_node(next_state).tr)
+            {
+                if (t.cs.contains(*it))
+                {
+                    next_state = t.next;
+                    backlink_indices.emplace_back(t.op_index);
+                    ++it;
+                    success = true;
+                    break; /* inner */
+                }
+            }
+
+            if (success)
+                continue; /* outer */
+
+            if (const auto& dt = this->get_node(next_state).default_tr; dt.has_value())
+            {
+                next_state = dt->next;
+                backlink_indices.emplace_back(dt->op_index);
+                ++it;
+                continue; /* outer */
+            }
+        }
+
+        if (not enable_fallback or fallback_state == fallback_disabled)
+            return { std::nullopt, continue_at }; /* skip converting tag registers to captures */
+
+        std::ranges::advance(it, -fallback_offset);
+        while (fallback_offset-- > 0)
+            backlink_indices.pop_back();
+
+        const auto& fni = this->final_nodes().at(fallback_state);
+        final_it = std::ranges::prev(it, fni.offset);
+        backlink = this->get_backlinks(fni.op_index).front();
+        continue_at = this->fallback_nodes().at(fallback_state).continue_at;
+        break; /* outer */
+    }
+
+    /* backwards pass to get tags */
+
+    std::vector<std::size_t> tag_vec(this->reg_count());
+    std::vector<bool> tags_assigned(this->reg_count(), false);
+
+    while (not std::ranges::all_of(tags_assigned, std::identity{}))
+    {
+        for (const auto tag : backlink.value().tags_seq | std::views::reverse)
+        {
+            if (tag > 0 and not tags_assigned.at(tag - 1))
+            {
+                tags_assigned.at(tag - 1) = true;
+                tag_vec.at(tag - 1) = std::ranges::distance(first, it);
+            }
+            else if (tag < 0 and not tags_assigned.at((-tag) - 1))
+            {
+                tags_assigned.at((-tag) - 1) = true;
+                tag_vec.at((-tag) - 1) = no_tag;
+            }
+        }
+
+        if (it == first)
+            break;
+
+        backlink = this->get_backlinks(backlink_indices.back()).at(backlink->prev_index);
+        backlink_indices.pop_back();
+        --it;
+    }
+
+    /* convert from tags to captures */
+
+    tag_result res;
+    const capture_info& ci{ this->get_capture_info() };
+    const std::size_t final_size{ static_cast<std::size_t>(std::ranges::distance(first, final_it)) };
+
+    auto f = [&](const capture_info::tag_pair_t& p) -> bool {
+        return not ((p.first.tag_number >= 0 and tag_vec.at(p.first.tag_number) == no_tag)
+                    or (p.second.tag_number >= 0 and tag_vec.at(p.second.tag_number) == no_tag));
+    };
+
+    auto t = [&](const capture_info::tag_pair_t& p) -> std::pair<std::size_t, std::size_t> {
+        return {
+            (p.first.tag_number >= 0)
+            ? tag_vec.at(p.first.tag_number)
+            : ((p.first.tag_number == start_of_input_tag) ? 0 : final_size) + p.first.offset,
+            (p.second.tag_number >= 0)
+            ? tag_vec.at(p.second.tag_number)
+            : ((p.second.tag_number == start_of_input_tag) ? 0 : final_size) + p.second.offset
+        };
+    };
+
+    for (std::size_t i{ 0 }, i_end{ ci.capture_count() }; i < i_end; ++i)
+    {
+        auto rng = ci.lookup(i)
+                    | std::views::filter(f)
+                    | std::views::transform(t)
+                    | std::ranges::to<std::vector>();
+
+        if (std::ranges::size(rng) == 0)
+        {
+            res.insert(res.end(), { no_tag, no_tag });
+            continue;
+        }
+
+        auto max_elem = std::ranges::max_element(rng, std::ranges::less{}, &std::pair<std::size_t, std::size_t>::first);
+
+        res.push_back(max_elem->first);
+        res.push_back(max_elem->second);
+    }
+
+    return { res, continue_at };
 }
 
 } // namespace testing
