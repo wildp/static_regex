@@ -56,6 +56,12 @@ struct register_operation
     bool        is_copy; /* true if cpy, false if set */
 };
 
+struct static_backlink
+{
+    tdfa::backlink_index_t   prev_index{};
+    static_span<tdfa::tag_t> tag_seq;
+};
+
 template<typename CharT>
 struct static_transition
 {
@@ -97,6 +103,16 @@ private:
                     std::unreachable();
             })
         };
+    }
+
+    static consteval auto make_backlink(const tdfa::backlink& bl)
+    {
+        return static_backlink{ .prev_index = bl.prev_index, .tag_seq{ bl.tags_seq } };
+    }
+
+    static consteval auto make_backlinks(const tdfa::backlinks_t& b)
+    {
+        return static_span{ b | std::views::transform(make_backlink) };
     }
 
     static consteval auto make_continue_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa)
@@ -170,18 +186,21 @@ public:
                                  const std::pair<std::size_t, std::size_t>& mml, fsm_flags f, bool alt_mode)
         : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
         , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
+        , backlink_arrays{ dfa.backlink_arrays_ | std::views::transform(make_backlinks) }
         , continue_nodes{ dfa.continue_nodes() }
         , additional_continue_nodes{ dfa.additional_continue_nodes() }
         , final_nodes{ dfa.final_nodes() }
         , fallback_nodes{ dfa.fallback_nodes() }
         , final_registers{ dfa.final_registers() }
+        , tag_count{ dfa.tag_count() }
         , register_count{ dfa.reg_count() }
         , match_start{ dfa.match_start }
         , captures{ dfa.get_capture_info() }
         , outer_transitions{ make_continue_info(dfa, nfa) }
         , min_max_lengths{ mml }
         , flags{ f }
-        , alt_mode{ alt_mode }{}
+        , alt_mode{ alt_mode }
+        , onepass{ dfa.is_onepass() } {}
 
     [[nodiscard]] consteval bool has_continue() const
     {
@@ -191,12 +210,14 @@ public:
     /* data members (public so that tdfa_info is structural) */
     static_span<static_span<static_transition<char_type>>> nodes;
     static_span<static_span<register_operation>> regops;
+    static_span<static_span<static_backlink>> backlink_arrays;
     static_span<std::size_t> continue_nodes;
     static_span<std::size_t> additional_continue_nodes;
     static_map<std::size_t, tdfa::final_node_info> final_nodes;
     static_map<std::size_t, tdfa::fallback_node_info> fallback_nodes;
     static_span<tdfa::reg_t> final_registers;
 
+    std::size_t tag_count{ 0 };
     std::size_t register_count{ 0 };
     std::size_t match_start{ 0 };
     final_capture_info captures;
@@ -206,6 +227,7 @@ public:
 
     fsm_flags flags;
     bool alt_mode;
+    bool onepass;
 };
 
 template<typename CharT>
@@ -235,7 +257,7 @@ struct lexer_info
 
 
 template<typename CharT>
-consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern, fsm_flags f)
+consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern, fsm_flags f, bool onepass)
 {
     /* set parser flags as appropriate */
     parser_flags p{};
@@ -258,7 +280,7 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
         nfa.add_non_empty_match_pathway();
 
     /* convert to tdfa */
-    tagged_dfa dfa{ nfa };
+    tagged_dfa dfa{ nfa, onepass };
     dfa.optimise_registers();
     // dfa.minimise_states();
 
@@ -271,7 +293,10 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
 }
 
 template<std::meta::info P, ff F>
-inline constexpr auto re = compile_pattern(std::basic_string_view{ [: P :] }, unpack_flags(F));
+inline constexpr auto re = compile_pattern(std::basic_string_view{ [: P :] }, unpack_flags(F), true);
+
+template<std::meta::info P, ff F>
+inline constexpr auto rf = compile_pattern(std::basic_string_view{ [: P :] }, unpack_flags(F), false);
 
 
 struct match_non_empty_t {};
