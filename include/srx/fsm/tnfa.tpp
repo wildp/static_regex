@@ -1507,7 +1507,7 @@ constexpr tagged_nfa<CharT>::tagged_nfa(const expr_tree<char_type>& ast, fsm_fla
         cont_info_.emplace_back(default_start_node, ~charset_type{});
 
     std::vector<std::vector<int>> tag_vec{};
-    if (tag_count_ > 1)
+    if (tag_count_ > 0)
         ast.make_tag_vec(tag_vec);
 
     if (not ast.is_alt_mode())
