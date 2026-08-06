@@ -103,6 +103,8 @@ int main(int argc, char* argv[])
         }
         else if (sv.starts_with("m"))
         {
+            sv.remove_prefix(1);
+
             [&]{
                 template for (constexpr std::meta::info r : define_static_array(enumerators_of(^^match_type_option)))
                 {
