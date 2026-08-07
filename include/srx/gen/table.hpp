@@ -29,72 +29,77 @@ template<std::meta::info Info>
 struct table_dfa
 {
     static_assert(has_template_arguments(type_of(Info)), "Invalid reflection value");
+    static_assert(template_of(type_of(Info)) == ^^tdfa_info);
 
-    // using char_type = typename [: template_arguments_of(type_of(Info))[0] :];
-    using char_type = char;
+    using char_type = typename [: template_arguments_of(type_of(Info))[0] :];
     using uchar_type = std::make_unsigned_t<char>;
 
     static_assert(sizeof(char_type) == 1);
 
-    // static constexpr bool is_regex{ template_of(type_of(Info)) == ^^tdfa_info };
-    // static constexpr bool is_lexer{ template_of(type_of(Info)) == ^^lexer_info };
-    // static_assert(is_regex and not is_lexer);
-
 private:
     static constexpr tdfa_info<char_type> DFA = [: Info :];
+    static_assert(not DFA.onepass, "Invalid reflection value: use p1306dfa instead");
+
     static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
-    static constexpr bool has_regops{ not DFA.regops.empty() };
     static constexpr bool has_fallback{ DFA.flags.enable_fallback };
     static constexpr bool has_continue{ DFA.flags.is_iterator };
     static constexpr bool has_alternative{ DFA.alt_mode };
-    static constexpr bool has_extra_continue{ has_continue and not never_empty };
+    static constexpr bool has_xcontinue{ has_continue and not never_empty };
+    static constexpr bool has_backlinks{ not DFA.flags.return_bool and DFA.tag_count > 0 };
     static constexpr auto largest_offset{ DFA.largest_offset() };
+    static constexpr auto largest_alternative{ DFA.largest_alt() };
 
-    using state_offset_t = std::uint_least8_t;
-    using regop_offset_t = std::uint_least8_t;
+    static constexpr std::size_t actual_length{ 0 /* TODO: calculate maximum length, inclusive of assertions extending beyond the end of patterns */ };
+    static constexpr std::size_t backlink_array_count{ DFA.backlink_arrays.size() };
 
-    static_assert(DFA.nodes.size() < std::numeric_limits<state_offset_t>::max() - 1);
-    static_assert(DFA.regops.size() < std::numeric_limits<regop_offset_t>::max() - 1);
+    using state_index_t = [: smallest_integer_type(DFA.nodes.size() + 1) :];
+    using backlink_index_t = [: smallest_integer_type(backlink_array_count) :]; // TODO: add maybe_type_t of this to disable
+
+    static consteval std::size_t get_start(tdfa::continue_at_t continue_at = tdfa::no_continue, bool use_alt = false)
+    {
+        if (continue_at == tdfa::no_continue)
+        {
+            if (use_alt and not never_empty)
+                return DFA.additional_continue_nodes.back();
+            else
+                return DFA.match_start;
+        }
+        else
+        {
+            if (use_alt and not never_empty)
+                return DFA.additional_continue_nodes[continue_at];
+            else
+                return DFA.continue_nodes[continue_at];
+        }
+    }
 
 public:
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
-    using result = static_match_results<I, smr_layout::reg_map<DFA.register_count, DFA.captures, DFA.final_registers>>;
+    using result = static_match_results<I, smr_layout::reg_id<DFA.register_count, DFA.captures>>;
 
     template<std::bidirectional_iterator I>
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     struct iterated_result;
 
+    // TODO: depending on pattern length, replace with a circular buffer?
+    using backlink_buffer_t = std::vector<backlink_index_t>;
+
 private:
-    using maybe_regop_offset_t = maybe_type_t<has_regops, regop_offset_t>;
-    using maybe_alternative_t = maybe_type_t<has_alternative, std::uint_least32_t>;
-    using maybe_next_start_nonempty_t = maybe_type_t<has_extra_continue, state_offset_t>;
-    using maybe_next_start_t = maybe_type_t<has_continue, state_offset_t>;
-
-    template<typename I>
-    using maybe_saved_first_t = maybe_type_t<has_extra_continue, I>;
-
-    struct overspill
-    {
-        // TODO: move overspill out of result<I>
-        [[no_unique_address]] maybe_alternative_t alt{ 0 };
-        [[no_unique_address]] maybe_next_start_t nst{ 0 };
-
-        overspill() = default;
-    };
-
-    using overspill_ref = std::add_lvalue_reference_t<overspill>;
+    using maybe_buf_t = maybe_type_t<has_backlinks, backlink_buffer_t&>;
 
     template<typename I>
     using result_ref = std::add_lvalue_reference_t<result<I>>;
 
-    static constexpr std::size_t fallback_disabled{ std::numeric_limits<std::size_t>::max() };
+    template<typename I>
+    using iterated_result_ref = std::add_lvalue_reference_t<iterated_result<I>>;
+
 
     template<typename I>
     struct fallback_info
     {
         I it;
-        std::size_t state{ fallback_disabled };
+        state_index_t state{ 0 };
 
         constexpr explicit(false) fallback_info(I it) : it{ it } {}
     };
@@ -102,97 +107,101 @@ private:
     template<typename I>
     using maybe_fallback_t = maybe_type_t<has_fallback, fallback_info<I>>;
 
-    template<typename I>
+
+    template<typename I, int X = 0>
     struct context
     {
+        /* empty context */
+    };
+
+    template<typename I>
+    struct context<I, 1>
+    {
+        /* store results */
         result_ref<I> res;
-        overspill_ref osr;
+
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res; }
+    };
+
+    template<typename I>
+    struct context<I, 2>
+    {
+        /* store results with iterated search info */
+        iterated_result_ref<I> res;
+
+        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res.res; }
+        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return res.stf; }
     };
 
 
-    /* register operations */
+    template<typename I>
+    context(result<I>&) -> context<I, 1>;
 
-    template<std::size_t Blk, std::bidirectional_iterator I>
-    static constexpr void exec_regop(context<I> ctx, I it)
-    {
-        if constexpr (Blk != tdfa::no_transition_regops)
-        {
-            template for (constexpr register_operation op : DFA.regops[Blk])
-            {
-                if constexpr (op.is_copy)
-                    ctx.res.reg_[op.dst] = ctx.res.reg_[op.cpy_src];
-                else if constexpr (op.set_val)
-                    ctx.res.reg_[op.dst] = it;
-                else if constexpr (std::contiguous_iterator<I>)
-                    ctx.res.reg_[op.dst] = I{};
-
-                if constexpr (not std::contiguous_iterator<I>)
-                {
-                    if constexpr (op.is_copy)
-                        ctx.res.enabled_[op.dst] = ctx.res.enabled_[op.cpy_src];
-                    else
-                        ctx.res.enabled_[op.dst] = op.set_val;
-                }
-            }
-        }
-    }
+    template<typename I>
+    context(iterated_result<I>&) -> context<I, 2>;
 
 
     /* table contents */
 
+    // TODO: benchmark AoS vs SoA?
     struct table_entry
     {
-        state_offset_t state;
-        [[no_unique_address]] maybe_regop_offset_t regop;
+        state_index_t                                                       state;
+        [[no_unique_address]] maybe_type_t<has_backlinks, backlink_index_t> backlink;
     };
 
     struct table_row
     {
         static constexpr std::size_t row_size{ 0b1 << std::numeric_limits<uchar_type>::digits };
 
-        constexpr table_entry& operator[](std::size_t n) noexcept { return data_[n]; }
-        constexpr const table_entry& operator[](std::size_t n) const noexcept { return data_[n]; }
+        // NOLINTBEGIN(*-pro-bounds-constant-array-index)
+        constexpr table_entry& operator[](uchar_type n) noexcept { return data_[n]; }
+        constexpr const table_entry& operator[](uchar_type n) const noexcept { return data_[n]; }
+        // NOLINTEND(*-pro-bounds-constant-array-index)
 
         table_row() = default;
 
-        table_entry data_[row_size]{};
+        /* note: we use a C-array because it's a structural type, which std::array is not */
+        table_entry data_[row_size]{}; // NOLINT(*-avoid-c-arrays)
     };
 
-    template<typename I>
+
     struct accepting_state
     {
-        struct contents_type;
+        using ofs_t = [: smallest_integer_type(largest_offset) :];
+        using alt_t = [: smallest_integer_type(largest_alternative) :];
 
-        using function_pointer_t = decltype(&exec_regop<tdfa::no_transition_regops, I>);
-        using alt_type = std::uint_least32_t;
-        using ofs_type = std::uint_least16_t;
-        using small_ofs_type = std::uint_least8_t;
+        // [[no_unique_address]] maybe_type_t<(largest_offset > 0), ofs_t>     offset{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_backlinks, backlink_index_t> backlink{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_continue, state_index_t>     nstart{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_xcontinue, state_index_t>    nenstart{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_alternative, alt_t>          resalt{ 0 };
+        // bool                                                                accept{ false };
+
+        struct contents_type;
 
         consteval {
             /* note: using maybe_type_t resulted in structs with unwanted padding */
             std::vector<std::meta::info> mems;
-            if (has_regops)
-                mems.push_back(data_member_spec(^^function_pointer_t, { .name = "final_regop" }));
-            if (has_fallback and has_regops)
-                mems.push_back(data_member_spec(^^function_pointer_t, { .name = "fallback_regop" }));
-            if (has_alternative)
-                mems.push_back(data_member_spec(^^alt_type, { .name = "alternative" }));
-            if (largest_offset > std::numeric_limits<small_ofs_type>::max())
-                mems.push_back(std::meta::data_member_spec(^^ofs_type, { .name = "offset" }));
-            else if (largest_offset > 0)
-                mems.push_back(std::meta::data_member_spec(^^small_ofs_type, { .name = "offset" }));
+            if (largest_offset > 0)
+                mems.emplace_back(data_member_spec(^^ofs_t, { .name = "offset" }));
+            if (has_backlinks)
+                mems.emplace_back(data_member_spec(^^backlink_index_t, { .name = "backlink" }));
             if (has_continue)
-                mems.push_back(data_member_spec(^^state_offset_t, { .name = "next_start" }));
-            if (has_extra_continue)
-                mems.push_back(data_member_spec(^^state_offset_t, { .name = "nonempty_next_start" }));
+                mems.emplace_back(data_member_spec(^^state_index_t, { .name = "nstart" }));
+            if (has_xcontinue)
+                mems.emplace_back(data_member_spec(^^state_index_t, { .name = "nenstart" }));
+            if (has_alternative)
+                mems.emplace_back(data_member_spec(^^state_index_t, { .name = "resalt" }));
+            mems.emplace_back(data_member_spec(^^bool, { .name = "accept" }));
             define_aggregate(^^contents_type, mems);
         }
 
         contents_type data{};
+        constexpr explicit operator bool() const noexcept { return data.accept; }
     };
 
-    static constexpr bool accepting_state_empty{ not (has_regops or (has_fallback and has_regops) or has_alternative
-                                                      or (largest_offset > 0) or has_continue or has_extra_continue) };
+    static constexpr bool accepting_state_empty{ not ((largest_offset > 0) or has_backlinks or has_continue or has_xcontinue or has_alternative) };
 
 
     /* helpers for table construction */
@@ -208,8 +217,8 @@ private:
                 for (uchar_type c{ static_cast<uchar_type>(lo) }; true; ++c)
                 {
                     row[c] = {
-                        .state = static_cast<state_offset_t>(tr.next + 1),
-                        .regop = static_cast<regop_offset_t>(tr.op_index + 1)
+                        .state    = static_cast<state_index_t>(tr.next + 1),
+                        .backlink = static_cast<backlink_index_t>(tr.op_index)
                     };
 
                     if (c == static_cast<uchar_type>(hi))
@@ -221,53 +230,46 @@ private:
         return row;
     }
 
-    template<std::size_t Index, typename I>
-    static consteval accepting_state<I> make_accepting_state()
+    static consteval accepting_state make_accepting_state(std::size_t q)
     {
-        static constexpr auto [state, fni] = *(DFA.final_nodes.cbegin() + Index);
-        static constexpr auto* fbni = DFA.fallback_nodes.at_if(state);
+        const auto* const fni = DFA.final_nodes.at_if(q);
 
-        accepting_state<I> qf{};
+        accepting_state as{};
 
-        if constexpr (has_regops)
-            qf.data.final_regop = &exec_regop<fni.op_index, I>;
+        if (fni == nullptr)
+            return as;
 
+        const auto* const fbni = DFA.fallback_nodes.at_if(q);
+
+        const auto cont{ (fbni != nullptr and has_continue) ? (1 + DFA.continue_nodes[fbni->continue_at]) : 0uz };
+        const auto xcont{ (fbni != nullptr and has_xcontinue) ? (1 + DFA.additional_continue_nodes[fbni->continue_at]) : 0uz };
+
+        // return accepting_state{
+        //     .offset   = static_cast<accepting_state::ofs_t>(fni->offset),
+        //     .backlink = static_cast<backlink_index_t>(fni->op_index),
+        //     .nstart   = static_cast<state_index_t>(cont),
+        //     .nenstart = static_cast<state_index_t>(xcont),
+        //     .resalt   = static_cast<accepting_state::alt_t>(fni->alternative),
+        //     .accept   = true
+        // };
+
+        if constexpr (largest_offset > 0)
+            as.data.offset = static_cast<accepting_state::ofs_t>(fni->offset);
+        if constexpr (has_backlinks)
+            as.data.backlink = static_cast<backlink_index_t>(fni->op_index);
+        if constexpr (has_continue)
+            as.data.nstart = static_cast<state_index_t>(cont);
+        if constexpr (has_xcontinue)
+            as.data.nenstart = static_cast<state_index_t>(xcont);
         if constexpr (has_alternative)
-            qf.data.alternative = fni.alternative;
+            as.data.resalt = static_cast<accepting_state::alt_t>(fni->alternative);
+        as.data.accept = true;
 
-        if constexpr (largest_offset > std::numeric_limits<typename accepting_state<I>::small_ofs_type>::max())
-            qf.data.offset = fni.offset;
-        else if constexpr (largest_offset > 0)
-            qf.data.offset = static_cast<typename accepting_state<I>::small_ofs_type>(fni.offset);
-
-        if constexpr (fbni != nullptr)
-        {
-            if constexpr (has_regops)
-                qf.data.fallback_regop = &exec_regop<fbni->op_index, I>;
-            if constexpr (has_continue)
-                qf.data.next_start = static_cast<state_offset_t>(1 + DFA.continue_nodes[fbni->continue_at]);
-            if constexpr (has_extra_continue)
-                qf.data.nonempty_next_start = static_cast<state_offset_t>(1 + DFA.additional_continue_nodes[fbni->continue_at]);
-        }
-
-        return qf;
+        return as;
     }
 
 
     /* table definitions */
-
-    template<typename I>
-    static constexpr auto regop_table = [] consteval {
-        if constexpr (DFA.regops.empty())
-        {
-            return terminal_object{};
-        }
-        else
-        {
-            constexpr auto [...Blks] = std::make_index_sequence<DFA.regops.size()>();
-            return std::array{ &exec_regop<tdfa::no_transition_regops, I>,  (&exec_regop<Blks, I>)... };
-        }
-    }();
 
     static constexpr auto transition_table = [] consteval {
         constexpr auto [...Idxs] = std::make_index_sequence<DFA.nodes.size()>();
@@ -281,19 +283,6 @@ private:
         return bitset;
     }();
 
-    template<typename I>
-    static constexpr auto accepting_state_table = [] consteval {
-        if constexpr (accepting_state_empty)
-        {
-            return terminal_object{};
-        }
-        else
-        {
-            constexpr auto [...Idxs] = std::make_index_sequence<DFA.final_nodes.size()>();
-            return std::array{ accepting_state<I>{}, (make_accepting_state<Idxs, I>())... };
-        }
-    }();
-
     static constexpr auto state_table = [] consteval {
         if constexpr (accepting_state_empty)
         {
@@ -304,142 +293,249 @@ private:
         }
         else
         {
-            std::array<state_offset_t, DFA.nodes.size() + 1> array{};
-            std::size_t i{ 0 };
-            for (const auto& [q, _] : DFA.final_nodes)
-                array[q + 1] = static_cast<state_offset_t>(++i);
-            return array;
+            constexpr auto [...Idxs] = std::make_index_sequence<DFA.nodes.size()>();
+            return std::array{ accepting_state{},  (make_accepting_state(Idxs))... };
         }
     }();
 
 
+    /* backwards pass */
+
+    using bitset_type = std::bitset<DFA.tag_count>;
+
+    template<std::size_t IdxA, std::size_t IdxB, std::bidirectional_iterator I, int X>
+    static constexpr std::size_t assign_tags(context<I, X> ctx, bitset_type& assigned, I it)
+    {
+        template for (constexpr auto tag : DFA.backlink_arrays[IdxA][IdxB].tag_seq | std::views::reverse)
+        {
+            if constexpr (tag > 0)
+            {
+                /* static */ constexpr std::size_t tag_position{ tag - 1 };
+                if (not std::as_const(assigned)[tag_position])
+                {
+                    assigned[tag_position] = true;
+
+                    ctx.get_res().reg_[tag_position] = it;
+                    if constexpr (not std::contiguous_iterator<I>)
+                        ctx.get_res().enabled_[tag_position] = true;
+                }
+            }
+            else if constexpr (tag < 0)
+            {
+                static constexpr std::size_t tag_position{ (-tag) - 1 };
+                assigned[tag_position] = true;
+                /* note: assigned to empty within constructor */
+            }
+        }
+
+        static constexpr std::size_t prev_index{ DFA.backlink_arrays[IdxA][IdxB].prev_index };
+        return prev_index;
+    }
+
+    template<std::bidirectional_iterator I, int X>
+    static constexpr std::size_t assign_tags_dispatch(context<I, X> ctx, bitset_type& assigned, I it, backlink_index_t outer, std::size_t index)
+    {
+        [[assume(outer < backlink_array_count)]];
+
+        template for (constexpr std::size_t idxa : std::views::indices(backlink_array_count))
+        {
+            if (outer == idxa)
+            {
+                static constexpr std::size_t max{ DFA.backlink_arrays[idxa].size() };
+
+                [[assume(index < max)]];
+
+                template for (constexpr std::size_t idxb : std::views::indices(max))
+                    if (index == idxb)
+                        return assign_tags<idxa, idxb>(ctx, assigned, it);
+
+                std::unreachable();
+            }
+        }
+
+        std::unreachable();
+    }
+
+    template<std::bidirectional_iterator I, int X>
+    static constexpr bool backwards_pass(context<I, X> ctx, backlink_buffer_t& backlinks, I it, backlink_index_t back)
+        requires (X != 0)
+    {
+        bitset_type assigned{};
+        std::size_t index{ 0 };
+
+        while (true)
+        {
+            index = assign_tags_dispatch(ctx, assigned, it, back, index);
+
+            if (assigned.all())
+                break;
+
+            back = backlinks.back();
+            backlinks.pop_back();
+            --it;
+        }
+
+        return true;
+    }
+
+
     /* matcher implementation */
 
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    static constexpr bool regex_state(context<I> ctx, I it, const S end, state_offset_t state)
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr bool forwards_pass(context<I, X> ctx, maybe_buf_t backlinks, I it, const S end, state_index_t state)
     {
-        const maybe_saved_first_t<I> first{ it };
         maybe_fallback_t<I> fallback{ it };
 
-        for (; it != end; ++it)
+        while (true)
         {
+            if (it == end) [[unlikely]]
+            {
+                if (not state_table[state])
+                {
+                    if constexpr (not has_fallback)
+                        return false;
+                    else
+                        state = 0; /* fallback */
+                }
+                break;
+            }
+
             if constexpr (has_fallback)
             {
                 if (fallback_bitset[state])
                 {
                     fallback.state = state;
-                    fallback.it = it;
+                    if constexpr (not DFA.flags.return_bool)
+                        fallback.it = it;
                 }
             }
 
-            const auto& [next, regop] = transition_table[state][static_cast<uchar_type>(*it)];
+            const auto& [next, backlink] = transition_table[state][static_cast<uchar_type>(*it)];
 
             if (next == 0) [[unlikely]]
+            {
+                if constexpr (not has_fallback)
+                    return false;
+                else
+                    if (not fallback_bitset[state])
+                        state = 0; /* fallback */
                 break;
+            }
 
-            /* N.B: this probably benefits from a two pass implementation
-               I expect this will be slower than the other "linear" dfa implementation
-               because we need to chase pointers here */
-            if constexpr (has_regops)
-                if (regop != 0)
-                    (regop_table<I>[regop])(ctx, it);
+            if constexpr (has_backlinks)
+                backlinks.push_back(backlink);
 
             state = next;
+            ++it;
         }
 
-        if (it == end or (has_fallback and fallback_bitset[state]))
-        {
-            if constexpr (accepting_state_empty)
-            {
-                if (state_table[state])
-                {
-                    ctx.res.match_end_ = it;
-                    return true;
-                }
-            }
-            else
-            {
-                if (const auto index{ state_table[state] }; index != 0)
-                {
-                    const accepting_state<I>& qf{ accepting_state_table<I>[index] };
+        /* process fallback */
 
-                    /* assume qf.data.final_regop != nullptr */
-                    if constexpr (has_regops)
-                        (qf.data.final_regop)(ctx, it);
-
-                    update_ctx(ctx, it, qf, first);
-                    return true;
-                }
-            }
-        }
-
-        /* compute and exec fallback state */
         if constexpr (has_fallback)
         {
-            if (fallback.state != fallback_disabled)
+            if (state == 0)
             {
-                if constexpr (accepting_state_empty)
+                if (not fallback_bitset[state])
                 {
-                    ctx.res.match_end_ = fallback.it;
-                    return true;
-                }
-                else
-                {
-                    /* since this is a fallback, assume index != 0 */
-                    const auto index{ state_table[fallback.state] };
-                    const accepting_state<I>& qf{ accepting_state_table<I>[index] };
+                    if (fallback.state == 0)
+                        return false;
 
-                    /* assume qf.data.fallback_regop != nullptr */
-                    if constexpr (has_regops)
-                        (qf.data.fallback_regop)(ctx, fallback.it);
+                    if constexpr (has_backlinks)
+                    {
+                        std::ptrdiff_t to_erase{ std::ranges::distance(fallback.it, it) };
 
-                    update_ctx(ctx, fallback.it, qf, first);
-                    return true;
+                        /* this is always true since we only ever call this function
+                            when the current state itself is not a fallback state */
+                        [[assume(to_erase > 0)]];
+
+                        while (to_erase-- > 0)
+                            backlinks.pop_back();
+                    }
+
+                    it = fallback.it;
+                    state = fallback.state;
                 }
+
+                if (not state_table[state])
+                    return false;
             }
         }
 
-        return false;
+
+        if constexpr (accepting_state_empty)
+        {
+            if constexpr (X != 0)
+                update_ctx(ctx, backlinks, it);
+        }
+        else
+        {
+            const accepting_state& as{ state_table[state] };
+
+            if (not as)
+                return false;
+
+            if constexpr (has_fallback)
+                if (not (fallback_bitset[state] or it == end))
+                    return false;
+
+            if constexpr (X != 0)
+                update_ctx(ctx, backlinks, it, as);
+        }
+
+        return true;
     }
 
-    template<std::bidirectional_iterator I>
-    [[gnu::always_inline]] static constexpr void update_ctx(context<I> ctx, const I it, const accepting_state<I>& qf, const maybe_saved_first_t<I> first)
+    template<std::bidirectional_iterator I, int X>
+        requires (X != 0)
+    static constexpr void update_ctx(context<I, X> ctx, maybe_buf_t /* backlinks */, I it)
     {
-        if constexpr (largest_offset > 0)
-            ctx.res.match_end_ = std::ranges::prev(it, qf.data.offset);
-        else
-            ctx.res.match_end_ = it;
+        ctx.get_res().match_end_ = it;
 
         if constexpr (not std::contiguous_iterator<I>)
-            ctx.res.match_success_ = true;
+            ctx.get_res().match_success_ = true;
+    }
 
-        if constexpr (has_continue)
-        {
-            if constexpr (has_extra_continue)
-            {
-                if (first == it)
-                    ctx.osr.nst = qf.data.nonempty_next_start;
-                else
-                    ctx.osr.nst = qf.data.next_start;
-            }
-            else
-            {
-                ctx.osr.nst = qf.data.next_start;
-            }
-        }
+    template<std::bidirectional_iterator I, int X>
+        requires (X != 0)
+    static constexpr void update_ctx(context<I, X> ctx, maybe_buf_t backlinks, I it, const accepting_state& as)
+    {
+        if constexpr (largest_offset > 0)
+            ctx.get_res().match_end_ = std::ranges::prev(it, as.data.offset);
+        else
+            ctx.get_res().match_end_ = it;
 
-        if constexpr (has_alternative)
-            ctx.osr.alt = qf.data.alternative;
+        if constexpr (not std::contiguous_iterator<I>)
+            ctx.get_res().match_success_ = true;
+
+        if constexpr (X == 2 and has_continue and not has_xcontinue)
+            ctx.get_stf().continue_at = as.data.nstart;
+
+        // if constexpr (X == 2 and has_alternative)
+        //     ctx.get_stf().alt = qf.data.alternative;
+
+        if constexpr (has_backlinks)
+            backwards_pass(ctx, backlinks, it, as.data.backlink);
+
+        if constexpr (X == 2 and has_continue and has_xcontinue)
+            ctx.get_stf().continue_at = (ctx.get_res().template force_get<0>().empty()) ? as.data.nenstart : as.data.nstart;
     }
 
 
 public:
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires (DFA.flags.return_bool)
+    static constexpr bool operator()(const I first, const S last)
+    {
+        return forwards_pass(context<I>{}, terminal_object{}, first, last, 1 + DFA.match_start);
+    }
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+        requires (not DFA.flags.return_bool)
     static constexpr result<I> operator()(const I first, const S last)
     {
         result<I> res{ first };
-        overspill osp{};
-        regex_state(context<I>{ res, osp }, first, last, 1 + DFA.match_start);
+        backlink_buffer_t buf{};
+        forwards_pass(context{ res }, buf, first, last, 1 + DFA.match_start);
         return res;
     }
 };
@@ -450,16 +546,17 @@ template<std::bidirectional_iterator I>
     requires std::is_nothrow_convertible_v<std::iter_value_t<I>, typename table_dfa<Info>::char_type>
 struct table_dfa<Info>::iterated_result
 {
-    static constexpr bool needs_begin{ not never_empty };
+    static constexpr bool needs_begin{ false };
 
     struct state_type
     {
         static constexpr bool has_continue{ true };
         static constexpr bool is_stateless{ false };
 
-        using continue_type = state_offset_t;
+        using continue_type = state_index_t;
 
-        [[no_unique_address]] continue_type continue_at{ 0 };
+        // TODO: add alternative_number when is_regex is true and there is more than one alt
+        continue_type continue_at{ 0 };
     };
 
     iterated_result() = default;
@@ -467,7 +564,16 @@ struct table_dfa<Info>::iterated_result
     constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
         : res{ first }, stf{ .continue_at = 1 + DFA.match_start }
     {
-        resume(first, last);
+        if constexpr (never_empty)
+        {
+            resume(first, last);
+        }
+        else
+        {
+            if (resume(first, last))
+                if (res.template force_get<0>().empty())
+                    stf.continue_at = 1 + DFA.additional_continue_nodes.back();
+        }
     }
 
     constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
@@ -483,7 +589,6 @@ struct table_dfa<Info>::iterated_result
     }
 
     constexpr I advance(const std::sentinel_for<I> auto last)
-        requires never_empty
     {
         const auto& match = res.template force_get<0>();
         const I current = match.end();
@@ -492,35 +597,13 @@ struct table_dfa<Info>::iterated_result
         return current;
     }
 
-    constexpr I advance(const I first, const std::sentinel_for<I> auto last)
-    {
-        const auto& match = res.template force_get<0>();
-        const I current = match.end();
-
-        if constexpr (not never_empty)
-        {
-            if (match.empty() and current == last)
-            {
-                res.clear_match();
-                return current;
-            }
-
-            if (current == first)
-                stf.continue_at = 1 + (never_empty ? DFA.match_start : DFA.additional_continue_nodes.back());
-        }
-
-        res.reset(current);
-        resume(current, last);
-        return current;
-    }
+    constexpr I advance(const I first, const std::sentinel_for<I> auto last) = delete;
 
 private:
-    constexpr void resume(const I first, const std::sentinel_for<I> auto last)
+    constexpr bool resume(const I first, const std::sentinel_for<I> auto last)
     {
-        overspill osp{};
-        regex_state(context<I>{ res, osp }, first, last, stf.continue_at);
-        stf.continue_at = osp.nst;
-        return;
+        backlink_buffer_t buf{};
+        return forwards_pass(context{ *this }, buf, first, last, stf.continue_at);
     }
 
 public:
@@ -530,7 +613,7 @@ public:
 
 
 template<string_literal Pattern, fsm_flags Flags>
-using table_dfa_matcher = table_dfa<(^^re<std::meta::reflect_constant_string(Pattern.view()), pack_flags(Flags)>)>;
+using table_dfa_matcher = table_dfa<(^^rf<std::meta::reflect_constant_string(Pattern.view()), pack_flags(Flags)>)>;
 
 } // namepace detail
 } // namepace srx

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <cstdint>
 #include <meta>
 #include <limits>
 #include <stdexcept>
@@ -145,6 +146,15 @@ constexpr void append(std::size_t& hash, const T& value)
 }
 
 } // namespace hash
+
+
+static std::meta::info consteval smallest_integer_type(std::size_t size)
+{
+    template for (constexpr std::meta::info type : { ^^::uint_least8_t, ^^::uint_least16_t, ^^::uint_least16_t, ^^uint_least64_t })
+        if (size <= static_cast<std::size_t>(std::numeric_limits<typename [: type :]>::max()))
+            return dealias(type);
+    return std::meta::info{};
+}
 
 
 inline constexpr std::size_t no_tag{ std::numeric_limits<std::size_t>::max() };

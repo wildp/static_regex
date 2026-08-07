@@ -214,6 +214,13 @@ public:
         return std::ranges::max(final_nodes | std::views::transform([](const auto& x){ return x.second.offset; }));
     }
 
+    [[nodiscard]] consteval std::uint_least32_t largest_alt() const
+    {
+        if (final_nodes.empty() or not alt_mode)
+            return 0;
+        return std::ranges::max(final_nodes | std::views::transform([](const auto& x){ return x.second.alternative; }));
+    }
+
     /* data members (public so that tdfa_info is structural) */
     static_span<static_span<static_transition<char_type>>> nodes;
     static_span<static_span<register_operation>> regops;
