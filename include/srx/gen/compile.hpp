@@ -183,7 +183,7 @@ private:
 
 public:
     explicit consteval tdfa_info(const tagged_dfa<char_type>& dfa, const tagged_nfa<char_type>& nfa,
-                                 const std::pair<std::size_t, std::size_t>& mml, fsm_flags f, bool alt_mode)
+                                 const std::pair<std::size_t, std::size_t>& mml, std::size_t bbs, fsm_flags f, bool alt_mode)
         : nodes{ dfa.nodes_ | std::views::transform(make_node_transitions) }
         , regops{ dfa.regops_ | std::views::transform(make_register_operations) }
         , backlink_arrays{ dfa.backlink_arrays_ | std::views::transform(make_backlinks) }
@@ -198,6 +198,7 @@ public:
         , captures{ dfa.get_capture_info() }
         , outer_transitions{ make_continue_info(dfa, nfa) }
         , min_max_lengths{ mml }
+        , backlink_buf_size{ bbs }
         , flags{ f }
         , alt_mode{ alt_mode }
         , onepass{ dfa.is_onepass() } {}
@@ -238,6 +239,7 @@ public:
 
     static_span<static_transition<char_type>> outer_transitions;
     std::pair<std::size_t, std::size_t> min_max_lengths;
+    std::size_t backlink_buf_size;
 
     fsm_flags flags;
     bool alt_mode;
@@ -280,8 +282,12 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     if (f.return_bool)
         p.enable_start_tag = false;
 
+    std::size_t bbs{ 0 };
+
     /* parse pattern string into tree */
     expr_tree ast{ pattern, p };
+    if (not onepass)
+        bbs = ast.minimum_backlink_buf_size();
     if (f.is_search)
         ast.insert_search_prefix();
     ast.optimise_tags();
@@ -303,7 +309,7 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
     dfa.minimise_transition_edges();
     dfa.de_default_edges();
 
-    return tdfa_info{ dfa, nfa, mml, f, ast.is_alt_mode() };
+    return tdfa_info{ dfa, nfa, mml, bbs, f, ast.is_alt_mode() };
 }
 
 template<std::meta::info P, ff F>

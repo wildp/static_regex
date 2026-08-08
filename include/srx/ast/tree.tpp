@@ -142,6 +142,162 @@ constexpr std::pair<std::size_t, std::size_t> expr_tree<CharT>::min_max_length()
 }
 
 template<typename CharT>
+constexpr std::size_t expr_tree<CharT>::minimum_backlink_buf_size() const
+{
+    // TODO: add tests for this
+    std::size_t no_upper_bound{ std::numeric_limits<std::size_t>::max() };
+
+    std::vector<std::pair<std::size_t, std::size_t>> lengths(expressions_.size());
+
+    using stack_elem_t = std::pair<std::size_t, std::size_t>;
+
+    std::vector<stack_elem_t> stack;
+    stack.emplace_back(root_idx(), false);
+
+    while (not stack.empty())
+    {
+        auto& [idx, pos] = stack.back();
+        const auto& entry = expressions_.at(idx);
+
+        switch (entry.index())
+        {
+        case ast_index<assertion>:
+        {
+            switch (get<assertion>(entry).type)
+            {
+            case assert_type::text_start:
+            case assert_type::text_end:
+            case assert_type::line_start:
+                lengths.at(idx) = { 0, 0 };
+                break;
+
+            case assert_type::line_end:
+            case assert_type::ascii_word_boundary:
+            case assert_type::not_ascii_word_boundary:
+                lengths.at(idx) = { 0, 1 };
+                break;
+
+            // case assert_type::text_end_or_newline_before:
+            //    return no_upper_bound;
+            }
+            stack.pop_back();
+            break;
+        }
+
+        case ast_index<tag>:
+            lengths.at(idx) = { 0, 0 };
+            stack.pop_back();
+            break;
+
+        case ast_index<char_str>:
+            lengths.at(idx) = [](std::size_t l){ return std::pair{ l, l }; }(get<char_str>(entry).data.size());
+            stack.pop_back();
+            break;
+
+        case ast_index<char_class>:
+            lengths.at(idx) = { 1, 1 }; /* TODO: determine maximum character length for utf8 and utf16 */
+            stack.pop_back();
+            break;
+
+        case ast_index<backref>:
+            return no_upper_bound;
+
+        case ast_index<concat>:
+        {
+            const auto& cat = get<concat>(entry);
+
+            if (pos == cat.idxs.size())
+            {
+                std::size_t length{ 0 };
+                std::size_t lookahead{ 0 };
+
+                auto sublengths = cat.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
+                for (const auto& [len, lah] : sublengths)
+                {
+                    length += len;
+                    lookahead = std::saturating_sub(lookahead, len);
+                    lookahead += lah;
+                }
+
+                lengths.at(idx) = { length, lookahead };
+                stack.pop_back();
+            }
+            else
+            {
+                pos += 1;
+                stack.emplace_back(cat.idxs.at(pos - 1), 0);
+            }
+            break;
+        }
+
+        case ast_index<alt>:
+        {
+            const auto& atl = get<alt>(entry);
+
+            if (pos == atl.idxs.size())
+            {
+                if (std::ranges::empty(atl.idxs))
+                    return no_upper_bound;
+
+                std::size_t length{ 0 };
+                std::size_t sum{ 0 };
+
+                auto sublengths = atl.idxs | std::views::transform([&](std::size_t i){ return lengths.at(i); });
+                for (const auto& [len, lah] : sublengths)
+                {
+                    length = std::ranges::max(length, len);
+                    sum = std::ranges::max(sum, len + lah);
+                }
+
+                lengths.at(idx) = { length, std::saturating_sub(sum, length) };
+                stack.pop_back();
+            }
+            else
+            {
+                pos += 1;
+                stack.emplace_back(atl.idxs.at(pos - 1), 0);
+            }
+            break;
+        }
+
+        case ast_index<repeat>:
+        {
+            const auto& rep = get<repeat>(entry);
+
+            if (pos == 1)
+            {
+                const auto& [rmin, rmax] = rep.reps;
+
+                if (rmin > rmax) /* unbounded repetition */
+                    return no_upper_bound;
+
+                const auto& [len, lah] = lengths.at(rep.idx);
+
+                if (rmax == 0)
+                    lengths.at(idx) = { 0, 0 };
+                else
+                    lengths.at(idx) = { len * rmax, lah + ((rmax - 1) * (lah - len)) };
+                stack.pop_back();
+            }
+            else
+            {
+                pos += 1;
+                stack.emplace_back(rep.idx, 0);
+            }
+            break;
+        }
+
+        default:
+            throw tree_error("Invalid tree");
+        }
+    }
+
+    const auto& [length, lookahead] = lengths.at(root_idx_);
+
+    return length + lookahead;
+}
+
+template<typename CharT>
 constexpr bool expr_tree<CharT>::empty_match_possible() const
 {
     return min_max_length().first == 0;

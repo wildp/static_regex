@@ -555,7 +555,7 @@ consteval auto defs<CharT>::compile_dfa(R&& patterns)
     dfa.minimise_transition_edges();
     dfa.de_default_edges();
 
-    return tdfa_info{ dfa, nfa, mml, default_fsm_flags::match_sequential, ast.is_alt_mode() };
+    return tdfa_info{ dfa, nfa, mml, 0, default_fsm_flags::match_sequential, ast.is_alt_mode() };
 }
 
 

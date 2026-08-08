@@ -137,6 +137,7 @@ public:
     [[nodiscard]] constexpr const auto& get_capture_info() const noexcept { return capture_info_; }
 
     [[nodiscard]] constexpr std::pair<std::size_t, std::size_t> min_max_length() const;
+    [[nodiscard]] constexpr std::size_t minimum_backlink_buf_size() const;
     [[nodiscard]] constexpr bool empty_match_possible() const;
     [[nodiscard]] constexpr bool is_alt_mode() const { return enable_alt_mode_; }
 

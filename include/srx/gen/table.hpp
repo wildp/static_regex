@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <bit>
 #include <bitset>
 #include <cstddef>
 #include <iterator>
@@ -24,6 +25,28 @@
 
 namespace srx {
 namespace detail {
+
+template<std::integral T, unsigned int Width>
+class backlink_hist
+{
+public:
+    backlink_hist() = default;
+
+    [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+    [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }
+    [[nodiscard]] constexpr T& back() { return data_[(size_ - 1) % buf_size]; }
+    [[nodiscard]] constexpr const T& back() const { return data_[(size_ - 1) % buf_size]; };
+
+    constexpr void push_back(T x) noexcept { data_[size_++ % buf_size] = x; }
+    constexpr void pop_back() noexcept { --size_; }
+    constexpr void clear() noexcept { size_ = 0; }
+
+private:
+    static constexpr std::size_t buf_size{ 0b1uz << Width };
+
+    std::size_t size_{ 0 };
+    std::array<T, buf_size> data_;
+};
 
 template<std::meta::info Info>
 struct table_dfa
@@ -46,32 +69,18 @@ private:
     static constexpr bool has_alternative{ DFA.alt_mode };
     static constexpr bool has_xcontinue{ has_continue and not never_empty };
     static constexpr bool has_backlinks{ not DFA.flags.return_bool and DFA.tag_count > 0 };
+    static constexpr bool has_finite_length{ DFA.backlink_buf_size != std::numeric_limits<std::size_t>::max() };
     static constexpr auto largest_offset{ DFA.largest_offset() };
     static constexpr auto largest_alternative{ DFA.largest_alt() };
 
-    static constexpr std::size_t actual_length{ 0 /* TODO: calculate maximum length, inclusive of assertions extending beyond the end of patterns */ };
     static constexpr std::size_t backlink_array_count{ DFA.backlink_arrays.size() };
 
-    using state_index_t = [: smallest_integer_type(DFA.nodes.size() + 1) :];
-    using backlink_index_t = [: smallest_integer_type(backlink_array_count) :]; // TODO: add maybe_type_t of this to disable
+    using state_t = [: smallest_integer_type(DFA.nodes.size() + 1) :];
+    using blidx_t = [: smallest_integer_type(backlink_array_count) :];
 
-    static consteval std::size_t get_start(tdfa::continue_at_t continue_at = tdfa::no_continue, bool use_alt = false)
-    {
-        if (continue_at == tdfa::no_continue)
-        {
-            if (use_alt and not never_empty)
-                return DFA.additional_continue_nodes.back();
-            else
-                return DFA.match_start;
-        }
-        else
-        {
-            if (use_alt and not never_empty)
-                return DFA.additional_continue_nodes[continue_at];
-            else
-                return DFA.continue_nodes[continue_at];
-        }
-    }
+    static constexpr state_t failure_state{ 0 };
+    static constexpr state_t start_state{ 1 + static_cast<state_t>(DFA.match_start) };
+    static constexpr state_t nestart_state{ 1 + static_cast<state_t>((never_empty ? DFA.match_start : DFA.additional_continue_nodes.back())) };
 
 public:
     template<std::bidirectional_iterator I>
@@ -82,8 +91,7 @@ public:
         requires std::is_nothrow_convertible_v<std::iter_value_t<I>, char_type>
     struct iterated_result;
 
-    // TODO: depending on pattern length, replace with a circular buffer?
-    using backlink_buffer_t = std::vector<backlink_index_t>;
+    using backlink_buffer_t = std::conditional_t<has_finite_length, backlink_hist<blidx_t, std::bit_width(DFA.backlink_buf_size)>, std::vector<blidx_t>>;
 
 private:
     using maybe_buf_t = maybe_type_t<has_backlinks, backlink_buffer_t&>;
@@ -99,7 +107,7 @@ private:
     struct fallback_info
     {
         I it;
-        state_index_t state{ 0 };
+        state_t state{ failure_state };
 
         constexpr explicit(false) fallback_info(I it) : it{ it } {}
     };
@@ -146,8 +154,8 @@ private:
     // TODO: benchmark AoS vs SoA?
     struct table_entry
     {
-        state_index_t                                                       state;
-        [[no_unique_address]] maybe_type_t<has_backlinks, backlink_index_t> backlink;
+        state_t                                                    state;
+        [[no_unique_address]] maybe_type_t<has_backlinks, blidx_t> backlink;
     };
 
     struct table_row
@@ -171,12 +179,12 @@ private:
         using ofs_t = [: smallest_integer_type(largest_offset) :];
         using alt_t = [: smallest_integer_type(largest_alternative) :];
 
-        // [[no_unique_address]] maybe_type_t<(largest_offset > 0), ofs_t>     offset{ 0 };
-        // [[no_unique_address]] maybe_type_t<has_backlinks, backlink_index_t> backlink{ 0 };
-        // [[no_unique_address]] maybe_type_t<has_continue, state_index_t>     nstart{ 0 };
-        // [[no_unique_address]] maybe_type_t<has_xcontinue, state_index_t>    nenstart{ 0 };
-        // [[no_unique_address]] maybe_type_t<has_alternative, alt_t>          resalt{ 0 };
-        // bool                                                                accept{ false };
+        // [[no_unique_address]] maybe_type_t<(largest_offset > 0), ofs_t> offset{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_backlinks, blidx_t>      backlink{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_continue, state_t>       art{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_xcontinue, state_t>      start{ 0 };
+        // [[no_unique_address]] maybe_type_t<has_alternative, alt_t>      resalt{ 0 };
+        // bool                                                            accept{ false };
 
         struct contents_type;
 
@@ -186,13 +194,13 @@ private:
             if (largest_offset > 0)
                 mems.emplace_back(data_member_spec(^^ofs_t, { .name = "offset" }));
             if (has_backlinks)
-                mems.emplace_back(data_member_spec(^^backlink_index_t, { .name = "backlink" }));
+                mems.emplace_back(data_member_spec(^^blidx_t, { .name = "backlink" }));
             if (has_continue)
-                mems.emplace_back(data_member_spec(^^state_index_t, { .name = "nstart" }));
+                mems.emplace_back(data_member_spec(^^state_t, { .name = "nstart" }));
             if (has_xcontinue)
-                mems.emplace_back(data_member_spec(^^state_index_t, { .name = "nenstart" }));
+                mems.emplace_back(data_member_spec(^^state_t, { .name = "nenstart" }));
             if (has_alternative)
-                mems.emplace_back(data_member_spec(^^state_index_t, { .name = "resalt" }));
+                mems.emplace_back(data_member_spec(^^state_t, { .name = "resalt" }));
             mems.emplace_back(data_member_spec(^^bool, { .name = "accept" }));
             define_aggregate(^^contents_type, mems);
         }
@@ -210,15 +218,15 @@ private:
     {
         table_row row{};
 
-        for (const static_transition<char_type>& tr : DFA.nodes[q] | std::views::reverse)
+        for (const auto& tr : DFA.nodes[q] | std::views::reverse)
         {
             for (const auto& [lo, hi] : tr.cs.get_intervals())
             {
                 for (uchar_type c{ static_cast<uchar_type>(lo) }; true; ++c)
                 {
                     row[c] = {
-                        .state    = static_cast<state_index_t>(tr.next + 1),
-                        .backlink = static_cast<backlink_index_t>(tr.op_index)
+                        .state    = static_cast<state_t>(1 + tr.next),
+                        .backlink = static_cast<blidx_t>(tr.op_index)
                     };
 
                     if (c == static_cast<uchar_type>(hi))
@@ -246,9 +254,9 @@ private:
 
         // return accepting_state{
         //     .offset   = static_cast<accepting_state::ofs_t>(fni->offset),
-        //     .backlink = static_cast<backlink_index_t>(fni->op_index),
-        //     .nstart   = static_cast<state_index_t>(cont),
-        //     .nenstart = static_cast<state_index_t>(xcont),
+        //     .backlink = static_cast<blidx_t>(fni->op_index),
+        //     .nstart   = static_cast<state_t>(cont),
+        //     .nenstart = static_cast<state_t>(xcont),
         //     .resalt   = static_cast<accepting_state::alt_t>(fni->alternative),
         //     .accept   = true
         // };
@@ -256,11 +264,11 @@ private:
         if constexpr (largest_offset > 0)
             as.data.offset = static_cast<accepting_state::ofs_t>(fni->offset);
         if constexpr (has_backlinks)
-            as.data.backlink = static_cast<backlink_index_t>(fni->op_index);
+            as.data.backlink = static_cast<blidx_t>(fni->op_index);
         if constexpr (has_continue)
-            as.data.nstart = static_cast<state_index_t>(cont);
+            as.data.nstart = static_cast<state_t>(cont);
         if constexpr (has_xcontinue)
-            as.data.nenstart = static_cast<state_index_t>(xcont);
+            as.data.nenstart = static_cast<state_t>(xcont);
         if constexpr (has_alternative)
             as.data.resalt = static_cast<accepting_state::alt_t>(fni->alternative);
         as.data.accept = true;
@@ -277,18 +285,18 @@ private:
     }();
 
     static constexpr auto fallback_bitset = [] consteval {
-        std::bitset<DFA.nodes.size() + 1> bitset;
+        std::bitset<1 + DFA.nodes.size()> bitset;
         for (const auto& [q, _] : DFA.fallback_nodes)
-            bitset[q + 1] = true;
+            bitset[1 + q] = true;
         return bitset;
     }();
 
     static constexpr auto state_table = [] consteval {
         if constexpr (accepting_state_empty)
         {
-            std::bitset<DFA.nodes.size() + 1> bitset;
+            std::bitset<1 + DFA.nodes.size()> bitset;
             for (const auto& [q, _] : DFA.final_nodes)
-                bitset[q + 1] = true;
+                bitset[1 + q] = true;
             return bitset;
         }
         else
@@ -333,7 +341,7 @@ private:
     }
 
     template<std::bidirectional_iterator I, int X>
-    static constexpr std::size_t assign_tags_dispatch(context<I, X> ctx, bitset_type& assigned, I it, backlink_index_t outer, std::size_t index)
+    static constexpr std::size_t assign_tags_dispatch(context<I, X> ctx, bitset_type& assigned, I it, blidx_t outer, std::size_t index)
     {
         [[assume(outer < backlink_array_count)]];
 
@@ -357,8 +365,8 @@ private:
     }
 
     template<std::bidirectional_iterator I, int X>
-    static constexpr bool backwards_pass(context<I, X> ctx, backlink_buffer_t& backlinks, I it, backlink_index_t back)
         requires (X != 0)
+    static constexpr bool backwards_pass(context<I, X> ctx, backlink_buffer_t& backlinks, I it, blidx_t back)
     {
         bitset_type assigned{};
         std::size_t index{ 0 };
@@ -382,7 +390,7 @@ private:
     /* matcher implementation */
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    static constexpr bool forwards_pass(context<I, X> ctx, maybe_buf_t backlinks, I it, const S end, state_index_t state)
+    static constexpr bool forwards_pass(context<I, X> ctx, maybe_buf_t backlinks, I it, const S end, state_t state)
     {
         maybe_fallback_t<I> fallback{ it };
 
@@ -395,13 +403,18 @@ private:
                     if constexpr (not has_fallback)
                         return false;
                     else
-                        state = 0; /* fallback */
+                        state = failure_state;
                 }
                 break;
             }
 
+            const state_t next{ transition_table[state][static_cast<uchar_type>(*it)].state };
+            const auto backlink{ transition_table[state][static_cast<uchar_type>(*it)].backlink };
+
             if constexpr (has_fallback)
             {
+                // TODO: improve this code here?
+                // note: if we record states, we don't need this at all -> 1 fewer branch
                 if (fallback_bitset[state])
                 {
                     fallback.state = state;
@@ -410,76 +423,59 @@ private:
                 }
             }
 
-            const auto& [next, backlink] = transition_table[state][static_cast<uchar_type>(*it)];
-
-            if (next == 0) [[unlikely]]
+            if (next == failure_state) [[unlikely]]
             {
                 if constexpr (not has_fallback)
                     return false;
                 else
                     if (not fallback_bitset[state])
-                        state = 0; /* fallback */
+                        state = failure_state;
                 break;
             }
 
+            ++it;
+            state = next;
+
             if constexpr (has_backlinks)
                 backlinks.push_back(backlink);
-
-            state = next;
-            ++it;
         }
 
         /* process fallback */
 
         if constexpr (has_fallback)
         {
-            if (state == 0)
+            if (state == failure_state)
             {
-                if (not fallback_bitset[state])
+                if (fallback.state == failure_state)
+                    return false;
+
+                if constexpr (has_backlinks)
                 {
-                    if (fallback.state == 0)
-                        return false;
+                    std::ptrdiff_t to_erase{ std::ranges::distance(fallback.it, it) };
 
-                    if constexpr (has_backlinks)
-                    {
-                        std::ptrdiff_t to_erase{ std::ranges::distance(fallback.it, it) };
+                    /* this is always true since we only ever call this function
+                        when the current state itself is not a fallback state */
+                    [[assume(to_erase > 0)]];
 
-                        /* this is always true since we only ever call this function
-                            when the current state itself is not a fallback state */
-                        [[assume(to_erase > 0)]];
-
-                        while (to_erase-- > 0)
-                            backlinks.pop_back();
-                    }
-
-                    it = fallback.it;
-                    state = fallback.state;
+                    while (to_erase-- > 0)
+                        backlinks.pop_back();
                 }
 
-                if (not state_table[state])
-                    return false;
+                state = fallback.state;
+                if constexpr (not DFA.flags.return_bool)
+                    it = fallback.it;
+
+                /* assume state_table[state] now holds */
             }
         }
 
 
-        if constexpr (accepting_state_empty)
+        if constexpr (X != 0)
         {
-            if constexpr (X != 0)
-                update_ctx(ctx, backlinks, it);
-        }
-        else
-        {
-            const accepting_state& as{ state_table[state] };
-
-            if (not as)
-                return false;
-
-            if constexpr (has_fallback)
-                if (not (fallback_bitset[state] or it == end))
-                    return false;
-
-            if constexpr (X != 0)
-                update_ctx(ctx, backlinks, it, as);
+            if constexpr (accepting_state_empty)
+                update_ctx(ctx, it);
+            else
+                update_ctx(ctx, backlinks, it, state_table[state]);
         }
 
         return true;
@@ -487,7 +483,7 @@ private:
 
     template<std::bidirectional_iterator I, int X>
         requires (X != 0)
-    static constexpr void update_ctx(context<I, X> ctx, maybe_buf_t /* backlinks */, I it)
+    static constexpr void update_ctx(context<I, X> ctx, I it)
     {
         ctx.get_res().match_end_ = it;
 
@@ -526,7 +522,7 @@ public:
         requires (DFA.flags.return_bool)
     static constexpr bool operator()(const I first, const S last)
     {
-        return forwards_pass(context<I>{}, terminal_object{}, first, last, 1 + DFA.match_start);
+        return forwards_pass(context<I>{}, terminal_object{}, first, last, start_state);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -535,7 +531,7 @@ public:
     {
         result<I> res{ first };
         backlink_buffer_t buf{};
-        forwards_pass(context{ res }, buf, first, last, 1 + DFA.match_start);
+        forwards_pass(context{ res }, buf, first, last, start_state);
         return res;
     }
 };
@@ -553,7 +549,7 @@ struct table_dfa<Info>::iterated_result
         static constexpr bool has_continue{ true };
         static constexpr bool is_stateless{ false };
 
-        using continue_type = state_index_t;
+        using continue_type = state_t;
 
         // TODO: add alternative_number when is_regex is true and there is more than one alt
         continue_type continue_at{ 0 };
@@ -562,7 +558,7 @@ struct table_dfa<Info>::iterated_result
     iterated_result() = default;
 
     constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
-        : res{ first }, stf{ .continue_at = 1 + DFA.match_start }
+        : res{ first }, stf{ .continue_at = start_state }
     {
         if constexpr (never_empty)
         {
@@ -572,12 +568,12 @@ struct table_dfa<Info>::iterated_result
         {
             if (resume(first, last))
                 if (res.template force_get<0>().empty())
-                    stf.continue_at = 1 + DFA.additional_continue_nodes.back();
+                    stf.continue_at = nestart_state;
         }
     }
 
     constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
-        : res{ first }, stf{ .continue_at = 1 + (never_empty ? DFA.match_start : DFA.additional_continue_nodes.back()) }
+        : res{ first }, stf{ .continue_at = nestart_state }
     {
         resume(first, last);
     }
