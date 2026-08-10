@@ -301,7 +301,10 @@ consteval tdfa_info<CharT> compile_pattern(std::basic_string_view<CharT> pattern
 
     /* convert to tdfa */
     tagged_dfa dfa{ nfa, onepass };
-    dfa.optimise_registers();
+    if (onepass)
+        dfa.optimise_registers();
+    else
+        dfa.minimise_backlinks();
     // dfa.minimise_states();
 
     /* optimise transition edges and their order to produce fewest comparisons */

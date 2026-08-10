@@ -1945,10 +1945,10 @@ constexpr void tagged_dfa<CharT>::compact_regop_blocks()
         for (auto& tr : node.tr)
             tr.op_index = (tr.op_index < regop_block_map.size()) ? regop_block_map[tr.op_index] : tdfa::no_transition_regops;
 
-    for (auto it = final_nodes_.begin(), last{ final_nodes_.end() }; it != last; ++it)
+    for (auto it = final_nodes_.begin(), last = final_nodes_.end(); it != last; ++it)
         it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
 
-    for (auto it = fallback_nodes_.begin(), last{ fallback_nodes_.end() }; it != last; ++it)
+    for (auto it = fallback_nodes_.begin(), last = fallback_nodes_.end(); it != last; ++it)
         it->second.op_index = (it->second.op_index < regop_block_map.size()) ? regop_block_map[it->second.op_index] : tdfa::no_transition_regops;
 
     regops_ = std::move(new_regops);
@@ -1959,6 +1959,70 @@ constexpr void tagged_dfa<CharT>::minimise_states()
 {
     tdfa::min<char_type> minimise{};
     minimise(*this);
+}
+
+template<typename CharT>
+constexpr void tagged_dfa<CharT>::minimise_backlinks()
+{
+    if (onepass_)
+        return;
+
+    static constexpr auto equals = [](const tdfa::backlinks_t& x, const tdfa::backlinks_t& y){
+        return std::ranges::equal(x, y, [](const tdfa::backlink& x, const tdfa::backlink& y){
+            return (x.prev_index == y.prev_index) and std::ranges::equal(x.tags_seq, y.tags_seq);
+        });
+    };
+
+    std::flat_multimap<std::size_t, tdfa::blkidx_t> unique_map;
+    std::vector<tdfa::backlinks_t> new_backlink_arrays;
+
+    std::vector<tdfa::blkidx_t> remap;
+    remap.reserve(backlink_arrays_.size());
+
+    for (tdfa::blkidx_t i{ 0 }, i_max{ backlink_arrays_.size() }; i < i_max; ++i)
+    {
+        std::size_t h{ hash::init() };
+        for (const auto& [prev_index, tags_seq] : backlink_arrays_[i])
+        {
+            hash::append(h, prev_index);
+            hash::append(h, tags_seq);
+        }
+
+        bool extant{ false };
+        auto [it, end] = unique_map.equal_range(h);
+        for (; it != end; ++it)
+        {
+            if (equals(backlink_arrays_[i], new_backlink_arrays[it->second]))
+            {
+                remap.push_back(it->second);
+                extant = true;
+                break;
+            }
+        }
+
+        if (not extant)
+        {
+            const tdfa::blkidx_t new_idx{ new_backlink_arrays.size() };
+            remap.push_back(new_idx);
+            unique_map.emplace_hint(end, h, new_idx);
+            new_backlink_arrays.emplace_back(std::move(backlink_arrays_[i]));
+        }
+    }
+
+    for (auto& node : nodes_)
+        for (auto& tr : node.tr)
+            if (tr.op_index != tdfa::no_transition_regops)
+                tr.op_index = remap[tr.op_index];
+
+    for (auto it = final_nodes_.begin(), last = final_nodes_.end(); it != last; ++it)
+        if (it->second.op_index != tdfa::no_transition_regops)
+            it->second.op_index = remap[it->second.op_index];
+
+    for (auto it = fallback_nodes_.begin(), last = fallback_nodes_.end(); it != last; ++it)
+        if (it->second.op_index != tdfa::no_transition_regops)
+            it->second.op_index = remap[it->second.op_index];
+
+    backlink_arrays_ = std::move(new_backlink_arrays);
 }
 
 template<typename CharT>

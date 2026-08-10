@@ -151,6 +151,7 @@ public:
     constexpr void optimise_registers();
     constexpr void compact_regop_blocks();
     constexpr void minimise_states();
+    constexpr void minimise_backlinks();
     constexpr void minimise_transition_edges();
     constexpr void make_default_transitions();
     constexpr void make_shared_transitions();
