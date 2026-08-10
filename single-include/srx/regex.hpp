@@ -11261,6 +11261,28 @@ inline constexpr auto rf = compile_pattern(std::basic_string_view{ [: P :] }, un
 struct match_non_empty_t {};
 inline constexpr match_non_empty_t match_non_empty;
 
+template<std::integral T, unsigned int Width>
+class backlink_hist
+{
+public:
+    backlink_hist() = default;
+
+    [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+    [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }
+    [[nodiscard]] constexpr T& back() { return data_[(size_ - 1) % buf_size]; }
+    [[nodiscard]] constexpr const T& back() const { return data_[(size_ - 1) % buf_size]; };
+
+    constexpr void push_back(T x) noexcept { data_[size_++ % buf_size] = x; }
+    constexpr void pop_back() noexcept { --size_; }
+    constexpr void clear() noexcept { size_ = 0; }
+
+private:
+    static constexpr std::size_t buf_size{ 0b1uz << Width };
+
+    std::size_t size_{ 0 };
+    std::array<T, buf_size> data_;
+};
+
 }
 }
 
@@ -14202,15 +14224,6 @@ using p1306_searcher = p1306dfa<(^^re<std::meta::reflect_constant_string(Pattern
 namespace srx {
 namespace detail {
 
-namespace backlink_types {
-
-using small_t  = std::uint_least8_t;
-using medium_t = std::uint_least16_t;
-using large_t  = std::uint_least32_t;
-using xlarge_t = std::uint_least64_t;
-
-}
-
 template<std::meta::info Info>
 struct p1306dfb
 {
@@ -14227,6 +14240,8 @@ private:
     static constexpr bool bounded_size{ DFA.min_max_lengths.first != std::numeric_limits<std::size_t>::max() };
     static constexpr bool fixed_length{ bounded_size and DFA.min_max_lengths.first == DFA.min_max_lengths.second };
     static constexpr bool branch_free{ std::ranges::all_of(DFA.nodes, [](const auto& n){ return n.size() <= 1; }) };
+    static constexpr bool enable_backlinks{ not DFA.flags.return_bool and DFA.tag_count > 0 };
+    static constexpr bool finite_length{ DFA.backlink_buf_size != std::numeric_limits<std::size_t>::max() };
 
     static constexpr std::size_t actual_length{ 0 /* TODO: calculate maximum length, inclusive of assertions extending beyond the end of patterns */ };
     static constexpr std::size_t backlink_array_count{ DFA.backlink_arrays.size() };
@@ -14259,13 +14274,7 @@ private:
         }
     }
 
-    using backlink_index_type = typename [: [] consteval {
-        const auto size = DFA.nodes.size(); /* replace with size of backlink array array? */
-        template for (constexpr const std::meta::info& type : define_static_array(members_of(^^backlink_types, std::meta::access_context::unprivileged())))
-            if (size <= static_cast<std::size_t>(std::numeric_limits<typename [: type :]>::max()))
-                return type;
-       return std::meta::info{};
-    }() :];
+    using backlink_index_type = [: smallest_integer_type(backlink_array_count) :];
 
 public:
     template<std::bidirectional_iterator I>
@@ -14286,18 +14295,19 @@ public:
         [[no_unique_address]] continue_type continue_at{ detail::tdfa::no_continue };
     };
 
-    using backlinks_type = std::vector<backlink_index_type>;
+    using backlink_buffer_type = std::conditional_t<finite_length, backlink_hist<backlink_index_type, std::bit_width(DFA.backlink_buf_size)>, std::vector<backlink_index_type>>;
 
 private:
-    static constexpr std::ptrdiff_t fallback_disabled{ 0 };
+    static constexpr backlink_index_type invalid_backlink_index{ std::numeric_limits<backlink_index_type>::max() };
+
+    using blbuf_t = maybe_type_t<enable_backlinks, backlink_buffer_type&>;
+    using blidx_t = maybe_type_t<enable_backlinks, backlink_index_type>;
 
     template<typename I>
     using result_ref = std::add_lvalue_reference_t<result<I>>;
 
     template<typename I>
     using iterated_result_ref = std::add_lvalue_reference_t<iterated_result<I>>;
-
-    using backlinks_ref = std::add_lvalue_reference_t<backlinks_type>;
 
     template<typename I, int X = 0>
     struct context
@@ -14310,7 +14320,6 @@ private:
     {
         /* store results */
         result_ref<I> res;
-        backlinks_ref arr;
 
         [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res; }
     };
@@ -14320,17 +14329,16 @@ private:
     {
         /* store results with iterated search info */
         iterated_result_ref<I> res;
-        backlinks_ref arr;
 
         [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res.res; }
         [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return res.stf; }
     };
 
     template<typename I>
-    context(result<I>&, backlinks_type&) -> context<I, 1>;
+    context(result<I>&) -> context<I, 1>;
 
     template<typename I>
-    context(iterated_result<I>&, backlinks_type&) -> context<I, 2>;
+    context(iterated_result<I>&) -> context<I, 2>;
 
     template<typename I>
     struct fallback_info
@@ -14341,15 +14349,17 @@ private:
         constexpr explicit(false) fallback_info(I it) : it{ it } {}
     };
 
+    static constexpr std::ptrdiff_t fallback_disabled{ 0 };
+
     template<typename I>
-    using maybe_fallback_t = maybe_type_t<DFA.flags.enable_fallback, fallback_info<I>>;
+    using mfb_t = maybe_type_t<DFA.flags.enable_fallback, fallback_info<I>>;
 
     /* backwards pass */
 
-    using bitset_type = std::bitset<DFA.tag_count>;
+    using assigned_t = std::bitset<DFA.tag_count>;
 
-    template<std::size_t IdxA, std::size_t IdxB, std::bidirectional_iterator I>
-    static constexpr tdfa::backlink_index_t assign_tags(result<I>& res, bitset_type& assigned, I it)
+    template<std::size_t IdxA, std::size_t IdxB, std::bidirectional_iterator I, int X>
+    static constexpr std::size_t assign_tags(context<I, X> ctx, assigned_t& assigned, I it)
     {
         template for (constexpr auto tag : DFA.backlink_arrays[IdxA][IdxB].tag_seq | std::views::reverse)
         {
@@ -14360,9 +14370,9 @@ private:
                 {
                     assigned[tag_position] = true;
 
-                    res.reg_[tag_position] = it;
+                    ctx.get_res().reg_[tag_position] = it;
                     if constexpr (not std::contiguous_iterator<I>)
-                        res.enabled_[tag_position] = true;
+                        ctx.get_res().enabled_[tag_position] = true;
                 }
             }
             else if constexpr (tag < 0)
@@ -14373,12 +14383,12 @@ private:
             }
         }
 
-        static constexpr auto prev_index{ DFA.backlink_arrays[IdxA][IdxB].prev_index };
+        static constexpr std::size_t prev_index{ DFA.backlink_arrays[IdxA][IdxB].prev_index };
         return prev_index;
     }
 
-    template<std::bidirectional_iterator I>
-    static constexpr tdfa::backlink_index_t assign_tags_dispatch(result<I>& res, bitset_type& assigned, I it, backlink_index_type outer, tdfa::backlink_index_t index)
+    template<std::bidirectional_iterator I, int X>
+    static constexpr std::size_t assign_tags_dispatch(context<I, X> res, assigned_t& assigned, I it, blidx_t outer, std::size_t index)
     {
         [[assume(outer < backlink_array_count)]];
 
@@ -14402,41 +14412,52 @@ private:
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    [[gnu::noinline]] static constexpr bool backwards_pass(context<I, X> ctx, I it, const S /* last */, maybe_fallback_t<I> /* fallback */)
-        requires (X != 0)
+        requires (X != 0 and enable_backlinks)
+    [[gnu::noinline]]
+    static constexpr bool backwards_pass(blbuf_t arr, blidx_t /* idx */, I it, const S /* last */, mfb_t<I> /* fb */, context<I, X> ctx)
     {
-        bitset_type assigned{};
-        tdfa::backlink_index_t index{ 0 };
+        assigned_t assigned{};
+        std::size_t index{ 0 };
 
-        while (true)
+        [[assume(arr.size() > 0)]];
+
+        do
         {
-            index = assign_tags_dispatch(ctx.get_res(), assigned, it, ctx.arr.back(), index);
-
-            ctx.arr.pop_back();
-
-            if ((assigned.all() or ctx.arr.empty()))
-                break;
-
+            index = assign_tags_dispatch(ctx, assigned, it, arr.back(), index);
+            arr.pop_back();
             --it;
         }
+        while (not assigned.all());
 
         return true;
     }
 
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
-    [[gnu::always_inline]] static constexpr bool backwards_pass(context<I, 0> /* ctx */, I /* it */, const S /* last */, maybe_fallback_t<I> /* fallback */)
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    [[gnu::always_inline]] static constexpr bool backwards_pass(blbuf_t, blidx_t, I, const S, mfb_t<I>, context<I, X>)
     {
         return true;
     }
 
     /* final and fallback */
 
-    template<std::size_t Idx, std::ptrdiff_t Offset, std::bidirectional_iterator I, int X>
-    static constexpr void set_final(context<I, X> ctx, const I it)
+    template<std::size_t Idx, std::ptrdiff_t Offset, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr void set_final(blbuf_t arr, context<I, X> ctx, const I it)
     {
         if constexpr (X != 0)
         {
-            ctx.arr.push_back(static_cast<backlink_index_type>(Idx));
+            if constexpr (enable_backlinks)
+            {
+                if constexpr (not finite_length and std::sized_sentinel_for<S, I>)
+                {
+                    [[assume(arr.size() < arr.capacity())]];
+                    arr.push_back(static_cast<backlink_index_type>(Idx));
+                }
+                else
+                {
+                    arr.push_back(static_cast<backlink_index_type>(Idx));
+                }
+            }
+
             ctx.get_res().match_end_ = std::ranges::prev(it, Offset);
 
             if constexpr (not std::contiguous_iterator<I>)
@@ -14444,27 +14465,28 @@ private:
         }
     }
 
-    template<std::size_t Idx, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I, int X>
-    static constexpr void set_fallback(context<I, X> ctx, const I it)
+    template<std::size_t Idx, std::ptrdiff_t Offset, tdfa::continue_at_t ContinueAt, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    static constexpr void set_fallback(blbuf_t arr, context<I, X> ctx, const I it)
     {
         if constexpr (X != 0)
         {
-            set_final<Idx, Offset>(ctx, it);
+            set_final<Idx, Offset, I, S>(arr, ctx, it);
 
             if constexpr (X != 1 and stateful::has_continue and ContinueAt != tdfa::no_continue)
                 ctx.get_stf().continue_at = ContinueAt;
         }
     }
 
-    /* state fallback */
+    /* state fallback / accept */
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
         requires (DFA.flags.enable_fallback)
-    static constexpr bool fallback_state(context<I, X> ctx, I it, const S last, fallback_info<I> fallback)
+    [[gnu::noinline]]
+    static constexpr bool fallback_state(blbuf_t arr, blidx_t idx, I it, const S last, mfb_t<I> fb, context<I, X> ctx)
     {
         static_assert(fallback_disabled == 0);
 
-        if (fallback.idx == fallback_disabled)
+        if (fb.idx == fallback_disabled)
             return false;
 
         if constexpr (X == 0)
@@ -14473,30 +14495,33 @@ private:
         }
         else
         {
-            std::ptrdiff_t to_erase{ std::ranges::distance(fallback.it, it) };
+            if constexpr (enable_backlinks)
+            {
+                std::ptrdiff_t to_erase{ std::ranges::distance(fb.it, it) };
 
-            /* this is always true since we only ever call this function
-               when the current state itself is not a fallback state */
-            [[assume(to_erase > 0)]];
+                /* this is always true since we only ever call this function
+                when the current state itself is not a fallback state */
+                [[assume(to_erase > 0)]];
 
-            while (to_erase-- > 0)
-                ctx.arr.pop_back();
+                while (to_erase-- > 0)
+                    arr.pop_back();
+            }
 
-            it = fallback.it;
+            it = fb.it;
 
-            [[assume(fallback.idx <= static_cast<std::ptrdiff_t>(DFA.fallback_nodes.size()))]];
-            [[assume(fallback.idx > 0)]];
+            [[assume(fb.idx <= static_cast<std::ptrdiff_t>(DFA.fallback_nodes.size()))]];
+            [[assume(fb.idx > 0)]];
 
             template for (constexpr auto i : std::views::indices(DFA.fallback_nodes.size()))
             {
                 static constexpr auto& [state, fbni] = DFA.fallback_nodes.begin()[i];
-                static constexpr std::ptrdiff_t idx{ 1 + static_cast<std::ptrdiff_t>(i) };
+                static constexpr std::ptrdiff_t fallback_idx{ 1 + static_cast<std::ptrdiff_t>(i) };
 
-                if (fallback.idx == idx)
+                if (fb.idx == fallback_idx)
                 {
                     static constexpr auto& fni = DFA.final_nodes.at(state);
-                    set_fallback<fbni.op_index, fni.offset, fbni.continue_at>(ctx, it);
-                    [[clang::musttail]] return backwards_pass(ctx, it, last, fallback);
+                    set_fallback<fbni.op_index, fni.offset, fbni.continue_at, I, S>(arr, ctx, it);
+                    [[clang::musttail]] return backwards_pass(arr, idx, it, last, fb, ctx);
                 }
             }
 
@@ -14504,157 +14529,120 @@ private:
         }
     }
 
+    template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
+    [[gnu::noinline]]
+    static constexpr bool accepting_state(blbuf_t arr, blidx_t idx, I it, const S last, mfb_t<I> fb, context<I, X> ctx)
+    {
+        static constexpr auto& final_node = DFA.final_nodes.at(DFAState);
+        static constexpr auto* fallback_node = DFA.fallback_nodes.at_if(DFAState);
+
+        if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
+        {
+            set_fallback<final_node.op_index, final_node.offset, fallback_node->continue_at, I, S>(arr, ctx, it);
+            [[clang::musttail]] return backwards_pass(arr, idx, it, last, fb, ctx);
+        }
+        else
+        {
+            if (it == last)
+            {
+                set_final<final_node.op_index, final_node.offset, I, S>(arr, ctx, it);
+                [[clang::musttail]] return backwards_pass(arr, idx, it, last, fb, ctx);
+            }
+
+            if constexpr (DFA.flags.enable_fallback)
+                [[clang::musttail]] return fallback_state(arr, idx, it, last, fb, ctx);
+            else
+                return false;
+        }
+
+    }
+
     /* next state functions */
 
     template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    static constexpr bool state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    [[gnu::noinline]]
+    static constexpr bool forwards_pass(blbuf_t arr, blidx_t idx, I it, const S last, mfb_t<I> fb, context<I, X> ctx)
     {
         static constexpr auto fb_it = DFA.fallback_nodes.find(DFAState);
-        static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
-        static constexpr auto* fallback_node = (fb_it != DFA.fallback_nodes.end()) ? &(fb_it->second) : nullptr;
+        static constexpr bool is_final{ DFA.final_nodes.contains(DFAState) };
+        static constexpr bool is_fallback{ fb_it != DFA.fallback_nodes.end() };
 
-        if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
+        ++it;
+        if constexpr (enable_backlinks)
         {
-            static constexpr std::ptrdiff_t index{ 1 + std::ranges::distance(DFA.fallback_nodes.begin(), fb_it) };
-
-            fallback.idx = index;
-            if constexpr (not DFA.flags.return_bool)
-                fallback.it = it;
-        }
-
-        if (it != last)
-        {
-            template for (constexpr auto& tr : DFA.nodes[DFAState])
+            if constexpr (not finite_length and std::sized_sentinel_for<S, I>)
             {
-                if (tr_possible<tr.cs>(*it))
-                {
-                    if constexpr (X != 0)
-                        ctx.arr.push_back(static_cast<backlink_index_type>(tr.op_index));
-                    [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
-                }
-            }
-        }
-        else
-        {
-            if constexpr (final_node != nullptr and not (DFA.flags.enable_fallback and fallback_node != nullptr))
-            {
-                set_final<final_node->op_index, final_node->offset>(ctx, it);
-                [[clang::musttail]] return backwards_pass(ctx, it, last, fallback);
-            }
-        }
-
-        if constexpr (final_node != nullptr and (DFA.flags.enable_fallback and fallback_node != nullptr))
-        {
-            set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-            [[clang::musttail]] return backwards_pass(ctx, it, last, fallback);
-        }
-
-        if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
-            [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
-        else
-            return false;
-    }
-
-    template<std::size_t DFAState, std::bidirectional_iterator I, int X>
-    static constexpr bool state(context<I, X> ctx, I it, const cstr_sentinel_t last, maybe_fallback_t<I> fallback)
-    {
-        static constexpr auto fb_it = DFA.fallback_nodes.find(DFAState);
-        static constexpr auto* final_node = DFA.final_nodes.at_if(DFAState);
-        static constexpr auto* fallback_node = (fb_it != DFA.fallback_nodes.end()) ? &(fb_it->second) : nullptr;
-
-        if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
-        {
-            static constexpr std::ptrdiff_t index{ 1 + std::ranges::distance(DFA.fallback_nodes.begin(), fb_it) };
-
-            fallback.idx = index;
-            if constexpr (not DFA.flags.return_bool)
-                fallback.it = it;
-        }
-
-        template for (constexpr auto& tr : DFA.nodes[DFAState])
-        {
-            if (tr_possible_exclude_null<tr.cs>(*it))
-            {
-                if constexpr (X != 0)
-                    ctx.arr.push_back(static_cast<backlink_index_type>(tr.op_index));
-                [[clang::musttail]] return state<tr.next>(ctx, ++it, last, fallback);
-            }
-        }
-
-        if constexpr (final_node != nullptr)
-        {
-            if constexpr (DFA.flags.enable_fallback and fallback_node != nullptr)
-            {
-                set_fallback<final_node->op_index, final_node->offset, fallback_node->continue_at>(ctx, it);
-                [[clang::musttail]] return backwards_pass(ctx, it, last, fallback);
+                [[assume(arr.size() < arr.capacity())]];
+                arr.push_back(idx);
             }
             else
             {
-                if (it == last) [[likely]]
-                {
-                    set_final<final_node->op_index, final_node->offset>(ctx, it);
-                    [[clang::musttail]] return backwards_pass(ctx, it, last, fallback);
-                }
+                arr.push_back(idx);
             }
         }
 
-        if constexpr (DFA.flags.enable_fallback and fallback_node == nullptr)
-            [[clang::musttail]] return fallback_state(ctx, it, last, fallback);
-        else
-            return false;
-    }
-
-    template<std::size_t DFAState, std::size_t Count, std::bidirectional_iterator I, std::sized_sentinel_for<I> S, int X>
-    static constexpr bool unchecked_state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
-    {
-        if constexpr (Count == 0)
+        if constexpr (DFA.flags.enable_fallback and is_fallback)
         {
-            [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
+            static constexpr std::ptrdiff_t index{ 1 + std::ranges::distance(DFA.fallback_nodes.begin(), fb_it) };
+
+            fb.idx = index;
+            if constexpr (not DFA.flags.return_bool)
+                fb.it = it;
         }
-        else
+
+        if (it != last) [[likely]]
         {
             template for (constexpr auto& tr : DFA.nodes[DFAState])
             {
+                static constexpr blidx_t new_idx{ static_cast<backlink_index_type>(tr.op_index) };
                 if (tr_possible<tr.cs>(*it))
-                {
-                    if constexpr (X != 0)
-                        ctx.arr.push_back(static_cast<backlink_index_type>(tr.op_index));
-                    [[clang::musttail]] return unchecked_state<tr.next, Count - 1>(ctx, ++it, last, fallback);
-                }
+                    [[clang::musttail]] return forwards_pass<tr.next>(arr, new_idx, it, last, fb, ctx);
             }
-
-            return false;
         }
+
+        if constexpr (is_final)
+            [[clang::musttail]] return accepting_state<DFAState>(arr, idx, it, last, fb, ctx);
+        else if constexpr (DFA.flags.enable_fallback)
+            [[clang::musttail]] return fallback_state(arr, idx, it, last, fb, ctx);
+        else
+            return false;
     }
 
-    /* next state function entry point */
+    /* initial state */
 
     template<std::size_t DFAState, std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    static constexpr bool initial_state(context<I, X> ctx, I it, const S last, maybe_fallback_t<I> fallback)
+    [[gnu::noinline]]
+    static constexpr bool initial_state(blbuf_t arr, blidx_t idx, I it, const S last, mfb_t<I> fb, context<I, X> ctx)
     {
-        static constexpr auto min_length = static_cast<std::ptrdiff_t>(DFA.min_max_lengths.first);
+        static constexpr auto fb_it = DFA.fallback_nodes.find(DFAState);
+        static constexpr bool is_final{ DFA.final_nodes.contains(DFAState) };
+        static constexpr bool is_fallback{ fb_it != DFA.fallback_nodes.end() };
 
-        if constexpr (not std::sized_sentinel_for<S, I> or (DFA.flags.is_search and not DFA.flags.adapted_search))
+        if constexpr (DFA.flags.enable_fallback and is_fallback)
         {
-            /* note: searches are very likely to exceed min_length, so prefer reduced code duplication instead */
-            [[clang::musttail]] return state<DFAState>(ctx, it, last, fallback);
+            static constexpr std::ptrdiff_t index{ 1 + std::ranges::distance(DFA.fallback_nodes.begin(), fb_it) };
+
+            fb.idx = index;
+            if constexpr (not DFA.flags.return_bool)
+                fb.it = it;
         }
-        else if constexpr (fixed_length and not DFA.flags.enable_fallback)
+
+        if (it != last) [[likely]]
         {
-            if (std::ranges::distance(it, last) == min_length)
+            template for (constexpr auto& tr : DFA.nodes[DFAState])
             {
-                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
+                static constexpr blidx_t new_idx{ static_cast<backlink_index_type>(tr.op_index) };
+                if (tr_possible<tr.cs>(*it))
+                    [[clang::musttail]] return forwards_pass<tr.next>(arr, new_idx, it, last, fb, ctx);
             }
         }
+
+        if constexpr (is_final)
+            [[clang::musttail]] return accepting_state<DFAState>(arr, idx, it, last, fb, ctx);
+        else if constexpr (DFA.flags.enable_fallback)
+            [[clang::musttail]] return fallback_state(arr, idx, it, last, fb, ctx);
         else
-        {
-            if (std::ranges::distance(it, last) >= min_length)
-            {
-                [[clang::musttail]] return unchecked_state<DFAState, min_length>(ctx, it, last, fallback);
-            }
-        }
-
-        return false;
+            return false;
     }
 
 public:
@@ -14664,7 +14652,7 @@ public:
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
-        return initial_state<DFA.match_start>(context<I, 0>{}, first, last, first);
+        return initial_state<DFA.match_start>(blbuf_t{}, invalid_backlink_index, first, last, first, context<I, 0>{} );
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -14674,9 +14662,12 @@ public:
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
         result<I> res{ first };
-        backlinks_type backlinks{};
+        backlink_buffer_type backlinks{};
 
-        initial_state<DFA.match_start>(context{ res, backlinks }, first, last, first);
+        if constexpr (not finite_length and std::sized_sentinel_for<S, I>)
+            backlinks.reserve(1 + std::ranges::distance(first, last));
+
+        initial_state<DFA.match_start>(backlinks, invalid_backlink_index, first, last, first, context{ res });
         return res;
     }
 };
@@ -14697,7 +14688,7 @@ struct p1306dfb<Info>::iterated_result
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
-        start(first, last);
+        start<S>(first, last);
     }
 
     template<std::sentinel_for<I> S>
@@ -14706,7 +14697,7 @@ struct p1306dfb<Info>::iterated_result
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
-        start<true>(first, last);
+        start<S, true>(first, last);
     }
 
     template<std::sentinel_for<I> S>
@@ -14719,11 +14710,11 @@ struct p1306dfb<Info>::iterated_result
         {
             if (prev_empty)
             {
-                resume<true>(it, last);
+                resume<S, true>(it, last);
                 return;
             }
         }
-        resume(it, last);
+        resume<S>(it, last);
     }
 
     template<std::sentinel_for<I> S>
@@ -14735,7 +14726,7 @@ struct p1306dfb<Info>::iterated_result
         const auto& match = res.template force_get<0>();
         const I current = match.end();
         res.reset(current);
-        resume(current, last);
+        resume<S>(current, last);
         return current;
     }
 
@@ -14759,54 +14750,53 @@ struct p1306dfb<Info>::iterated_result
 
                 res.reset(current);
                 if (current == first)
-                    start<true>(current, last);
+                    start<S, true>(current, last);
                 else
-                    resume<true>(current, last);
+                    resume<S, true>(current, last);
                 return current;
             }
         }
 
         res.reset(current);
-        resume(current, last);
+        resume<S>(current, last);
         return current;
     }
 
 private:
-    template<bool NonEmptyMatch = false>
-    constexpr void start(const I first, const std::sentinel_for<I> auto last)
+    template<std::sentinel_for<I> S, bool NonEmptyMatch = false>
+    constexpr void start(const I first, const S last)
     {
-        backlinks_type backlinks{};
+        backlink_buffer_type backlinks{};
 
-        initial_state<get_start(tdfa::no_continue, NonEmptyMatch)>(context{ *this, backlinks }, first, last, first);
+        if constexpr (not finite_length and std::sized_sentinel_for<S, I>)
+            backlinks.reserve(1 + std::ranges::distance(first, last));
+
+        initial_state<get_start(tdfa::no_continue, NonEmptyMatch)>(backlinks, invalid_backlink_index, first, last, first, context{ *this });
     }
 
-    template<bool NonEmptyMatch = false>
-    constexpr void resume(const I first, const std::sentinel_for<I> auto last)
+    template<std::sentinel_for<I> S, bool NonEmptyMatch = false>
+    constexpr void resume(const I first, const S last)
     {
         if constexpr (not stateful::has_continue)
         {
-            return start<NonEmptyMatch>(first, last);
+            start<S, NonEmptyMatch>(first, last);
         }
         else
         {
             const stateful state_info{ std::exchange(stf, {}) };
-            backlinks_type backlinks{};
+            backlink_buffer_type backlinks{};
+
+            if constexpr (not finite_length and std::sized_sentinel_for<S, I>)
+                backlinks.reserve(1 + std::ranges::distance(first, last));
 
             template for (constexpr std::size_t i : std::views::indices(DFA.continue_nodes.size()))
             {
                 if (state_info.continue_at == i)
                 {
-
-                    initial_state<get_start(i, NonEmptyMatch)>(context{ *this, backlinks }, first, last, first);
-#ifndef __GNUC_MINOR__
-                    break;
-#else
+                    initial_state<get_start(i, NonEmptyMatch)>(backlinks, invalid_backlink_index, first, last, first, context{ *this });
                     return;
-#endif
                 }
             }
-
-            return;
         }
     }
 
@@ -14823,28 +14813,6 @@ using p1306_multipass = p1306dfb<(^^rf<std::meta::reflect_constant_string(Patter
 
 namespace srx {
 namespace detail {
-
-template<std::integral T, unsigned int Width>
-class backlink_hist
-{
-public:
-    backlink_hist() = default;
-
-    [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
-    [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }
-    [[nodiscard]] constexpr T& back() { return data_[(size_ - 1) % buf_size]; }
-    [[nodiscard]] constexpr const T& back() const { return data_[(size_ - 1) % buf_size]; };
-
-    constexpr void push_back(T x) noexcept { data_[size_++ % buf_size] = x; }
-    constexpr void pop_back() noexcept { --size_; }
-    constexpr void clear() noexcept { size_ = 0; }
-
-private:
-    static constexpr std::size_t buf_size{ 0b1uz << Width };
-
-    std::size_t size_{ 0 };
-    std::array<T, buf_size> data_;
-};
 
 template<std::meta::info Info>
 struct table_dfa

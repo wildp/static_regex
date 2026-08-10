@@ -322,5 +322,28 @@ inline constexpr auto rf = compile_pattern(std::basic_string_view{ [: P :] }, un
 struct match_non_empty_t {};
 inline constexpr match_non_empty_t match_non_empty;
 
+
+template<std::integral T, unsigned int Width>
+class backlink_hist
+{
+public:
+    backlink_hist() = default;
+
+    [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+    [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }
+    [[nodiscard]] constexpr T& back() { return data_[(size_ - 1) % buf_size]; }
+    [[nodiscard]] constexpr const T& back() const { return data_[(size_ - 1) % buf_size]; };
+
+    constexpr void push_back(T x) noexcept { data_[size_++ % buf_size] = x; }
+    constexpr void pop_back() noexcept { --size_; }
+    constexpr void clear() noexcept { size_ = 0; }
+
+private:
+    static constexpr std::size_t buf_size{ 0b1uz << Width };
+
+    std::size_t size_{ 0 };
+    std::array<T, buf_size> data_;
+};
+
 } // namespace detail
 } // namespace srx
