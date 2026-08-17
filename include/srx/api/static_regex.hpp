@@ -38,7 +38,7 @@ consteval auto get_matcher_refl(mode i, bool is_search = false)
 {
     if (i == mode::backtrack)
         return ^^detail::naive_matcher_adaptor;
-    else if (i == mode ::tabledfa)
+    else if (i == mode::tabledfa)
         return ^^detail::table_dfa_matcher;
     else if (i == mode::linear_twopass)
         return ^^detail::p1306_multipass;

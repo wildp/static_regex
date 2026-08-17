@@ -7,7 +7,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -108,12 +107,12 @@ public:
 
     constexpr const value_type& operator*() const noexcept
     {
-        return parent_->cached_result_.res;
+        return *parent_->cached_result_;
     }
 
     constexpr iterator& operator++()
     {
-        if (not parent_->cached_result_.res)
+        if (not parent_->cached_result_)
             return *this;
 
         if constexpr (result_type::needs_begin)
@@ -131,7 +130,7 @@ public:
 
     friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
     {
-        return not x.parent_->cached_result_.res.has_value();
+        return not x.parent_->cached_result_;
     }
 
     template<std::ranges::input_range W, int...>
@@ -780,12 +779,11 @@ public:
             const auto end = std::ranges::end(base_);
             result_type result{ beg, end, detail::match_non_empty };
 
-            if (result.res)
+            if (result)
             {
-                auto [mfirst, mlast] = get<0>(result.res);
+                auto [mfirst, mlast] = get<0>(*result);
                 cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
-                cached_begin_continue_at_ = result.stf.continue_at;
-                // TODO: add more members as necessary;
+                cached_begin_continue_at_ = result.get_continue();
             }
             else
             {
@@ -821,13 +819,13 @@ private:
     using matcher_type   = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
     using result_type    = matcher_type::template iterated_result<std::ranges::iterator_t<V>>;
     using next_type      = std::ranges::subrange<std::ranges::iterator_t<V>>;
-    using state_type     = result_type::state_type;
+    using continue_type  = result_type::continue_type;
 
     static constexpr matcher_type matcher{};
 
     V base_{};
     next_type cached_begin_next_;
-    [[no_unique_address]] state_type::continue_type cached_begin_continue_at_;
+    [[no_unique_address]] continue_type cached_begin_continue_at_;
     bool cache_engaged_{ false };
 };
 
@@ -846,7 +844,7 @@ public:
     constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
-    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, state_type::continue_type cont)
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 
     constexpr std::ranges::iterator_t<V>& base() const
@@ -874,14 +872,13 @@ public:
             }
             else
             {
-                result_type result{ std::ranges::begin(parent_->base_), current_, end, state_type{ continue_at_ }, next_.empty() };
+                result_type result{ std::ranges::begin(parent_->base_), current_, end, continue_at_, next_.empty() };
 
-                if (result.res)
+                if (result)
                 {
-                    auto [mfirst, mlast] = get<0>(result.res);
+                    auto [mfirst, mlast] = get<0>(*result);
                     next_ = { std::move(mfirst), std::move(mlast) };
-                    continue_at_ = result.stf.continue_at;
-                    // TODO: add more members as necessary;
+                    continue_at_ = result.get_continue();
                 }
                 else
                 {
@@ -917,7 +914,7 @@ private:
     regex_split_view* parent_{ nullptr };
     std::ranges::iterator_t<V> current_{};
     next_type next_{};
-    [[no_unique_address]] state_type::continue_type continue_at_{};
+    [[no_unique_address]] continue_type continue_at_{};
     bool trailing_empty_{ false };
 };
 

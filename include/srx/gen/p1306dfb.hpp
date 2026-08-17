@@ -492,7 +492,7 @@ template<std::bidirectional_iterator I>
 struct p1306dfb<Info>::iterated_result
 {
     static constexpr bool needs_begin{ not never_empty };
-    using state_type = stateful;
+    using continue_type = stateful::continue_type;
 
     iterated_result() = default;
 
@@ -515,8 +515,8 @@ struct p1306dfb<Info>::iterated_result
     }
 
     template<std::sentinel_for<I> S>
-    constexpr iterated_result(const I /* first */, const I it, const S last, stateful stf, bool prev_empty)
-        : res{ it }, stf{ stf }
+    constexpr iterated_result(const I /* first */, const I it, const S last, continue_type cont, bool prev_empty)
+        : res{ it }, stf{ .continue_at = cont }
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
@@ -529,6 +529,21 @@ struct p1306dfb<Info>::iterated_result
             }
         }
         resume<S>(it, last);
+    }
+
+    constexpr operator bool() const noexcept
+    {
+        return res.has_value();
+    }
+
+    constexpr const result<I>& operator*() const noexcept
+    {
+        return res;
+    }
+
+    constexpr continue_type get_continue() const noexcept
+    {
+        return stf.continue_at;
     }
 
     template<std::sentinel_for<I> S>
@@ -576,6 +591,7 @@ struct p1306dfb<Info>::iterated_result
         return current;
     }
 
+    friend p1306dfb<Info>::context<I, 2>;
 
 private:
     template<std::sentinel_for<I> S, bool NonEmptyMatch = false>
@@ -615,7 +631,6 @@ private:
         }
     }
 
-public:
     result<I> res;
     stateful stf;
 };

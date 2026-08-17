@@ -45,17 +45,17 @@ public:
 
     constexpr const value_type& operator*() const noexcept
     {
-        return result_.res;
+        return *result_;
     }
 
     constexpr const value_type* operator->() const noexcept
     {
-        return &result_.res;
+        return &*result_;
     }
 
     constexpr stashing_regex_iterator& operator++()
     {
-        if (not result_.res)
+        if (not result_)
             return *this;
 
         if constexpr (result_type::needs_begin)
@@ -73,7 +73,7 @@ public:
 
     friend constexpr bool operator==(const stashing_regex_iterator& x, std::default_sentinel_t)
     {
-        return not x.result_.res.has_value();
+        return not x.result_;
     }
 
     template<std::ranges::input_range W, int...>
@@ -175,9 +175,9 @@ public:
 
         result_type delim_matcher_result{ first, last };
 
-        while (delim_matcher_result.res)
+        while (delim_matcher_result)
         {
-            const auto& [mfirst, mlast] = get<0>(delim_matcher_result.res);
+            const auto& [mfirst, mlast] = get<0>(*delim_matcher_result);
             const auto& cap = captures_.emplace_back(detail::parse_fmt_replace(std::ranges::next(mfirst), mlast, submatch_count));
 
             if (cap == replace_constants::skip) /* treat $$ in format as single $ */

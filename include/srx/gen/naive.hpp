@@ -1086,14 +1086,7 @@ template<std::bidirectional_iterator I>
 struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_result
 {
     static constexpr bool needs_begin{ true };
-
-    struct state_type
-    {
-        using continue_type = terminal_object;
-
-        // TODO: add simd vec mask?
-        [[no_unique_address]] continue_type continue_at{};
-    };
+    using continue_type = terminal_object;
 
     iterated_result() = default;
 
@@ -1107,8 +1100,8 @@ struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_res
         resume<true>(first, first, last);
     }
 
-    constexpr iterated_result(const I first, const I it, const std::sentinel_for<I> auto last, state_type stf, bool prev_empty)
-        : res{ it }, stf{ stf }
+    constexpr iterated_result(const I first, const I it, const std::sentinel_for<I> auto last, continue_type, bool prev_empty)
+        : res{ it }
     {
         if constexpr (ast.empty_match_possible)
         {
@@ -1119,6 +1112,21 @@ struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_res
             }
         }
         resume(first, it, last);
+    }
+
+    constexpr operator bool() const noexcept
+    {
+        return res.has_value();
+    }
+
+    constexpr const result<I>& operator*() const noexcept
+    {
+        return res;
+    }
+
+    constexpr continue_type get_continue() const noexcept
+    {
+        return terminal_object{};
     }
 
     constexpr I advance(const I first, const std::sentinel_for<I> auto last)
@@ -1153,9 +1161,7 @@ private:
             res = outer_state(first, current, last);
     }
 
-public:
     result<I> res{};
-    state_type stf{};
 };
 
 

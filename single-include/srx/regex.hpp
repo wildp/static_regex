@@ -12975,13 +12975,7 @@ template<std::bidirectional_iterator I>
 struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_result
 {
     static constexpr bool needs_begin{ true };
-
-    struct state_type
-    {
-        using continue_type = terminal_object;
-
-        [[no_unique_address]] continue_type continue_at{};
-    };
+    using continue_type = terminal_object;
 
     iterated_result() = default;
 
@@ -12995,8 +12989,8 @@ struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_res
         resume<true>(first, first, last);
     }
 
-    constexpr iterated_result(const I first, const I it, const std::sentinel_for<I> auto last, state_type stf, bool prev_empty)
-        : res{ it }, stf{ stf }
+    constexpr iterated_result(const I first, const I it, const std::sentinel_for<I> auto last, continue_type, bool prev_empty)
+        : res{ it }
     {
         if constexpr (ast.empty_match_possible)
         {
@@ -13007,6 +13001,21 @@ struct naive_matcher<Pattern>::partial_match<IsSearch, IsIterator>::iterated_res
             }
         }
         resume(first, it, last);
+    }
+
+    constexpr operator bool() const noexcept
+    {
+        return res.has_value();
+    }
+
+    constexpr const result<I>& operator*() const noexcept
+    {
+        return res;
+    }
+
+    constexpr continue_type get_continue() const noexcept
+    {
+        return terminal_object{};
     }
 
     constexpr I advance(const I first, const std::sentinel_for<I> auto last)
@@ -13040,9 +13049,7 @@ private:
             res = outer_state(first, current, last);
     }
 
-public:
     result<I> res{};
-    state_type stf{};
 };
 
 template<string_literal Pattern, fsm_flags Flags>
@@ -14140,7 +14147,7 @@ template<std::bidirectional_iterator I>
 struct p1306dfa<Info>::iterated_result
 {
     static constexpr bool needs_begin{ not never_empty };
-    using state_type = stateful;
+    using continue_type = stateful::continue_type;
 
     iterated_result() = default;
 
@@ -14163,8 +14170,8 @@ struct p1306dfa<Info>::iterated_result
     }
 
     template<std::sentinel_for<I> S>
-    constexpr iterated_result(const I /* first */, const I it, const S last, stateful stf, bool prev_empty)
-        : res{ it }, stf{ stf }
+    constexpr iterated_result(const I /* first */, const I it, const S last, continue_type cont, bool prev_empty)
+        : res{ it }, stf{ .continue_at = cont }
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
@@ -14177,6 +14184,21 @@ struct p1306dfa<Info>::iterated_result
             }
         }
         resume(it, last);
+    }
+
+    constexpr operator bool() const noexcept
+    {
+        return res.has_value();
+    }
+
+    constexpr const result<I>& operator*() const noexcept
+    {
+        return res;
+    }
+
+    constexpr continue_type get_continue() const noexcept
+    {
+        return stf.continue_at;
     }
 
     template<std::sentinel_for<I> S>
@@ -14223,6 +14245,8 @@ struct p1306dfa<Info>::iterated_result
         resume(current, last);
         return current;
     }
+
+    friend p1306dfa<Info>::context<I, 2>;
 
 private:
     template<bool NonEmptyMatch = false>
@@ -14275,7 +14299,6 @@ private:
         }
     }
 
-public:
     result<I> res;
     stateful stf;
 };
@@ -14746,7 +14769,7 @@ template<std::bidirectional_iterator I>
 struct p1306dfb<Info>::iterated_result
 {
     static constexpr bool needs_begin{ not never_empty };
-    using state_type = stateful;
+    using continue_type = stateful::continue_type;
 
     iterated_result() = default;
 
@@ -14769,8 +14792,8 @@ struct p1306dfb<Info>::iterated_result
     }
 
     template<std::sentinel_for<I> S>
-    constexpr iterated_result(const I /* first */, const I it, const S last, stateful stf, bool prev_empty)
-        : res{ it }, stf{ stf }
+    constexpr iterated_result(const I /* first */, const I it, const S last, continue_type cont, bool prev_empty)
+        : res{ it }, stf{ .continue_at = cont }
     {
         static_assert(can_tailcall_with<I> and can_tailcall_with<S>, "Iterator is not useable in tail calls");
 
@@ -14783,6 +14806,21 @@ struct p1306dfb<Info>::iterated_result
             }
         }
         resume<S>(it, last);
+    }
+
+    constexpr operator bool() const noexcept
+    {
+        return res.has_value();
+    }
+
+    constexpr const result<I>& operator*() const noexcept
+    {
+        return res;
+    }
+
+    constexpr continue_type get_continue() const noexcept
+    {
+        return stf.continue_at;
     }
 
     template<std::sentinel_for<I> S>
@@ -14830,6 +14868,8 @@ struct p1306dfb<Info>::iterated_result
         return current;
     }
 
+    friend p1306dfb<Info>::context<I, 2>;
+
 private:
     template<std::sentinel_for<I> S, bool NonEmptyMatch = false>
     constexpr void start(const I first, const S last)
@@ -14868,7 +14908,6 @@ private:
         }
     }
 
-public:
     result<I> res;
     stateful stf;
 };
@@ -14901,20 +14940,15 @@ private:
     static constexpr bool has_fallback{ DFA.flags.enable_fallback };
     static constexpr bool has_continue{ DFA.flags.is_iterator };
     static constexpr bool has_alternative{ DFA.alt_mode };
-    static constexpr bool has_xcontinue{ has_continue and not never_empty };
     static constexpr bool has_backlinks{ not DFA.flags.return_bool and DFA.tag_count > 0 };
     static constexpr bool has_finite_length{ DFA.backlink_buf_size != std::numeric_limits<std::size_t>::max() };
     static constexpr auto largest_offset{ DFA.largest_offset() };
     static constexpr auto largest_alternative{ DFA.largest_alt() };
+    static constexpr auto char_size{ 0b1uz << std::numeric_limits<uchar_type>::digits };
 
     static constexpr std::size_t backlink_array_count{ DFA.backlink_arrays.size() };
 
-    using state_t = [: smallest_integer_type(DFA.nodes.size() + 1) :];
     using blidx_t = [: smallest_integer_type(backlink_array_count) :];
-
-    static constexpr state_t failure_state{ 0 };
-    static constexpr state_t start_state{ 1 + static_cast<state_t>(DFA.match_start) };
-    static constexpr state_t nestart_state{ 1 + static_cast<state_t>((never_empty ? DFA.match_start : DFA.additional_continue_nodes.back())) };
 
 public:
     template<std::bidirectional_iterator I>
@@ -14930,79 +14964,73 @@ public:
 private:
     using maybe_buf_t = maybe_type_t<has_backlinks, backlink_buffer_t&>;
 
-    template<typename I>
-    using result_ref = std::add_lvalue_reference_t<result<I>>;
-
-    template<typename I>
-    using iterated_result_ref = std::add_lvalue_reference_t<iterated_result<I>>;
-
-    template<typename I>
-    struct fallback_info
-    {
-        I it;
-        state_t state{ failure_state };
-
-        constexpr explicit(false) fallback_info(I it) : it{ it } {}
-    };
-
-    template<typename I>
-    using maybe_fallback_t = maybe_type_t<has_fallback, fallback_info<I>>;
-
-    template<typename I, int X = 0>
-    struct context
-    {
-        /* empty context */
-    };
-
-    template<typename I>
-    struct context<I, 1>
-    {
-        /* store results */
-        result_ref<I> res;
-
-        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res; }
-    };
-
-    template<typename I>
-    struct context<I, 2>
-    {
-        /* store results with iterated search info */
-        iterated_result_ref<I> res;
-
-        [[gnu::always_inline]] constexpr auto& get_res() noexcept { return res.res; }
-        [[gnu::always_inline]] constexpr auto& get_stf() noexcept { return res.stf; }
-    };
-
-    template<typename I>
-    context(result<I>&) -> context<I, 1>;
-
-    template<typename I>
-    context(iterated_result<I>&) -> context<I, 2>;
-
     /* table contents */
 
-    struct table_entry
+    static constexpr auto make_partitions()
     {
-        state_t                                                    state;
-        [[no_unique_address]] maybe_type_t<has_backlinks, blidx_t> backlink;
-    };
+        using charset_type = charset<char_type>;
+        const auto entire = ~charset_type{};
+
+        std::vector<charset_type> css;
+        for (const auto& nodes : DFA.nodes)
+            for (const auto& tr : nodes)
+                css.emplace_back(tr.cs);
+
+        auto refs = css | std::views::transform([](const auto& x){ return std::cref(x); }) | std::ranges::to<std::vector>();
+        refs.emplace_back(std::cref(entire));
+        auto result = charset_type::partition(refs);
+        return std::define_static_array(result | std::views::transform([](const auto& x){ return static_charset{ x }; }));
+    }
+
+    static constexpr std::span partitions = make_partitions();
 
     struct table_row
     {
-        static constexpr std::size_t row_size{ 0b1 << std::numeric_limits<uchar_type>::digits };
-
-        constexpr table_entry& operator[](uchar_type n) noexcept { return data_[n]; }
-        constexpr const table_entry& operator[](uchar_type n) const noexcept { return data_[n]; }
+        static constexpr std::size_t size{ partitions.size() };
+        static_assert(size > 0);
 
         table_row() = default;
 
         /* note: we use a C-array because it's a structural type, which std::array is not */
-        table_entry data_[row_size]{};
+        table_row* next[size]{};
+    };
+
+    struct table
+    {
+        static constexpr std::size_t table_size{ DFA.nodes.size() };
+
+        constexpr table() noexcept
+        {
+            for (std::size_t i{ 0 }; i < table_size; ++i)
+            {
+                for (const auto& [j, part] : partitions | std::views::enumerate)
+                {
+                    for (const auto& tr : DFA.nodes[i] | std::views::reverse)
+                    {
+                        if ((part & tr.cs).empty())
+                            continue;
+
+                        transitions[i].next[j] = &transitions[tr.next];
+
+                        if constexpr (has_backlinks)
+                            backlinks[i][j] = static_cast<blidx_t>(tr.op_index);
+                    }
+                }
+            }
+        }
+
+        using transition_table_t = std::array<table_row, table_size>;
+        using backlink_table_t   = std::array<std::array<blidx_t, table_row::size>, table_size>;
+        using maybe_backlinks_t  = maybe_type_t<has_backlinks, backlink_table_t>;
+
+        transition_table_t transitions{};
+        [[no_unique_address]] maybe_backlinks_t backlinks{};
     };
 
     struct accepting_state
     {
         using ofs_t = [: smallest_integer_type(largest_offset) :];
+        using con_t = [: smallest_integer_type(DFA.continue_nodes.size()) :];
         using alt_t = [: smallest_integer_type(largest_alternative) :];
 
         struct contents_type;
@@ -15015,12 +15043,9 @@ private:
             if (has_backlinks)
                 mems.emplace_back(data_member_spec(^^blidx_t, { .name = "backlink" }));
             if (has_continue)
-                mems.emplace_back(data_member_spec(^^state_t, { .name = "nstart" }));
-            if (has_xcontinue)
-                mems.emplace_back(data_member_spec(^^state_t, { .name = "nenstart" }));
+                mems.emplace_back(data_member_spec(^^con_t, { .name = "contat" }));
             if (has_alternative)
-                mems.emplace_back(data_member_spec(^^state_t, { .name = "resalt" }));
-            mems.emplace_back(data_member_spec(^^bool, { .name = "accept" }));
+                mems.emplace_back(data_member_spec(^^alt_t, { .name = "resalt" }));
             define_aggregate(^^contents_type, mems);
         }
 
@@ -15028,24 +15053,26 @@ private:
         constexpr explicit operator bool() const noexcept { return data.accept; }
     };
 
-    static constexpr bool accepting_state_empty{ not ((largest_offset > 0) or has_backlinks or has_continue or has_xcontinue or has_alternative) };
+    static constexpr bool accepting_state_empty{ not ((largest_offset > 0) or has_backlinks or has_continue or has_alternative) };
 
     /* helpers for table construction */
 
-    static consteval table_row make_transition_row(std::size_t q)
+    static consteval auto make_partition_table()
     {
-        table_row row{};
+        using result_type = [: smallest_integer_type(partitions.size()) :];
+        static_assert(std::same_as<result_type, std::uint_least8_t>);
+        std::array<std::uint_least8_t, char_size> result{};
 
-        for (const auto& tr : DFA.nodes[q] | std::views::reverse)
+        for (const auto& [i, cs] : partitions | std::views::enumerate)
         {
-            for (const auto& [lo, hi] : tr.cs.get_intervals())
+            if (i == 0)
+                continue;
+
+            for (const auto& [lo, hi] : cs.get_intervals())
             {
                 for (uchar_type c{ static_cast<uchar_type>(lo) }; true; ++c)
                 {
-                    row[c] = {
-                        .state    = static_cast<state_t>(1 + tr.next),
-                        .backlink = static_cast<blidx_t>(tr.op_index)
-                    };
+                    result[c] = static_cast<std::uint_least8_t>(i);
 
                     if (c == static_cast<uchar_type>(hi))
                         break;
@@ -15053,7 +15080,7 @@ private:
             }
         }
 
-        return row;
+        return result;
     }
 
     static consteval accepting_state make_accepting_state(std::size_t q)
@@ -15067,72 +15094,140 @@ private:
 
         const auto* const fbni = DFA.fallback_nodes.at_if(q);
 
-        const auto cont{ (fbni != nullptr and has_continue) ? (1 + DFA.continue_nodes[fbni->continue_at]) : 0uz };
-        const auto xcont{ (fbni != nullptr and has_xcontinue) ? (1 + DFA.additional_continue_nodes[fbni->continue_at]) : 0uz };
+        const auto cont{ (fbni != nullptr and has_continue) ? fbni->continue_at : 0uz };
 
         if constexpr (largest_offset > 0)
             as.data.offset = static_cast<accepting_state::ofs_t>(fni->offset);
         if constexpr (has_backlinks)
             as.data.backlink = static_cast<blidx_t>(fni->op_index);
         if constexpr (has_continue)
-            as.data.nstart = static_cast<state_t>(cont);
-        if constexpr (has_xcontinue)
-            as.data.nenstart = static_cast<state_t>(xcont);
+            as.data.contat = static_cast<accepting_state::con_t>(cont);
         if constexpr (has_alternative)
             as.data.resalt = static_cast<accepting_state::alt_t>(fni->alternative);
-        as.data.accept = true;
 
         return as;
     }
 
     /* table definitions */
 
-    static constexpr auto transition_table = [] consteval {
-        constexpr auto [...Idxs] = std::make_index_sequence<DFA.nodes.size()>();
-        return std::array{ table_row{},  (make_transition_row(Idxs))... };
+    static constexpr auto partition_table = make_partition_table();
+
+    static constexpr table transition_table{};
+
+    static constexpr auto final_bitset = [] consteval {
+        std::bitset<DFA.nodes.size()> bitset;
+        for (const auto& [q, _] : DFA.final_nodes)
+            bitset[q] = true;
+        return bitset;
     }();
 
     static constexpr auto fallback_bitset = [] consteval {
-        std::bitset<1 + DFA.nodes.size()> bitset;
+        std::bitset<DFA.nodes.size()> bitset;
         for (const auto& [q, _] : DFA.fallback_nodes)
-            bitset[1 + q] = true;
+            bitset[q] = true;
         return bitset;
     }();
 
     static constexpr auto state_table = [] consteval {
-        if constexpr (accepting_state_empty)
-        {
-            std::bitset<1 + DFA.nodes.size()> bitset;
-            for (const auto& [q, _] : DFA.final_nodes)
-                bitset[1 + q] = true;
-            return bitset;
-        }
-        else
-        {
-            constexpr auto [...Idxs] = std::make_index_sequence<DFA.nodes.size()>();
-            return std::array{ accepting_state{},  (make_accepting_state(Idxs))... };
-        }
+        constexpr auto [...Idxs] = std::make_index_sequence<DFA.nodes.size()>();
+        return std::array{ (make_accepting_state(Idxs))... };
     }();
 
-    /* backwards pass */
+    /* types for forward/backward passes */
+
+    template<typename I>
+    struct fwd_result
+    {
+        using success_type     = maybe_type_t<std::contiguous_iterator<I>, bool>;
+        using backlink_type    = maybe_type_t<has_backlinks, blidx_t>;
+        using offset_type      = maybe_type_t<(largest_offset > 0), typename accepting_state::ofs_t>;
+        using continue_type    = maybe_type_t<has_continue, typename accepting_state::con_t>;
+        using alternative_type = maybe_type_t<has_alternative, typename accepting_state::alt_t>;
+
+        I it;
+        [[no_unique_address]] success_type     success;
+        [[no_unique_address]] offset_type      offset;
+        [[no_unique_address]] backlink_type    backlink;
+        [[no_unique_address]] continue_type    continue_at;
+        [[no_unique_address]] alternative_type alternative;
+
+        constexpr fwd_result() noexcept
+            : success{ false } {}
+
+        constexpr fwd_result() noexcept
+            requires std::contiguous_iterator<I>
+            : it{} {}
+
+        constexpr fwd_result(I iterator) noexcept(std::is_nothrow_move_constructible_v<I>)
+            requires (not (has_backlinks or has_continue or has_alternative))
+            : it{ std::move(iterator) }, success{ true } {}
+
+        constexpr fwd_result(I iterator, const accepting_state& as)
+            noexcept(std::is_nothrow_move_constructible_v<I> and largest_offset == 0)
+            : it{ std::move(iterator) }, success{ true }
+        {
+            if constexpr (largest_offset > 0)
+                offset = as.data.offset;
+            if constexpr (has_backlinks)
+                backlink = as.data.backlink;
+            if constexpr (has_continue)
+                continue_at = as.data.contat;
+            if constexpr (has_alternative)
+                alternative = as.data.resalt;
+        }
+
+        [[nodiscard]] constexpr bool has_value() const noexcept
+        {
+            if constexpr (std::contiguous_iterator<I>)
+                return std::to_address(it) != std::to_address(I{});
+            else
+                return success;
+        }
+
+        constexpr operator bool() const noexcept
+        {
+            return has_value();
+        }
+
+        constexpr void reset()
+        {
+            if constexpr (std::contiguous_iterator<I>)
+                it = std::to_address(I{});
+            else
+                success = false;
+        }
+
+    };
+
+    template<typename I>
+    struct bwd_result
+    {
+        /* store results */
+        std::add_lvalue_reference_t<result<I>> res;
+    };
+
+    template<typename I>
+    bwd_result(result<I>&) -> bwd_result<I>;
+
+    /* backward pass */
 
     using bitset_type = std::bitset<DFA.tag_count>;
 
-    template<std::size_t IdxA, std::size_t IdxB, std::bidirectional_iterator I, int X>
-    static constexpr std::size_t assign_tags(context<I, X> ctx, bitset_type& assigned, I it)
+    template<std::size_t IdxA, std::size_t IdxB, std::bidirectional_iterator I>
+    static constexpr std::size_t assign_tags(bwd_result<I> ctx, bitset_type& assigned, I it)
     {
         template for (constexpr auto tag : DFA.backlink_arrays[IdxA][IdxB].tag_seq | std::views::reverse)
         {
             if constexpr (tag > 0)
             {
-                /* static */ constexpr std::size_t tag_position{ tag - 1 };
+                static constexpr std::size_t tag_position{ tag - 1 };
                 if (not std::as_const(assigned)[tag_position])
                 {
                     assigned[tag_position] = true;
 
-                    ctx.get_res().reg_[tag_position] = it;
+                    ctx.res.reg_[tag_position] = it;
                     if constexpr (not std::contiguous_iterator<I>)
-                        ctx.get_res().enabled_[tag_position] = true;
+                        ctx.res.enabled_[tag_position] = true;
                 }
             }
             else if constexpr (tag < 0)
@@ -15147,8 +15242,8 @@ private:
         return prev_index;
     }
 
-    template<std::bidirectional_iterator I, int X>
-    static constexpr std::size_t assign_tags_dispatch(context<I, X> ctx, bitset_type& assigned, I it, blidx_t outer, std::size_t index)
+    template<std::bidirectional_iterator I>
+    static constexpr std::size_t assign_tags_dispatch(bwd_result<I> ctx, bitset_type& assigned, I it, blidx_t outer, std::size_t index)
     {
         [[assume(outer < backlink_array_count)]];
 
@@ -15171,74 +15266,104 @@ private:
         std::unreachable();
     }
 
-    template<std::bidirectional_iterator I, int X>
-        requires (X != 0)
-    static constexpr bool backwards_pass(context<I, X> ctx, backlink_buffer_t& backlinks, I it, blidx_t back)
+    template<std::bidirectional_iterator I>
+    static constexpr void backward_pass(bwd_result<I> ctx, maybe_buf_t backlinks, const fwd_result<I>& fwd)
     {
-        bitset_type assigned{};
-        std::size_t index{ 0 };
+        if constexpr (largest_offset > 0)
+            ctx.res.match_end_ = std::ranges::prev(fwd.it, fwd.offset);
+        else
+            ctx.res.match_end_ = fwd.it;
 
-        while (true)
+        if constexpr (not std::contiguous_iterator<I>)
+            ctx.res.match_success_ = true;
+
+        if constexpr (has_backlinks)
         {
-            index = assign_tags_dispatch(ctx, assigned, it, back, index);
+            blidx_t back{ fwd.backlink };
+            I it{ fwd.it };
+            bitset_type assigned{};
+            std::size_t index{ 0 };
 
-            if (assigned.all())
-                break;
+            while (true)
+            {
+                index = assign_tags_dispatch(ctx, assigned, it, back, index);
 
-            back = backlinks.back();
-            backlinks.pop_back();
-            --it;
+                if (assigned.all())
+                    break;
+
+                back = backlinks.back();
+                backlinks.pop_back();
+                --it;
+            }
         }
-
-        return true;
     }
 
-    /* matcher implementation */
+    /* forward pass */
 
-    template<std::bidirectional_iterator I, std::sentinel_for<I> S, int X>
-    static constexpr bool forwards_pass(context<I, X> ctx, maybe_buf_t backlinks, I it, const S end, state_t state)
+    template<typename I>
+    struct fallback_info
+    {
+        I it;
+        const table_row* state_ptr{ nullptr };
+
+        constexpr explicit(false) fallback_info(I it) : it{ it } {}
+    };
+
+    template<typename I>
+    using maybe_fallback_t = maybe_type_t<has_fallback, fallback_info<I>>;
+
+    template<std::bidirectional_iterator I, std::sentinel_for<I> S>
+    static constexpr fwd_result<I> forward_pass(maybe_buf_t backlinks, I it, const S end, const std::size_t start_state)
     {
         maybe_fallback_t<I> fallback{ it };
 
+        const table_row* state_ptr{ &transition_table.transitions[start_state] };
+        blidx_t backlink{};
+
         while (true)
         {
+            const auto state{ state_ptr - &transition_table.transitions[0] };
+
             if (it == end) [[unlikely]]
             {
-                if (not state_table[state])
+                if (not final_bitset[state])
                 {
                     if constexpr (not has_fallback)
-                        return false;
+                        return {};
                     else
-                        state = failure_state;
+                        state_ptr = nullptr;
                 }
                 break;
             }
 
-            const state_t next{ transition_table[state][static_cast<uchar_type>(*it)].state };
-            const auto backlink{ transition_table[state][static_cast<uchar_type>(*it)].backlink };
+            const auto part = partition_table[static_cast<uchar_type>(*it)];
+            const table_row* next_ptr{ state_ptr->next[part] };
+
+            if constexpr (has_backlinks)
+                backlink = transition_table.backlinks[state][part];
 
             if constexpr (has_fallback)
             {
                 if (fallback_bitset[state])
                 {
-                    fallback.state = state;
+                    fallback.state_ptr = state_ptr;
                     if constexpr (not DFA.flags.return_bool)
                         fallback.it = it;
                 }
             }
 
-            if (next == failure_state) [[unlikely]]
+            if (next_ptr == nullptr) [[unlikely]]
             {
                 if constexpr (not has_fallback)
-                    return false;
+                    return {};
                 else
                     if (not fallback_bitset[state])
-                        state = failure_state;
+                        state_ptr = nullptr;
                 break;
             }
 
             ++it;
-            state = next;
+            state_ptr = next_ptr;
 
             if constexpr (has_backlinks)
                 backlinks.push_back(backlink);
@@ -15248,10 +15373,10 @@ private:
 
         if constexpr (has_fallback)
         {
-            if (state == failure_state)
+            if (state_ptr == nullptr)
             {
-                if (fallback.state == failure_state)
-                    return false;
+                if (fallback.state_ptr == nullptr)
+                    return {};
 
                 if constexpr (has_backlinks)
                 {
@@ -15265,7 +15390,7 @@ private:
                         backlinks.pop_back();
                 }
 
-                state = fallback.state;
+                state_ptr = fallback.state_ptr;
                 if constexpr (not DFA.flags.return_bool)
                     it = fallback.it;
 
@@ -15273,47 +15398,10 @@ private:
             }
         }
 
-        if constexpr (X != 0)
-        {
-            if constexpr (accepting_state_empty)
-                update_ctx(ctx, it);
-            else
-                update_ctx(ctx, backlinks, it, state_table[state]);
-        }
-
-        return true;
-    }
-
-    template<std::bidirectional_iterator I, int X>
-        requires (X != 0)
-    static constexpr void update_ctx(context<I, X> ctx, I it)
-    {
-        ctx.get_res().match_end_ = it;
-
-        if constexpr (not std::contiguous_iterator<I>)
-            ctx.get_res().match_success_ = true;
-    }
-
-    template<std::bidirectional_iterator I, int X>
-        requires (X != 0)
-    static constexpr void update_ctx(context<I, X> ctx, maybe_buf_t backlinks, I it, const accepting_state& as)
-    {
-        if constexpr (largest_offset > 0)
-            ctx.get_res().match_end_ = std::ranges::prev(it, as.data.offset);
+        if constexpr (DFA.flags.return_bool or accepting_state_empty)
+            return fwd_result{ it };
         else
-            ctx.get_res().match_end_ = it;
-
-        if constexpr (not std::contiguous_iterator<I>)
-            ctx.get_res().match_success_ = true;
-
-        if constexpr (X == 2 and has_continue and not has_xcontinue)
-            ctx.get_stf().continue_at = as.data.nstart;
-
-        if constexpr (has_backlinks)
-            backwards_pass(ctx, backlinks, it, as.data.backlink);
-
-        if constexpr (X == 2 and has_continue and has_xcontinue)
-            ctx.get_stf().continue_at = (ctx.get_res().template force_get<0>().empty()) ? as.data.nenstart : as.data.nstart;
+            return fwd_result{ it, state_table[state_ptr - &transition_table.transitions[0]] };
     }
 
 public:
@@ -15321,7 +15409,7 @@ public:
         requires (DFA.flags.return_bool)
     static constexpr bool operator()(const I first, const S last)
     {
-        return forwards_pass(context<I>{}, terminal_object{}, first, last, start_state);
+        return forward_pass(terminal_object{}, first, last, DFA.match_start);
     }
 
     template<std::bidirectional_iterator I, std::sentinel_for<I> S>
@@ -15330,7 +15418,9 @@ public:
     {
         result<I> res{ first };
         backlink_buffer_t buf{};
-        forwards_pass(context{ res }, buf, first, last, start_state);
+
+        if (const auto& fwd = forward_pass(buf, first, last, DFA.match_start))
+            backward_pass(bwd_result{ res }, buf, fwd);
         return res;
     }
 };
@@ -15340,68 +15430,169 @@ template<std::bidirectional_iterator I>
     requires std::is_nothrow_convertible_v<std::iter_value_t<I>, typename table_dfa<Info>::char_type>
 struct table_dfa<Info>::iterated_result
 {
-    static constexpr bool needs_begin{ false };
+    static constexpr bool needs_begin{ not never_empty };
 
-    struct state_type
-    {
-        static constexpr bool has_continue{ true };
-        static constexpr bool is_stateless{ false };
-
-        using continue_type = state_t;
-
-        continue_type continue_at{ 0 };
-    };
+    using buffer_type = maybe_type_t<has_backlinks, backlink_buffer_t>;
+    using continue_type = fwd_result<I>::continue_type;
 
     iterated_result() = default;
 
-    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last)
-        : res{ first }, stf{ .continue_at = start_state }
+    template<std::sentinel_for<I> S>
+    constexpr iterated_result(const I first, const S last)
+        : cached_res{ first }
     {
-        if constexpr (never_empty)
+        start(first, last);
+    }
+
+    template<std::sentinel_for<I> S>
+    constexpr iterated_result(const I first, const S last, match_non_empty_t)
+        : cached_res{ first }
+    {
+        start(first, last, true);
+    }
+
+    template<std::sentinel_for<I> S>
+    constexpr iterated_result(const I /* first */, const I it, const S last, continue_type cont, bool prev_empty)
+        : cached_res{ it }
+    {
+        fwd_res.continue_at = cont;
+
+        const bool nonempty = [&]{
+            if constexpr (not never_empty)
+                return prev_empty;
+            return false;
+        }();
+
+        resume(it, last, nonempty);
+    }
+
+    constexpr operator bool() const noexcept
+    {
+        return fwd_res.has_value();
+    }
+
+    constexpr const result<I>& operator*() const
+    {
+        if (not cache_engaged_)
         {
-            resume(first, last);
+            if (fwd_res)
+                backward_pass(bwd_result{ cached_res }, buf, fwd_res);
+            cache_engaged_ = true;
         }
-        else
-        {
-            if (resume(first, last))
-                if (res.template force_get<0>().empty())
-                    stf.continue_at = nestart_state;
-        }
+
+        return cached_res;
     }
 
-    constexpr iterated_result(const I first, const std::sentinel_for<I> auto last, match_non_empty_t)
-        : res{ first }, stf{ .continue_at = nestart_state }
+    constexpr continue_type get_continue() const noexcept
     {
-        resume(first, last);
+        return fwd_res.continue_at;
     }
 
-    constexpr iterated_result(const I /* first */, const I it, const std::sentinel_for<I> auto last, state_type stf, bool /* prev_empty */)
-        : res{ it }, stf{ stf }
+    template<std::sentinel_for<I> S>
+    constexpr I advance(const S last)
+        requires never_empty
     {
-        resume(it, last);
-    }
+        I current{ fwd_res.it };
 
-    constexpr I advance(const std::sentinel_for<I> auto last)
-    {
-        const auto& match = res.template force_get<0>();
-        const I current = match.end();
-        res.reset(current);
+        if constexpr (largest_offset > 0)
+            std::ranges::advance(current, -fwd_res.offset);
+
+        cached_res.reset(current);
         resume(current, last);
         return current;
     }
 
-    constexpr I advance(const I first, const std::sentinel_for<I> auto last) = delete;
-
-private:
-    constexpr bool resume(const I first, const std::sentinel_for<I> auto last)
+    template<std::sentinel_for<I> S>
+    constexpr I advance(const I first, const S last)
     {
-        backlink_buffer_t buf{};
-        return forwards_pass(context{ *this }, buf, first, last, stf.continue_at);
+        I current{ fwd_res.it };
+
+        if constexpr (largest_offset > 0)
+            std::ranges::advance(current, -fwd_res.offset);
+
+        if constexpr (not never_empty)
+        {
+            const auto& match = cached_res.template force_get<0>();
+
+            if (match.empty())
+            {
+                if (current == last)
+                {
+                    fwd_res.reset();
+                    cached_res.clear_match();
+                    return current;
+                }
+
+                cached_res.reset(current);
+
+                if (current == first)
+                    start(current, last, true);
+                else
+                    resume(current, last, true);
+                return current;
+            }
+        }
+
+        cached_res.reset(current);
+        resume(current, last);
+        return current;
     }
 
-public:
-    result<I> res;
-    state_type stf;
+    constexpr iterated_result(const iterated_result&) = delete;
+    constexpr iterated_result(iterated_result&&) noexcept = default;
+    constexpr iterated_result& operator=(const iterated_result&) = delete;
+    constexpr iterated_result& operator=(iterated_result&&) noexcept = default;
+    constexpr ~iterated_result() = default;
+
+private:
+    template<std::sentinel_for<I> S>
+    constexpr bool start(const I first, const S last, const bool nonempty_match = false)
+    {
+        const std::size_t start_state = [&](){
+            if constexpr (not never_empty)
+                if (nonempty_match)
+                    return DFA.additional_continue_nodes.back();
+            return DFA.match_start;
+        }();
+
+        if constexpr (has_backlinks and not has_finite_length)
+            buf.clear();
+
+        fwd_res = forward_pass(buf, first, last, start_state);
+        cache_engaged_ = false;
+        return fwd_res;
+    }
+
+    template<std::sentinel_for<I> S>
+    constexpr bool resume(const I first, const S last, const bool nonempty_match = false)
+    {
+        if constexpr (not has_continue)
+        {
+            return start(first, last, nonempty_match);
+        }
+        else
+        {
+            const std::size_t resume_state = [&]{
+                if constexpr (not never_empty)
+                    if (nonempty_match)
+                        return DFA.additional_continue_nodes[fwd_res.continue_at];
+                return DFA.continue_nodes[fwd_res.continue_at];
+            }();
+
+            fwd_res.reset();
+            if constexpr (has_backlinks and not has_finite_length)
+                buf.clear();
+
+            fwd_res = forward_pass(buf, first, last, resume_state);
+            cache_engaged_ = false;
+            return fwd_res.has_value();
+        }
+    }
+
+    fwd_result<I> fwd_res;
+    mutable result<I> cached_res;
+    [[no_unique_address]] mutable buffer_type buf;
+    mutable bool cache_engaged_{ false };
 };
 
 template<string_literal Pattern, fsm_flags Flags>
@@ -15427,7 +15618,7 @@ consteval auto get_matcher_refl(mode i, bool is_search = false)
 {
     if (i == mode::backtrack)
         return ^^detail::naive_matcher_adaptor;
-    else if (i == mode ::tabledfa)
+    else if (i == mode::tabledfa)
         return ^^detail::table_dfa_matcher;
     else if (i == mode::linear_twopass)
         return ^^detail::p1306_multipass;
@@ -15734,17 +15925,17 @@ public:
 
     constexpr const value_type& operator*() const noexcept
     {
-        return result_.res;
+        return *result_;
     }
 
     constexpr const value_type* operator->() const noexcept
     {
-        return &result_.res;
+        return &*result_;
     }
 
     constexpr stashing_regex_iterator& operator++()
     {
-        if (not result_.res)
+        if (not result_)
             return *this;
 
         if constexpr (result_type::needs_begin)
@@ -15762,7 +15953,7 @@ public:
 
     friend constexpr bool operator==(const stashing_regex_iterator& x, std::default_sentinel_t)
     {
-        return not x.result_.res.has_value();
+        return not x.result_;
     }
 
     template<std::ranges::input_range W, int...>
@@ -15863,9 +16054,9 @@ public:
 
         result_type delim_matcher_result{ first, last };
 
-        while (delim_matcher_result.res)
+        while (delim_matcher_result)
         {
-            const auto& [mfirst, mlast] = get<0>(delim_matcher_result.res);
+            const auto& [mfirst, mlast] = get<0>(*delim_matcher_result);
             const auto& cap = captures_.emplace_back(detail::parse_fmt_replace(std::ranges::next(mfirst), mlast, submatch_count));
 
             if (cap == replace_constants::skip) /* treat $$ in format as single $ */
@@ -16232,12 +16423,12 @@ public:
 
     constexpr const value_type& operator*() const noexcept
     {
-        return parent_->cached_result_.res;
+        return *parent_->cached_result_;
     }
 
     constexpr iterator& operator++()
     {
-        if (not parent_->cached_result_.res)
+        if (not parent_->cached_result_)
             return *this;
 
         if constexpr (result_type::needs_begin)
@@ -16255,7 +16446,7 @@ public:
 
     friend constexpr bool operator==(const iterator& x, std::default_sentinel_t)
     {
-        return not x.parent_->cached_result_.res.has_value();
+        return not x.parent_->cached_result_;
     }
 
     template<std::ranges::input_range W, int...>
@@ -16896,11 +17087,11 @@ public:
             const auto end = std::ranges::end(base_);
             result_type result{ beg, end, detail::match_non_empty };
 
-            if (result.res)
+            if (result)
             {
-                auto [mfirst, mlast] = get<0>(result.res);
+                auto [mfirst, mlast] = get<0>(*result);
                 cached_begin_next_ = { std::move(mfirst), std::move(mlast) };
-                cached_begin_continue_at_ = result.stf.continue_at;
+                cached_begin_continue_at_ = result.get_continue();
             }
             else
             {
@@ -16936,13 +17127,13 @@ private:
     using matcher_type   = [: detail::get_matcher_refl(Mode, true) :]<Pattern, detail::default_fsm_flags::search_all>;
     using result_type    = matcher_type::template iterated_result<std::ranges::iterator_t<V>>;
     using next_type      = std::ranges::subrange<std::ranges::iterator_t<V>>;
-    using state_type     = result_type::state_type;
+    using continue_type  = result_type::continue_type;
 
     static constexpr matcher_type matcher{};
 
     V base_{};
     next_type cached_begin_next_;
-    [[no_unique_address]] state_type::continue_type cached_begin_continue_at_;
+    [[no_unique_address]] continue_type cached_begin_continue_at_;
     bool cache_engaged_{ false };
 };
 
@@ -16961,7 +17152,7 @@ public:
     constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) } {}
 
-    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, state_type::continue_type cont)
+    constexpr explicit iterator(regex_split_view& parent, std::ranges::iterator_t<V> current, next_type next, continue_type cont)
         : parent_{ std::addressof(parent) }, current_{ std::move(current) }, next_{ std::move(next) }, continue_at_{ cont } {}
 
     constexpr std::ranges::iterator_t<V>& base() const
@@ -16989,13 +17180,13 @@ public:
             }
             else
             {
-                result_type result{ std::ranges::begin(parent_->base_), current_, end, state_type{ continue_at_ }, next_.empty() };
+                result_type result{ std::ranges::begin(parent_->base_), current_, end, continue_at_, next_.empty() };
 
-                if (result.res)
+                if (result)
                 {
-                    auto [mfirst, mlast] = get<0>(result.res);
+                    auto [mfirst, mlast] = get<0>(*result);
                     next_ = { std::move(mfirst), std::move(mlast) };
-                    continue_at_ = result.stf.continue_at;
+                    continue_at_ = result.get_continue();
                 }
                 else
                 {
@@ -17031,7 +17222,7 @@ private:
     regex_split_view* parent_{ nullptr };
     std::ranges::iterator_t<V> current_{};
     next_type next_{};
-    [[no_unique_address]] state_type::continue_type continue_at_{};
+    [[no_unique_address]] continue_type continue_at_{};
     bool trailing_empty_{ false };
 };
 
