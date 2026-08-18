@@ -356,7 +356,7 @@ struct p1306dfa
 
 private:
     static constexpr const tdfa_info<char_type>& DFA =  [: Info :];
-    static_assert(DFA.onepass, "Invalid reflection value: use p1306dfb instead");
+    static_assert(DFA.onepass, "Invalid reflection value");
 
     static constexpr bool never_empty{ DFA.additional_continue_nodes.empty() };
     static constexpr bool fixed_length{ DFA.min_max_lengths.first != std::numeric_limits<std::size_t>::max()

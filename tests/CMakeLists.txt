@@ -20,7 +20,6 @@ target_sources(tests
         setc_test.cpp
         srx1_test.cpp
         srx2_test.cpp
-        srxb_test.cpp
         srxc_test.cpp
         srxf_test.cpp
         srxt_test.cpp

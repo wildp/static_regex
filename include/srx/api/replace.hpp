@@ -17,7 +17,6 @@
 #include "srx/api/static_regex.hpp"
 #include "srx/etc/string_literal.hpp"
 #include "srx/etc/util.hpp"
-#include "srx/gen/result.hpp"
 
 
 namespace srx {
@@ -35,7 +34,7 @@ class stashing_regex_iterator<I, S, static_regex<Pattern, Mode>>
 public:
     using iterator_concept  = std::input_iterator_tag;
     using iterator_category = std::input_iterator_tag;
-    using value_type        = matcher_type::template result<I>;;
+    using value_type        = matcher_type::template result<I>;
     using difference_type   = std::ptrdiff_t;
 
     stashing_regex_iterator() requires std::default_initializable<I> and std::default_initializable<S> = default;

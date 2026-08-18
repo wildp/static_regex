@@ -16,7 +16,6 @@
 #include "srx/fsm/flags.hpp"
 #include "srx/gen/naive.hpp"
 #include "srx/gen/p1306.hpp"
-#include "srx/gen/p1306dfb.hpp"
 #include "srx/gen/result.hpp"
 #include "srx/gen/table.hpp"
 
@@ -27,9 +26,8 @@ enum class mode : unsigned char
 {
     standard,
     linear,
-    linear_twopass,
     backtrack,
-    tabledfa,
+    table_dfa,
 };
 
 namespace detail {
@@ -38,10 +36,8 @@ consteval auto get_matcher_refl(mode i, bool is_search = false)
 {
     if (i == mode::backtrack)
         return ^^detail::naive_matcher_adaptor;
-    else if (i == mode::tabledfa)
+    else if (i == mode::table_dfa)
         return ^^detail::table_dfa_matcher;
-    else if (i == mode::linear_twopass)
-        return ^^detail::p1306_multipass;
     else if (i == mode::standard and is_search)
         return ^^detail::p1306_searcher;
     else

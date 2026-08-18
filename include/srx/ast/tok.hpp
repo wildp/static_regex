@@ -394,7 +394,7 @@ constexpr std::size_t lexer<CharT>::parse_hex(const std::size_t fixed_amt)
         while (true)
         {
             if (it_ == end_)
-                throw pattern_error("EOF in escape sequence");;
+                throw pattern_error("EOF in escape sequence");
 
             const auto c = *it_;
             ++it_;
@@ -414,7 +414,7 @@ constexpr std::size_t lexer<CharT>::parse_hex(const std::size_t fixed_amt)
         }
 
         if (digits == 0)
-            throw pattern_error("Delimited escape sequence cannot be empty");;
+            throw pattern_error("Delimited escape sequence cannot be empty");
     }
     else if (fixed_amt != 0)
     {
@@ -560,7 +560,7 @@ constexpr tok::backref lexer<CharT>::parse_bref()
         while (true)
         {
             if (it_ == end_)
-                throw pattern_error("Incomplete escape sequence");;
+                throw pattern_error("Incomplete escape sequence");
 
             next = *it_++;
 
@@ -568,7 +568,7 @@ constexpr tok::backref lexer<CharT>::parse_bref()
                 break;
 
             if (not ('0' <= next and next <= '9'))
-                throw pattern_error("Incomplete escape sequence");;
+                throw pattern_error("Incomplete escape sequence");
 
             bref.number *= base;
             bref.number += next - '0';
@@ -691,7 +691,7 @@ constexpr lexer<CharT>::token_t lexer<CharT>::parse_lparen()
         return tok::lparen<CharT>{};
 
     if (++it_ == end_)
-        throw pattern_error("Invalid Pattern");;
+        throw pattern_error("Invalid Pattern");
 
     using cf = parser::capture_flags::flag_value;
     using gm = parser::group_modes;

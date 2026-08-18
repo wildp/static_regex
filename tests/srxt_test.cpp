@@ -5,7 +5,7 @@
 using srx::detail::no_tag;
 
 template<srx::string_literal Pattern>
-consteval srx::static_regex<Pattern, srx::mode::tabledfa> operator ""_test() { return {}; }
+consteval srx::static_regex<Pattern, srx::mode::table_dfa> operator ""_test() { return {}; }
 
 #include "inc/1-basic.inc"
 #include "inc/4-partial.inc"

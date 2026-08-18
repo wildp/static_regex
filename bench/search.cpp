@@ -56,10 +56,7 @@ template<srx::string_literal Pattern>
 consteval srx::static_regex<Pattern, srx::mode::linear> operator ""_srxl() { return {}; }
 
 template<srx::string_literal Pattern>
-consteval srx::static_regex<Pattern, srx::mode::linear_twopass> operator ""_srxm() { return {}; }
-
-template<srx::string_literal Pattern>
-consteval srx::static_regex<Pattern, srx::mode::tabledfa> operator ""_srxt() { return {}; }
+consteval srx::static_regex<Pattern, srx::mode::table_dfa> operator ""_srxt() { return {}; }
 
 template<srx::string_literal Pattern>
 consteval srx::static_regex<Pattern, srx::mode::backtrack> operator ""_srxb() { return {}; }
@@ -67,7 +64,6 @@ consteval srx::static_regex<Pattern, srx::mode::backtrack> operator ""_srxb() { 
 #define TEST(PATTERN)                                   \
 BENCHMARK_CAPTURE(BM_srx, q/PATTERN, PATTERN ## _srx);  \
 BENCHMARK_CAPTURE(BM_srx, l/PATTERN, PATTERN ## _srxl); \
-BENCHMARK_CAPTURE(BM_srx, m/PATTERN, PATTERN ## _srxm); \
 BENCHMARK_CAPTURE(BM_srx, t/PATTERN, PATTERN ## _srxt); \
 BENCHMARK_CAPTURE(BM_srx, b/PATTERN, PATTERN ## _srxb); \
 BENCHMARK_CAPTURE(BM_ctre, /PATTERN, PATTERN ## _ctre);
